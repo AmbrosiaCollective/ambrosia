@@ -11,7 +11,7 @@
 </p>
 <p align="center">
   <a href="runtime/README.md"><img alt="Native build: unverified" src="https://img.shields.io/badge/native_build-unverified-f59e0b?style=flat-square"></a>
-  <a href="docs/ci-policy.md"><img alt="CI: configured, not run" src="https://img.shields.io/badge/CI-configured%2C_not_run-64748b?style=flat-square&amp;logo=githubactions&amp;logoColor=white"></a>
+  <a href="https://github.com/AmbrosiaCollective/ambrosia/actions/workflows/contributor.yml"><img alt="Contributor CI" src="https://github.com/AmbrosiaCollective/ambrosia/actions/workflows/contributor.yml/badge.svg?branch=main"></a>
   <a href="docs/ci-policy.md"><img alt="CD: not configured" src="https://img.shields.io/badge/CD-not_configured-64748b?style=flat-square"></a>
   <a href="#project-status"><img alt="Tests: 106 local checks passed" src="https://img.shields.io/badge/tests-106_local_checks_passed-0f766e?style=flat-square"></a>
 </p>
@@ -69,11 +69,12 @@ SPIR-V for Vulkan. Game files and generated outputs stay on the player's machine
 | Runtime | PE loader, import shims, and a D3D12-to-Vulkan backend are present. The new strict import gate has generated-PE regression cases, but those Windows cases have not run. |
 | Shaders and formats | Translation, archive, model, texture, and audio tools are inherited from earlier work. Their recorded measurements are not new Ambrosia validation. |
 | Native builds | The renamed Windows runtime has not been build-verified locally. |
-| CI and delivery | Windows/Linux contributor CI is configured but has not run on GitHub for Ambrosia. Extended builds are opt-in. No continuous deployment or release pipeline is configured. |
+| CI and delivery | Contributor CI runs on GitHub for Windows and Linux. Extended builds are opt-in. No continuous deployment or release pipeline is configured. |
 | Game and GPU | No Ambrosia menu, in-game rendering, performance, or stability result has been verified. |
 
-The badges above describe this local state. They are not live GitHub build
-results. See the [roadmap](ROADMAP.md), [CI policy](docs/ci-policy.md), and
+The CI badge follows the published Contributor workflow. The test-count badge
+records local validation; native builds and gameplay remain unverified.
+See the [roadmap](ROADMAP.md), [CI policy](docs/ci-policy.md), and
 [inherited technical notes](docs/README.md) for the detail behind it.
 
 ## 🧪 Contribute without game files

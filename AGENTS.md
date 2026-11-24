@@ -38,8 +38,8 @@ loader that maps the game's executable and resolves its imports to shims. Nothin
 
 Follow `CONTRIBUTING.md`, `ROADMAP.md` and `docs/ci-policy.md`: one focused task
 per new contributor, exact acceptance checks and maintainer review before merge.
-The planned GitHub home is `AmbrosiaCollective/ambrosia`; remote creation/access
-and branch-rule enforcement are separate from these local repository files.
+The GitHub home is `AmbrosiaCollective/ambrosia`. Inspect its live access and
+branch settings; these repository files alone do not enforce permissions.
 
 - This is the independent Ambrosia fork. Check this repository's issues and
   [community](https://discord.gg/Bdguf59NvB) for existing work before proposing a fix.

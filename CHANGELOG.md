@@ -1,5 +1,15 @@
 # Ambrosia changelog
 
+## Public organization launch
+
+- Published `AmbrosiaCollective/ambrosia` with public source and forking,
+  collaborator-only pull requests, and access through approved org teams.
+- Imported attributed source with the focused Ambrosia commits preserved.
+  Removed workstation paths from every outgoing historical tree; retained
+  original credits and licenses. The original local history remains intact.
+- Linked the README to live Contributor CI. Native Windows compilation and
+  game/GPU validation remain unverified.
+
 ## Unreleased — local launch preparation
 
 - Independent Ambrosia branding, transparent wordmark and A emblem, updated
