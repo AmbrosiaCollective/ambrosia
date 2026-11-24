@@ -69,7 +69,7 @@ SPIR-V for Vulkan. Game files and generated outputs stay on the player's machine
 | Local checks | 106 synthetic test methods passed on Linux with Python 3.12.3: 78 contributor checks, 22 import-readiness checks, and six launch-policy checks. |
 | Runtime | A separate native CPU bootstrap maps and executes tiny synthetic PEs through a shared core and host-memory adapters. The inherited full loader/shims still depend on Windows; native retail services and graphics integration remain unfinished. |
 | Shaders and formats | Translation, archive, model, texture, and audio tools are inherited from earlier work. Their recorded measurements are not new Ambrosia validation. |
-| Native builds | The CPU bootstrap builds with GCC, Clang and offline CMake on Linux; 116 native fixture checks pass under each compiler, including EXE/DLL forwarders, shared TLS and initialization rollback. Its standalone CLI was built, not launched. No verified menu result exists. |
+| Native builds | The CPU bootstrap builds with GCC, Clang and offline CMake on Linux; 158 native checks pass under each compiler, including package-backed DLL discovery and CLI inspection/run behavior. CLI logic is tested in-process; the standalone executable was built, not launched. No verified menu result exists. |
 | CI and delivery | Contributor CI runs on GitHub for Windows and Linux. Extended builds are opt-in. No continuous deployment or release pipeline is configured. |
 | Game and GPU | No Ambrosia menu, in-game rendering, performance, or stability result has been verified. |
 

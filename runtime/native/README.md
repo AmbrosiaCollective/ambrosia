@@ -24,10 +24,11 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 116 checks under a
+as errors. Each build's native shared-object entry passed 158 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
-the CLI and test executable. Those standalone executables have not been run.
+the CLI and test executable. The shared CLI implementation is tested in-process;
+those standalone executables have not been run.
 Windows/macOS builds and the parent CMake configuration remain unverified.
 
 ## Boundaries
@@ -37,7 +38,7 @@ Windows/macOS builds and the parent CMake configuration remain unverified.
 - `host.*`: RAII memory/protection/cache operations and dynamic native paths.
   Windows uses VirtualAlloc/VirtualProtect; POSIX uses mmap/mprotect. Guest ABI
   code does not call those APIs directly. No page is writable and executable.
-- `main.cpp`: narrow inspect/bootstrap CLI, with wide-character Windows paths.
+- `main.cpp` and `native_command.*`: inspect/bootstrap CLI, with wide-character Windows paths.
   There is no native host-DLL fallback or success-return stub for missing imports.
 - `guest_thread.*` and `host_tls.cpp`: aligned, independent TLS storage and a
   scoped Linux GS adapter. Native C++ TLS remains on FS. Other host thread
@@ -95,15 +96,44 @@ dependencies, and a new graph session starts with fresh TLS values.
 Current limits: 64 registered modules, 64 MiB of input bytes, 128 MiB of mappings,
 64 snapshotted callbacks per module and a 1 MiB TLS block. The guest anchor still
 exposes only a TLS vector rather than a complete Windows TEB. Cyclic imports,
-automatic package discovery, dynamic module insertion, worker threads, thread
+recursive package discovery, dynamic module insertion, worker threads, thread
 notifications and static process startup are not implemented. The strict tests
-create no threads and do not validate concurrent behavior. The standalone CLI
-does not yet expose the module-graph API.
+create no threads and do not validate concurrent behavior.
+
+## Package-backed CLI
+
+The CLI now feeds the module graph through `package_modules.*`. It indexes only
+the explicitly selected package directory, matches DLL basenames with ASCII case
+folding and reads their bytes on demand. Unreferenced DLL contents and asset
+archives are not read. Explicit shim bindings take precedence over package
+discovery; there is no host system-DLL fallback.
+
+```text
+ambrosia-host --inspect IMAGE --package PACKAGE --work WORK
+ambrosia-host --run-bootstrap IMAGE --package PACKAGE --work WORK
+```
+
+These are usage forms for original synthetic PE inputs. If omitted, PACKAGE is
+the image's directory and WORK follows the existing dynamic cache-root policy.
+The executable may reside outside the package. Neither mode creates a work
+directory or writes package files. Results contain numeric counts, not host paths.
+
+`--inspect` maps and binds dependencies without guest callbacks or entry execution.
+`--run-bootstrap` performs the tested synthetic lifecycle and entry call. A DLL
+root is rejected before initialization in this mode. Invalid arguments return 2;
+input/loading failures return 1; success/help returns 0. Failures produce no partial
+success JSON. This is not a supported retail game-launch command.
+
+Provider limits are 4,096 directory entries, 64 DLL entries and the graph's 64 MiB
+aggregate source budget. Empty/oversized reads, invalid basenames, ambiguous DLL
+case variants and DLL symlinks fail explicitly. The portable reader assumes a
+stable directory: these checks are not race-proof filesystem containment. Keep
+the reviewed OS sandbox, read-only package access and hidden credentials/home.
 
 The bootstrap still caps images/files at 64 MiB and rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security
 boundary or support claim for arbitrary PE files. Guest exceptions/unwinding,
-package-backed dependency loading, storage/audio and graphics remain future work. Existing
+guest file/storage services, audio and graphics remain future work. Existing
 Vulkan code should be reused behind a platform surface/input adapter.
 
 The next game milestone is a correctly presented interactive menu. Correct world
