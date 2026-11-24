@@ -22,17 +22,25 @@ struct ModuleLimits {
     std::size_t mapped_bytes = 128 * 1024 * 1024;
 };
 
+struct ModuleRange {
+    std::string name;
+    std::uintptr_t base = 0;
+    std::size_t bytes = 0;
+};
+
 class ModuleGraph {
     struct State;
 
   public:
     class Execution;
-    explicit ModuleGraph(Resolver external = {}, ModuleProvider provider = {}, ModuleLimits limits = {});
+    explicit ModuleGraph(Resolver external = {}, ModuleProvider provider = {}, ModuleLimits limits = {},
+                         Resolver diagnostic_stop = {});
     void add(std::string name, std::span<const std::byte> source);
     void load(std::string root);
     std::uintptr_t export_address(std::string module, const Import &symbol);
     std::vector<std::string> initialization_order() const;
     ModuleStatistics statistics() const;
+    std::vector<ModuleRange> diagnostic_ranges() const;
     Execution start() const;
 
   private:

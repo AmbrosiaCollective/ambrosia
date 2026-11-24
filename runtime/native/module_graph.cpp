@@ -65,6 +65,7 @@ struct ModuleGraph::State {
     std::vector<std::string> order;
     std::string root;
     Resolver external;
+    Resolver diagnostic_stop;
     ModuleProvider provider;
     ModuleLimits limits;
     std::thread::id owner = std::this_thread::get_id();
@@ -104,7 +105,10 @@ struct ModuleGraph::State {
         auto resolve_import = [&](const Import &symbol) {
             const auto dependency = module_key(symbol.module);
             std::set<std::pair<std::string, std::string>> visited;
-            const auto address = resolve(dependency, symbol, visited);
+            auto address = resolve(dependency, symbol, visited);
+            if (!address && diagnostic_stop) {
+                address = diagnostic_stop(symbol);
+            }
             if (modules.contains(dependency)) {
                 node.dependencies.insert(dependency);
             }
@@ -194,13 +198,18 @@ struct ModuleGraph::State {
     }
 };
 
-ModuleGraph::ModuleGraph(Resolver external, ModuleProvider provider, ModuleLimits limits)
+ModuleGraph::ModuleGraph(Resolver external, ModuleProvider provider, ModuleLimits limits,
+                         Resolver diagnostic_stop)
     : state_(std::make_shared<State>()) {
     if (!limits.source_bytes || !limits.mapped_bytes || !limits.image.file_bytes ||
         !limits.image.mapped_bytes) {
         throw std::invalid_argument("module byte budgets must be nonzero");
     }
     state_->limits = limits;
+    if (diagnostic_stop && limits.image.mode != LoadMode::diagnostic_startup) {
+        throw std::invalid_argument("diagnostic import stops require diagnostic startup mode");
+    }
+    state_->diagnostic_stop = std::move(diagnostic_stop);
     state_->external = std::move(external);
     state_->provider = std::move(provider);
 }
@@ -268,6 +277,18 @@ ModuleStatistics ModuleGraph::statistics() const {
         }
     }
     return result;
+}
+
+std::vector<ModuleRange> ModuleGraph::diagnostic_ranges() const {
+    state_->require_owner();
+    std::vector<ModuleRange> ranges;
+    for (const auto &[name, node] : state_->modules) {
+        if (node.image) {
+            ranges.push_back(
+                {name, reinterpret_cast<std::uintptr_t>(node.image->base()), node.image->size()});
+        }
+    }
+    return ranges;
 }
 
 ModuleGraph::Execution ModuleGraph::start() const {

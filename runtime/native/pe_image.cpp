@@ -127,7 +127,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
                                           "delay imports",
                                           "CLR",
                                           "reserved"};
-            if (limits.mode != LoadMode::inspect || (i != 2 && i != 3 && i != 4 && i != 6 && i != 10)) {
+            if (limits.mode == LoadMode::executable || (i != 2 && i != 3 && i != 4 && i != 6 && i != 10)) {
                 throw std::runtime_error("unsupported PE directory " + std::to_string(i) + ": " + names[i]);
             }
             unsupported_directories |= std::uint32_t{1} << i;
