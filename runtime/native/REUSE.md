@@ -58,3 +58,10 @@ The TIB field layout follows the already pinned Wine winnt.h NT_TIB64 declaratio
 Native Linux stack discovery calls installed pthread APIs; glibc sources at
 `ef321e23c20eebc6d6fb4044425c00e6df27b05f` were read to verify bounds semantics.
 No glibc/Wine implementation or header is imported into host_stack.cpp.
+
+CRT callback table layout and initialization/cleanup ordering were checked against
+Wine exit.c, data.c, msvcrt.h and public-domain CRT header declarations at
+`ff2631c6ed3d1721cd050d951671c307ade32b90`. They are behavior/layout references;
+no Wine implementation, header or runtime is imported by the owned C++ tables
+and Microsoft ABI adapters. The initializer routines retain forward ordering,
+null skipping and first-error propagation.

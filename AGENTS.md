@@ -56,8 +56,10 @@ branch settings; these repository files alone do not enforce permissions.
 - Use synthetic inputs without game files where possible. Inspect executable
   paths before running them; preserve isolation and do not install dependencies
   or weaken controls without approval.
-- Local native boot work may now use the supplied game files read-only inside
-  reviewed isolation. Keep original bytes, disassembly, generated assets and
+- Standing permission for local native boot work includes reading and executing
+  the supplied game files inside reviewed isolation with read-only inputs. This
+  supersedes historical repository-only/no-game-file restrictions. Keep original
+  bytes, disassembly, generated assets and
   private diagnostics outside Git. Game execution is authorized; unsupported
   startup requirements must still fail explicitly. GPU access and any weaker
   execution profile require their concrete isolation review before use.
@@ -125,7 +127,8 @@ Shard runs write `index.part*.json`; merge them into `index.json` with `--merge`
   explicit control flow and small focused functions. Let ordinary behavior speak
   for itself; document ABI, ownership, ordering and other non-obvious constraints.
   Avoid compressed one-line logic, redundant comments and unrelated formatting
-  churn. Keep commits short and focused. Native runtime formatting is defined in
+  churn. Keep commits focused and manageable; related implementation and tests may share
+  a slightly larger commit to reduce overhead. Native runtime formatting is defined in
   `runtime/native/.clang-format`; follow it when editing those files.
 - Python tools run with `python -I` and use only the standard library unless a file says otherwise; the exceptions
   are the texture and model tools that import numpy or Pillow: `bc_feature.py`, `amd_swizzle.py`, `tile_probe.py`,

@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 392 checks under a
+as errors. Each build's native shared-object entry passed 411 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `_initialize_onexit_table`, after passing the TEB self/stack-base
-access that previously faulted. This occurs during module initialization; the game's
+and now stop at `InitializeSListHead`, after passing CRT on-exit table
+initialization and the TEB self/stack-base access that previously faulted. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -292,3 +292,19 @@ The next game milestone is a correctly presented interactive menu. Correct world
 rendering and stable 30 fps with minimal stutter follow. Performance unlocking
 comes later. Local development continues in small commits; GitHub publication is
 on hold until explicitly requested.
+
+## CRT initialization and cleanup tables
+
+The scoped service runtime owns bounded on-exit callback arrays. The 24-byte x64
+guest table exposes their first/last/end pointers, but foreign pointers are never
+followed. Initialization preserves an existing valid batch; execution clears its
+guest view before invoking callbacks in reverse order. Callback-time registrations
+form a later batch, and callback return values do not interrupt cleanup. Limits
+are 128 tables, 4,096 entries per table, 65,536 total pending/executing callbacks
+and 32 nested executions. These are explicit local budgets, not Windows maxima.
+
+`_initterm` and `_initterm_e` walk bounded arrays forward, skipping null entries;
+the latter returns the first nonzero initializer result. Microsoft x64 wrappers
+are registered for ucrtbase, msvcrt and the CRT runtime API set. This does not yet
+provide process-global atexit, full CRT startup or automatic process termination
+cleanup. Synthetic callback tests do not establish guest exception support.
