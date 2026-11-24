@@ -21,7 +21,7 @@ These are synthetic/tooling checks, not retail boot or GPU evidence.
 ## 1. One native Linux bootstrap
 
 Delivered locally: portable PE mapping/relocation/import binding, Windows/POSIX
-memory adapters, dynamic host paths and an offline CMake target. The same 84 CPU
+memory adapters, dynamic host paths and an offline CMake target. The same 116 CPU
 fixture checks pass through native shared objects built with GCC and Clang on
 Linux. The standalone ELF CLI is build-verified, not launch-verified. Windows and
 macOS adapters are unverified. See [bootstrap scope](runtime/native/README.md).
@@ -38,9 +38,11 @@ game files, Wine, Proton, Windows SDK or host credentials are involved.
 ## 2. Correct guest execution and services
 
 Delivered locally: aligned per-context static TLS, scoped Linux guest GS state,
-TLS callbacks and dynamic DLL attach/detach for one module. Fixtures verify
-native TLS preservation and failed-attach cleanup. Worker-thread creation,
-multi-module slot assignment and a complete guest TEB remain unfinished.
+TLS callbacks and dynamic DLL attach/detach. An in-memory module graph now resolves
+names, ordinals and forwarded exports, assigns shared TLS slots and initializes
+dependencies before their importers. Fixtures execute EXE-to-DLL calls and verify
+reverse-order cleanup after failed attach. Worker-thread creation, cyclic imports,
+package discovery, dynamic module insertion and a complete guest TEB remain unfinished.
 
 Implement and test guest TLS/thread state, exceptions/unwinding and the required
 host-API semantics. Resolve names and ordinals, including dynamically requested

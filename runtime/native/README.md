@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 84 checks under a
+as errors. Each build's native shared-object entry passed 116 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. Those standalone executables have not been run.
@@ -44,6 +44,10 @@ Windows/macOS builds and the parent CMake configuration remain unverified.
   adapters fail explicitly until implemented.
 - `module_execution.cpp`: explicit dynamic module lifetime, ordered TLS/DLL
   notifications and mapping ownership through detach.
+- `pe_exports.*` and `module_graph.*`: shared export/forwarder resolution,
+  explicit in-memory module registration, dependency ordering and graph rollback.
+  [Reuse provenance](REUSE.md) records the inherited implementation and licensed
+  peer fixture cases.
 
 Explicit package/work paths are supported. Otherwise the image's parent is the
 package root and the work root follows host cache conventions, falling back to
@@ -66,16 +70,40 @@ use their separate Microsoft x64 lifecycle ABI and dynamic-load reserved argumen
 TLS persists across calls within a session and starts fresh in a new session.
 The guest GS base is restored after every call, including nested host scopes.
 
-Current limits: one module per session with TLS index zero, a minimal anchor
-exposing the TLS vector rather than a complete Windows TEB, at most 64 snapshotted
-callbacks and a 1 MiB TLS block. Worker threads, thread attach/detach notifications,
-shared multi-module TLS slots and static process startup are not implemented.
-The strict tests create no threads and do not validate concurrent behavior.
+## Shared module graphs
+
+`ModuleGraph` accepts explicitly provided module bytes and an optional shim
+resolver. It does not search the host for replacement DLLs. A synthetic caller
+can use the API as follows, with buffers it already owns:
+
+```cpp
+ModuleGraph modules(shim_resolver);
+modules.add("app.exe", executable_bytes);
+modules.add("provider.dll", provider_bytes);
+modules.load("app.exe");
+auto execution = modules.start();
+auto result = execution.run_bootstrap();
+```
+
+Exports resolve by exact name or ordinal; module basenames use ASCII case folding.
+Forwarders can target names, ordinals or other forwarders. Loops fail explicitly.
+Dependencies initialize first and detach in reverse order. Every module receives
+a stable TLS slot, with the root at zero, in one shared thread context. All TLS
+blocks exist before the first callback. A failed attach cleans up initialized
+dependencies, and a new graph session starts with fresh TLS values.
+
+Current limits: 64 registered modules, 64 MiB of input bytes, 128 MiB of mappings,
+64 snapshotted callbacks per module and a 1 MiB TLS block. The guest anchor still
+exposes only a TLS vector rather than a complete Windows TEB. Cyclic imports,
+automatic package discovery, dynamic module insertion, worker threads, thread
+notifications and static process startup are not implemented. The strict tests
+create no threads and do not validate concurrent behavior. The standalone CLI
+does not yet expose the module-graph API.
 
 The bootstrap still caps images/files at 64 MiB and rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security
 boundary or support claim for arbitrary PE files. Guest exceptions/unwinding,
-bundled dependency loading, storage/audio and graphics remain future work. Existing
+package-backed dependency loading, storage/audio and graphics remain future work. Existing
 Vulkan code should be reused behind a platform surface/input adapter.
 
 The next game milestone is a correctly presented interactive menu. Correct world

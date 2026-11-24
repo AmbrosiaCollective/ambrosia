@@ -9,12 +9,13 @@ there is no available native game build.
 
 The [native CPU bootstrap](../runtime/native/README.md) shares PE parsing,
 relocation/import binding and path policy across hosts, with OS memory operations
-behind one adapter. Linux builds pass 84 synthetic checks under GCC and Clang.
+behind one adapter. Linux builds pass 116 synthetic checks under GCC and Clang.
 The CLI builds through offline CMake but has not been launch-tested. This does
 not implement the retail entry contract, exceptions or graphics. Single-module
-static TLS and dynamic DLL lifecycle now work in fixtures; actual worker threads,
-multi-module TLS and a complete guest TEB remain unfinished. Windows/macOS guest
-thread adapters fail explicitly until implemented.
+static TLS and dynamic DLL lifecycle now work in fixtures, including an in-memory
+module graph, forwarded exports and independent shared TLS slots. Worker threads,
+cyclic imports, package discovery and a complete guest TEB remain unfinished.
+Windows/macOS guest thread adapters fail explicitly until implemented.
 
 ## What the comparison establishes
 
