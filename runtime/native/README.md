@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 158 checks under a
+as errors. Each build's native shared-object entry passed 217 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -45,6 +45,8 @@ Windows/macOS builds and the parent CMake configuration remain unverified.
   adapters fail explicitly until implemented.
 - `module_execution.cpp`: explicit dynamic module lifetime, ordered TLS/DLL
   notifications and mapping ownership through detach.
+- `import_registry.*`, `memory_services.*` and `service_runtime.*`: explicit
+  service names, bounded memory semantics and scoped Microsoft-ABI adapters.
 - `pe_exports.*` and `module_graph.*`: shared export/forwarder resolution,
   explicit in-memory module registration, dependency ordering and graph rollback.
   [Reuse provenance](REUSE.md) records the inherited implementation and licensed
@@ -94,8 +96,8 @@ blocks exist before the first callback. A failed attach cleans up initialized
 dependencies, and a new graph session starts with fresh TLS values.
 
 Current limits: 64 registered modules, 64 MiB of input bytes, 128 MiB of mappings,
-64 snapshotted callbacks per module and a 1 MiB TLS block. The guest anchor still
-exposes only a TLS vector rather than a complete Windows TEB. Cyclic imports,
+64 snapshotted callbacks per module and a 1 MiB TLS block. The guest anchor exposes
+a TLS vector at GS:[0x58] and last error at GS:[0x68], not a complete Windows TEB. Cyclic imports,
 recursive package discovery, dynamic module insertion, worker threads, thread
 notifications and static process startup are not implemented. The strict tests
 create no threads and do not validate concurrent behavior.
@@ -129,6 +131,31 @@ aggregate source budget. Empty/oversized reads, invalid basenames, ambiguous DLL
 case variants and DLL symlinks fail explicitly. The portable reader assumes a
 stable directory: these checks are not race-proof filesystem containment. Keep
 the reviewed OS sandbox, read-only package access and hidden credentials/home.
+
+## Initial native services
+
+The CLI's explicit registry binds VirtualAlloc, VirtualFree, GetLastError and
+SetLastError through kernel32/kernelbase and their registered API-set aliases.
+Missing symbols and ordinals remain unresolved; there is no system DLL fallback.
+`services::Scope` must enclose graph initialization, entry and detach. Each
+runtime owns its reservations and destroys them on teardown. Runtime/memory
+objects and their scopes remain confined to one host thread; concurrency is untested.
+
+Supported allocations reserve at a 64 KiB-aligned base and round sizes/ranges to
+the host page size. Commit preserves existing data; decommit retains addresses
+and discards contents so recommit observes zeros. Release requires the exact
+reservation base and size zero. The default budget is 64 MiB across at most
+1,024 reservations. Only no-access, read-only, read/write and execute/read
+protections are accepted. No page is writable and executable.
+
+Fixed-address reservations, protection changes on committed pages, other flags
+and VirtualProtect are unsupported. These return explicit failure or remain
+unresolved rather than silently stripping console/GPU flags. Native error
+adapters set failure codes and preserve the previous last error on success.
+Active guest contexts keep that cell independent from the native-thread fallback;
+nested scopes restore the previous context and GS base. Native TLS stays on FS.
+The ABI bridge keeps native TLS resolution in a non-inlined host call because a
+GCC shared-library build otherwise lost a live guest argument in synthetic tests.
 
 The bootstrap still caps images/files at 64 MiB and rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security

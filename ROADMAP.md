@@ -21,7 +21,7 @@ These are synthetic/tooling checks, not retail boot or GPU evidence.
 ## 1. One native Linux bootstrap
 
 Delivered locally: portable PE mapping/relocation/import binding, Windows/POSIX
-memory adapters, dynamic host paths and an offline CMake target. The same 158 CPU
+memory adapters, dynamic host paths and an offline CMake target. The same 217 CPU
 fixture checks pass through native shared objects built with GCC and Clang on
 Linux. CLI logic is tested in-process; the standalone ELF is build-verified,
 not launch-verified. Windows and
@@ -47,6 +47,9 @@ dynamic module insertion and a complete guest TEB remain unfinished. A bounded
 package provider now loads requested DLLs lazily from an explicit root. CLI
 inspection maps dependencies without calling guest initialization or entry code;
 bootstrap execution remains limited to original synthetic fixtures.
+An explicit service registry now binds bounded VirtualAlloc/VirtualFree and
+per-context last-error adapters. Unsupported flags and imports fail explicitly;
+these four APIs do not constitute complete native startup support.
 
 Implement and test guest TLS/thread state, exceptions/unwinding and the required
 host-API semantics. Resolve names and ordinals, including dynamically requested
