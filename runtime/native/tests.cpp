@@ -146,6 +146,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "unwind_program_tests.h"
 #include "unwind_walk_tests.h"
 #include "trace_tests.h"
+#include "clock_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -295,6 +296,7 @@ extern "C" int ambrosia_native_tests() {
         unwind_program_checks();
         unwind_walk_checks();
         trace_configuration_checks();
+        clock_service_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
