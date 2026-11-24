@@ -56,6 +56,11 @@ branch settings; these repository files alone do not enforce permissions.
 - Use synthetic inputs without game files where possible. Inspect executable
   paths before running them; preserve isolation and do not install dependencies
   or weaken controls without approval.
+- Local native boot work may now use the supplied game files read-only inside
+  reviewed isolation. Keep original bytes, disassembly, generated assets and
+  private diagnostics outside Git. Game execution is authorized; unsupported
+  startup requirements must still fail explicitly. GPU access and any weaker
+  execution profile require their concrete isolation review before use.
 
 ## Before you guess, look
 
