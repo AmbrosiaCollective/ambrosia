@@ -20,6 +20,12 @@ These are synthetic/tooling checks, not retail boot or GPU evidence.
 
 ## 1. One native Linux bootstrap
 
+Delivered locally: portable PE mapping/relocation/import binding, Windows/POSIX
+memory adapters, dynamic host paths and an offline CMake target. The same 41 CPU
+fixture checks pass through native shared objects built with GCC and Clang on
+Linux. The standalone ELF CLI is build-verified, not launch-verified. Windows and
+macOS adapters are unverified. See [bootstrap scope](runtime/native/README.md).
+
 Create one Linux executable target and a small host boundary for memory, files,
 threads, clocks and diagnostics. Reuse portable code before writing replacements.
 Do not start another renderer, launcher GUI or full asset-export pipeline.

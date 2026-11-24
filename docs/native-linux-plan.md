@@ -1,8 +1,18 @@
 # Native Linux path to the menu
 
 Decision: x86-64 Linux is the target host. The runtime must be a native Linux
-executable with Vulkan, without Wine or Proton. Target stable 30 fps after
-correct boot/menu and world rendering. This is a plan, not an available build.
+executable with Vulkan, without Wine or Proton. Target stable 30 fps with minimal
+stutter after correct boot/menu and world rendering. A CPU bootstrap exists;
+there is no available native game build.
+
+## Local bootstrap progress
+
+The [native CPU bootstrap](../runtime/native/README.md) shares PE parsing,
+relocation/import binding and path policy across hosts, with OS memory operations
+behind one adapter. Linux builds pass 41 synthetic checks under GCC and Clang.
+The CLI builds through offline CMake but has not been launch-tested. This does
+not implement the retail entry contract, TLS, exceptions or graphics. Windows
+and macOS extension points exist but remain unverified.
 
 ## What the comparison establishes
 
@@ -27,8 +37,8 @@ was incorporated by preparing this plan.
 The inherited executable target is Windows-only. Its loader depends on Windows
 virtual memory, DLL loading, TLS and unwind/exception facilities. The Vulkan
 execution core is already separated from many COM-facing wrappers, which is
-useful material for the port. A Linux CMake build currently does not produce a
-native title loader.
+useful material for the port. A Linux CMake build now produces a separate CPU
+bootstrap, not a complete native title loader.
 
 Native Linux still needs to supply the guest's Windows-shaped ABI. Map PE images
 in a native process, bridge the Microsoft x64 calling convention, maintain guest
@@ -68,9 +78,15 @@ imports, skip asserts, or substitute dropped mandatory draws to claim a pass.
 
 ## One layout and one entry point
 
+Keep the core portable: standard filesystem and C++ facilities first, narrow
+adapters for OS-specific semantics, and the existing Vulkan execution model for
+graphics. Vulkan surface creation will remain a host adapter. Do not invent a
+second graphics API or claim that a thin wrapper makes guest services trivial.
+
 Use one eventual build/run entry point through the existing developer command
-surface, rather than another launcher GUI. The native command does not exist
-yet. Keep the package and separate executable read-only. Store build output,
+surface, rather than another launcher GUI. The integrated native game command
+does not exist yet; the standalone CPU bootstrap is separate. Keep the package
+and separate executable read-only. Store build output,
 shader caches, saves and logs under one work root outside the repository, with
 distinct subdirectories. No game assets or generated shader data belong in Git.
 
@@ -101,4 +117,8 @@ GPU access shares the host driver and can still cause a driver reset.
 Use CPU fixtures first, then a synthetic Vulkan draw/readback and presentation,
 then game initialization. Native title execution, dependencies, host/device
 integration and large generated outputs need their concrete task approval.
-No native build, game execution or GPU initialization occurred during research.
+Task 025 research ran no native build or game. Task 026's CPU-only compiler
+profile was explicitly approved, and its native shared-object checks still use
+the original strict Python launcher. Game execution and GPU initialization have
+not occurred. Work stays local without publication prompts until explicitly
+instructed otherwise.
