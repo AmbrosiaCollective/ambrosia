@@ -1,0 +1,138 @@
+{
+  "schema": "ambrosia.suites/1",
+  "suites": {
+    "hashdict": {
+      "description": "Jenkins hashing, string harvesting and real-main repeated-input regressions",
+      "module": "tests/test_hashdict.py",
+      "methods": [
+        "JenkinsHashTest.test_empty_string",
+        "JenkinsHashTest.test_known_reference_vectors",
+        "JenkinsHashTest.test_case_insensitivity",
+        "JenkinsHashTest.test_unsigned_32bit_range",
+        "JenkinsHashTest.test_latin1_encoding_and_replacement",
+        "StringHarvestTest.test_harvest_basic_identifiers",
+        "StringHarvestTest.test_harvest_delimiters_split",
+        "StringHarvestTest.test_harvest_minlen_threshold",
+        "StringHarvestTest.test_harvest_short_standalone_identifiers",
+        "RepeatedExtraInputsTest.test_repeated_extra_groups_harvest_all_inputs",
+        "RepeatedExtraInputsTest.test_single_extra_group_still_harvests_all_inputs",
+        "RepeatedExtraInputsTest.test_empty_later_extra_group_does_not_discard_earlier_inputs",
+        "RepeatedExtraInputsTest.test_missing_earlier_extra_preserves_previous_output",
+        "RepeatedExtraInputsTest.test_output_cannot_overwrite_an_earlier_extra_input",
+        "RepeatedExtraInputsTest.test_no_extra_inputs_still_produce_an_empty_dictionary"
+      ],
+      "requires": [
+        "tools/hashdict.py"
+      ]
+    },
+    "paths": {
+      "description": "Report alias protection and volume-name behavior",
+      "module": "tests/test_report_paths.py",
+      "methods": [
+        "SamePathTests.test_same_spelling_and_other_spelling",
+        "SamePathTests.test_different_files",
+        "SamePathTests.test_paths_that_do_not_exist_yet",
+        "SamePathTests.test_one_missing_one_present_is_not_an_error",
+        "SamePathTests.test_hard_link",
+        "SamePathTests.test_symlink",
+        "SamePathTests.test_case_only_difference_follows_the_volume",
+        "MacVolumeTests.test_not_macos_is_never_case_insensitive",
+        "MacVolumeTests.test_macos_case_insensitive_volume_folds_case_and_accents",
+        "MacVolumeTests.test_macos_case_sensitive_volume_keeps_case",
+        "MacVolumeTests.test_macos_pathconf_failure_counts_as_case_insensitive",
+        "MacVolumeTests.test_macos_probe_walks_up_to_an_existing_folder",
+        "FoldingVolumeTests.test_case_only_difference_follows_the_volume",
+        "FoldingVolumeTests.test_other_spellings_of_one_folder_are_one_report",
+        "FoldingVolumeTests.test_names_that_differ_by_more_than_case_never_ask_the_volume",
+        "FoldingVolumeTests.test_it_leaves_no_scratch_folder_behind",
+        "FoldingVolumeTests.test_a_folder_that_does_not_exist_is_not_created",
+        "FoldingVolumeTests.test_same_report_path_asks_the_volume_when_the_name_rules_disagree",
+        "FoldingVolumeTests.test_each_path_is_resolved_once_per_call"
+      ],
+      "requires": [
+        "tools/report_paths.py"
+      ]
+    },
+    "manifests": {
+      "description": "Synthetic shader manifest validation, without translation or shader files",
+      "module": "tests/test_shader_stage_manifest.py",
+      "methods": [
+        "ShaderStemsTests.test_valid_carve_index_with_suffix_and_duplicates",
+        "ShaderStemsTests.test_valid_unpack_index_without_suffix",
+        "ShaderStemsTests.test_empty_list_returns_empty_set",
+        "ShaderStemsTests.test_rejects_traversal_stems_after_suffix_stripping",
+        "ShaderStemsTests.test_rejects_bare_dot_stems_without_suffix",
+        "ShaderStemsTests.test_rejects_separators_drive_prefixes_and_nul_bytes",
+        "ShaderStemsTests.test_rejects_wrong_suffix",
+        "ShaderStemsTests.test_rejects_missing_or_invalid_field_values",
+        "ShaderStemsTests.test_rejects_non_list_root",
+        "ShaderStemsTests.test_malformed_json_raises_value_error_with_path",
+        "ShaderStemsTests.test_invalid_utf8_raises_value_error_with_path",
+        "ShaderStemsTests.test_index_saved_with_a_utf8_bom_is_read"
+      ],
+      "requires": [
+        "make_game.py",
+        "tools/shader_stage_manifest.py",
+        "tools/mc_command.py",
+        "tools/ambrosia_tui.py",
+        "tools/replace_retry.py"
+      ]
+    },
+    "console": {
+      "description": "Console eligibility, keyboard parsing and temporary stage logs",
+      "module": "tests/test_ambrosia_tui.py",
+      "methods": [
+        "EligibleTest.test_no_tui_flag_disables",
+        "JobsBoundsTest.test_clamp_and_defaults",
+        "JobsBoundsTest.test_read_key_timeout_zero_polls_once",
+        "JobsBoundsTest.test_nt_arrow_scan_codes",
+        "JobsBoundsTest.test_wheel_delta_to_keys",
+        "JobsBoundsTest.test_sgr_mouse_wheel",
+        "StageConsoleTest.test_write_and_snapshot",
+        "StageConsoleTest.test_wrap_log_lines_breaks_and_keeps_newest",
+        "CapturePopenTest.test_pipes_stdio_and_detaches_console_on_windows"
+      ],
+      "requires": [
+        "make_game.py",
+        "tools/shader_stage_manifest.py",
+        "tools/mc_command.py",
+        "tools/ambrosia_tui.py",
+        "tools/replace_retry.py"
+      ]
+    },
+    "developer": {
+      "description": "Offline doctor, redaction, catalog and contributor-runner failure controls",
+      "module": "tests/test_ambrosia_dev.py",
+      "methods": [
+        "CatalogTests.test_real_catalog_has_nonempty_explicit_methods",
+        "CatalogTests.test_invalid_roots_and_schema_fail_cleanly",
+        "CatalogTests.test_invalid_paths_and_methods_are_rejected",
+        "CatalogTests.test_missing_invalid_encoding_and_oversized_catalog",
+        "DoctorTests.test_discovery_does_not_execute_tools_or_import_tests",
+        "DoctorTests.test_missing_tools_have_actionable_fixes",
+        "DoctorTests.test_missing_source_is_not_reported_as_ready",
+        "DoctorTests.test_old_python_is_a_missing_requirement",
+        "DoctorTests.test_environment_values_and_credentials_are_never_reported",
+        "RunnerTests.test_real_selected_assertion_runs_and_unselected_method_does_not",
+        "RunnerTests.test_behavioral_failure_is_redacted_and_not_green",
+        "RunnerTests.test_error_is_not_green",
+        "RunnerTests.test_skip_is_incomplete",
+        "RunnerTests.test_expected_failure_is_incomplete",
+        "RunnerTests.test_unexpected_success_is_failed",
+        "RunnerTests.test_subtest_values_do_not_leak",
+        "RunnerTests.test_missing_method_cannot_silently_shrink_the_run",
+        "RunnerTests.test_missing_source_and_import_error_are_incomplete",
+        "RunnerTests.test_import_system_exit_is_incomplete_and_does_not_escape",
+        "RunnerTests.test_sys_path_is_restored_after_failed_import",
+        "CommandTests.test_list_is_json_without_importing_test_modules",
+        "CommandTests.test_unknown_suite_and_invalid_catalog_are_usage_errors",
+        "CommandTests.test_incomplete_test_result_has_nonzero_exit"
+      ],
+      "requires": [
+        "ambrosia.py",
+        "tools/ambrosia_dev.py",
+        "tools/ambrosia_suites.json"
+      ]
+    }
+  }
+}

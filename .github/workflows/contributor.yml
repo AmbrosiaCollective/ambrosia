@@ -1,0 +1,47 @@
+name: Contributor
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contributor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contributor:
+    name: Contributor (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Offline contributor prerequisites
+        run: python -I ambrosia.py doctor --json
+      - name: Exact selected coverage
+        run: python -I ambrosia.py test --list --json
+      - name: Game-free contributor tests
+        run: python -I ambrosia.py test --json
+      - name: Launch configuration contracts
+        run: python -I tests/test_ambrosia_launch.py
+      - name: Python syntax
+        run: python -m compileall -q ambrosia.py make_game.py tools tests
+      - name: State validation scope
+        shell: bash
+        run: |
+          echo 'Selected contributor tests only; not a native build, full suite or game validation.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'CI/runtime/decoder workflows are opt-in; see docs/ci-policy.md.' >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,34 @@
+name: Focused contribution
+description: Propose or claim one small, reviewable task.
+body:
+  - type: markdown
+    attributes:
+      value: Search existing tasks and PRs before claiming. Use synthetic evidence without game files.
+  - type: input
+    id: outcome
+    attributes:
+      label: Intended outcome
+      description: One concrete behavior or result this task should deliver.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and ownership
+      description: Name the component, proposed owner, dependencies and any overlapping work. Wait for coordination before starting a second implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance checks
+      description: Exact commands or reproducible outcomes, plus required hardware/dependencies. State whether game files are needed; never attach them.
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Baseline and evidence
+      description: Commit/revision, expected/current behavior and relevant source references. Omit private paths and credentials.
+    validations:
+      required: true
