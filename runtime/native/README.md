@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 311 checks under a
+as errors. Each build's native shared-object entry passed 323 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -133,6 +133,31 @@ aggregate source budget. Empty/oversized reads, invalid basenames, ambiguous DLL
 case variants and DLL symlinks fail explicitly. The portable reader assumes a
 stable directory: these checks are not race-proof filesystem containment. Keep
 the reviewed OS sandbox, read-only package access and hidden credentials/home.
+
+## Diagnostic startup
+
+`--trace-startup IMAGE --package PACKAGE` is an explicitly diagnostic CPU mode.
+It maps the selected modules, binds real native services and bundled exports,
+and assigns non-returning stops only to unresolved imports. Every stop terminates
+the isolated process with exit 78 and the missing symbol. Linux signal faults
+terminate with exit 79 and a module-relative location. A returned entry produces
+diagnostic JSON and exit 3, never game-launch success. Inspection remains NX and
+normal bootstrap execution retains strict metadata/import checks.
+
+This mode permits bounded passive metadata for diagnosis while its full semantics
+are unfinished. It does not implement Windows exception handling or a complete
+retail process environment. It must use the reviewed OS sandbox; its signal
+handlers are diagnostics within that isolated process, not containment. It
+installs an alternate signal stack and restores previous dispositions on normal
+return. Current usage is single-threaded, with process/thread/network creation
+denied and GPU/display devices hidden. Generated stop code is sealed RX before
+initialization and never returns fabricated API values.
+
+Both native builds execute supplied PE startup code far enough to stop at
+`GetSystemTimeAsFileTime`. This occurs during module initialization; the game's
+main bootstrap entry and menu have not been reached. The read-only package and
+actual runtime code now guide the next service implementation. Private trace
+records and input bytes remain outside Git.
 
 ## Initial native services
 

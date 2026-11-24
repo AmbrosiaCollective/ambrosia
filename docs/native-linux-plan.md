@@ -9,7 +9,7 @@ there is no available native game build.
 
 The [native CPU bootstrap](../runtime/native/README.md) shares PE parsing,
 relocation/import binding and path policy across hosts, with OS memory operations
-behind one adapter. Linux builds pass 311 synthetic checks under GCC and Clang.
+behind one adapter. Linux builds pass 323 synthetic checks under GCC and Clang.
 The CLI engine is tested in-process with synthetic package files; the standalone
 executable builds through offline CMake but has not been launched. This does
 not implement the retail entry contract, exceptions or graphics. Single-module
@@ -25,7 +25,10 @@ bundled DLLs read-only/NX, retaining unwind data and reporting unresolved import
 and unsupported metadata. There are 861 unresolved import entries in the measured
 graph; that count does not establish unique APIs or their execution order.
 Inspection mappings cannot initialize or execute. Actual imports guide priorities.
-No game entry, graphics or menu has been executed through this native path.
+An explicit fail-stop diagnostic mode now executes supplied PE initialization
+until the first unsupported API, currently GetSystemTimeAsFileTime. It neither
+returns fake service results nor implements full exception handling. The main
+game entry, graphics and menu have not been reached.
 
 ## What the comparison establishes
 
