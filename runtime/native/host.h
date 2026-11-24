@@ -5,6 +5,13 @@
 #include <filesystem>
 
 namespace ambrosia::host {
+std::uint64_t filetime_from_unix_ticks(std::int64_t ticks_100ns);
+std::uint64_t utc_filetime();
+std::int64_t performance_counter() noexcept;
+inline constexpr std::int64_t performance_frequency = 1000000000;
+std::uint32_t current_process_id();
+std::uint32_t current_thread_id();
+
 // A thread-local guest segment scope. Linux uses GS and leaves native FS TLS
 // untouched. Unsupported hosts fail before changing their thread environment.
 std::uintptr_t guest_segment_base();
