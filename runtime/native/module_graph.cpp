@@ -14,6 +14,9 @@ std::string module_key(std::string name) {
         throw std::runtime_error("module name must be a basename");
     }
     for (auto &character : name) {
+        if (static_cast<unsigned char>(character) < 32 || character == 127) {
+            throw std::runtime_error("module name contains a control character");
+        }
         if (character >= 'A' && character <= 'Z') {
             character += 'a' - 'A';
         }
@@ -62,12 +65,24 @@ struct ModuleGraph::State {
     std::vector<std::string> order;
     std::string root;
     Resolver external;
+    ModuleProvider provider;
     std::thread::id owner = std::this_thread::get_id();
     std::size_t source_bytes = 0;
     std::size_t mapped_bytes = 0;
     std::uint32_t next_slot = 0;
     bool active = false;
     bool failed = false;
+
+    void register_source(std::string name, std::span<const std::byte> source) {
+        if (modules.size() >= 64 || source.size() > 64 * 1024 * 1024 - source_bytes ||
+            modules.contains(name)) {
+            throw std::runtime_error("module registration is ambiguous or exceeds bootstrap budget");
+        }
+        Node node;
+        node.source.assign(source.begin(), source.end());
+        modules.emplace(std::move(name), std::move(node));
+        source_bytes += source.size();
+    }
 
     void require_owner() const {
         if (owner != std::this_thread::get_id() || failed) {
@@ -87,11 +102,12 @@ struct ModuleGraph::State {
         const auto slot = next_slot++;
         auto resolve_import = [&](const Import &symbol) {
             const auto dependency = module_key(symbol.module);
+            std::set<std::pair<std::string, std::string>> visited;
+            const auto address = resolve(dependency, symbol, visited);
             if (modules.contains(dependency)) {
                 node.dependencies.insert(dependency);
             }
-            std::set<std::pair<std::string, std::string>> visited;
-            return resolve(dependency, symbol, visited);
+            return address;
         };
         auto image = Image::load(node.source, resolve_import, slot);
         if (image.size() > 128 * 1024 * 1024 - mapped_bytes) {
@@ -113,7 +129,18 @@ struct ModuleGraph::State {
         if (!modules.contains(module)) {
             Import request = symbol;
             request.module = module;
-            return external ? external(request) : 0;
+            const auto address = external ? external(request) : 0;
+            if (address) {
+                return address;
+            }
+            if (!provider || active) {
+                return 0;
+            }
+            auto bytes = provider(module);
+            if (!bytes) {
+                return 0;
+            }
+            register_source(module, *bytes);
         }
         auto &image = load_module(module);
         const auto &exports = image.state_->exports;
@@ -136,10 +163,11 @@ struct ModuleGraph::State {
             return reinterpret_cast<std::uintptr_t>(image.base() + target->rva);
         }
         const auto next = forward_target(target->forwarder);
+        const auto address = resolve(next.module, next, visited);
         if (next.module != module && modules.contains(next.module)) {
             modules.at(module).dependencies.insert(next.module);
         }
-        return resolve(next.module, next, visited);
+        return address;
     }
 
     void update_order() {
@@ -163,24 +191,17 @@ struct ModuleGraph::State {
     }
 };
 
-ModuleGraph::ModuleGraph(Resolver external) : state_(std::make_shared<State>()) {
+ModuleGraph::ModuleGraph(Resolver external, ModuleProvider provider) : state_(std::make_shared<State>()) {
     state_->external = std::move(external);
+    state_->provider = std::move(provider);
 }
 
 void ModuleGraph::add(std::string name, std::span<const std::byte> source) {
     state_->require_owner();
-    if (!state_->root.empty() || state_->modules.size() >= 64 ||
-        source.size() > 64 * 1024 * 1024 - state_->source_bytes) {
-        throw std::runtime_error("module registration is sealed or exceeds bootstrap budget");
+    if (!state_->root.empty()) {
+        throw std::runtime_error("module registration is sealed");
     }
-    name = module_key(std::move(name));
-    if (state_->modules.contains(name)) {
-        throw std::runtime_error("duplicate module basename");
-    }
-    State::Node node;
-    node.source.assign(source.begin(), source.end());
-    state_->source_bytes += source.size();
-    state_->modules.emplace(std::move(name), std::move(node));
+    state_->register_source(module_key(std::move(name)), source);
 }
 
 void ModuleGraph::load(std::string root) {
@@ -217,6 +238,23 @@ std::uintptr_t ModuleGraph::export_address(std::string module, const Import &sym
 std::vector<std::string> ModuleGraph::initialization_order() const {
     state_->require_owner();
     return state_->order;
+}
+
+ModuleStatistics ModuleGraph::statistics() const {
+    state_->require_owner();
+    ModuleStatistics result;
+    result.mapped_bytes = state_->mapped_bytes;
+    for (const auto &[name, node] : state_->modules) {
+        (void)name;
+        if (node.image) {
+            ++result.modules;
+            result.imports += node.image->imports().size();
+            if (name == state_->root) {
+                result.executable_root = !node.image->state_->dll;
+            }
+        }
+    }
+    return result;
 }
 
 ModuleGraph::Execution ModuleGraph::start() const {

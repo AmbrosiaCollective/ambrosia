@@ -1,17 +1,28 @@
 #pragma once
 #include "pe_image.h"
+#include <optional>
 
 namespace ambrosia::pe {
+using ModuleProvider = std::function<std::optional<std::vector<std::byte>>(const std::string &)>;
+
+struct ModuleStatistics {
+    std::size_t modules = 0;
+    std::size_t mapped_bytes = 0;
+    std::size_t imports = 0;
+    bool executable_root = false;
+};
+
 class ModuleGraph {
     struct State;
 
   public:
     class Execution;
-    explicit ModuleGraph(Resolver external = {});
+    explicit ModuleGraph(Resolver external = {}, ModuleProvider provider = {});
     void add(std::string name, std::span<const std::byte> source);
     void load(std::string root);
     std::uintptr_t export_address(std::string module, const Import &symbol);
     std::vector<std::string> initialization_order() const;
+    ModuleStatistics statistics() const;
     Execution start() const;
 
   private:
