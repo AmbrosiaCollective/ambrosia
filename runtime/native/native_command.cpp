@@ -15,10 +15,10 @@ struct Options {
     bool run = false;
 };
 
-constexpr const char *usage =
-    "ambrosia-host --inspect IMAGE [--package DIR] [--work DIR]\n"
-    "              --run-bootstrap IMAGE [--package DIR] [--work DIR]\n"
-    "Synthetic PE bootstrap only. Inspect maps dependencies without running callbacks.\n";
+constexpr const char *usage = "ambrosia-host --inspect IMAGE [--package DIR] [--work DIR]\n"
+                              "              --run-bootstrap IMAGE [--package DIR] [--work DIR]\n"
+                              "Inspect maps supported PE dependencies without running callbacks.\n"
+                              "Run-bootstrap supports synthetic PE startup only.\n";
 
 Options parse_options(std::span<const std::filesystem::path> arguments) {
     Options options;
@@ -66,17 +66,26 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
     try {
         const auto options = parse_options(arguments);
         const auto paths = host::resolve_paths(options.image, options.package, options.work);
-        constexpr std::size_t source_limit = 64 * 1024 * 1024;
-        auto bytes = host::read_bootstrap_file(paths.image, source_limit);
-        host::PackageLimits limits;
-        limits.total_bytes = source_limit - bytes.size();
-        host::PackageModules package(paths.package, limits);
+        pe::ModuleLimits module_limits;
+        if (!options.run) {
+            module_limits.image.file_bytes = 128 * 1024 * 1024;
+            module_limits.image.mapped_bytes = 256 * 1024 * 1024;
+            module_limits.source_bytes = 256 * 1024 * 1024;
+            module_limits.mapped_bytes = 384 * 1024 * 1024;
+        }
+        auto bytes = host::read_bootstrap_file(paths.image, module_limits.image.file_bytes);
+        const auto root_bytes = bytes.size();
+        host::PackageLimits package_limits;
+        package_limits.total_bytes = module_limits.source_bytes - root_bytes;
+        host::PackageModules package(paths.package, package_limits);
         services::Runtime service_runtime;
         pe::ModuleGraph graph([&](const auto &symbol) { return service_runtime.resolve(symbol); },
-                              [&](const auto &name) { return package.read(name); });
+                              [&](const auto &name) { return package.read(name); }, module_limits);
         const auto filename = paths.image.filename().u8string();
         const std::string root(reinterpret_cast<const char *>(filename.data()), filename.size());
         graph.add(root, bytes);
+        // Registration owns a copy. Drop the file buffer before mapping large images.
+        std::vector<std::byte>().swap(bytes);
         graph.load(root);
         const auto statistics = graph.statistics();
         std::optional<std::uint64_t> result;
@@ -90,7 +99,7 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         }
         output << "{\"modules\":" << statistics.modules << ",\"mapped_bytes\":" << statistics.mapped_bytes
                << ",\"imports\":" << statistics.imports << ",\"files_read\":" << package.files_read() + 1
-               << ",\"bytes_read\":" << package.bytes_read() + bytes.size();
+               << ",\"bytes_read\":" << package.bytes_read() + root_bytes;
         if (result) {
             output << ",\"bootstrap_result\":" << *result;
         }
