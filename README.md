@@ -39,11 +39,25 @@ services it expects, while the shader tools translate RDNA2 GPU programs to
 SPIR-V for Vulkan. Game files and generated outputs stay on the player's machine.
 
 > [!IMPORTANT]
-> This repository contains no original game files, game assets, keys, or prebuilt
-> copy of the game. It does not provide instructions for obtaining them. Workflows
-> that use the game require your own copy with files already readable on disk.
-> Nothing here decrypts protected packages. Do not upload game files, extracted
-> assets, generated shaders, or traces containing game content.
+> Ambrosia exists to preserve knowledge about this game and the technology behind
+> it. We document what we learn and build tools that people can study, test, and
+> improve. That work belongs in the open, where it can benefit more than one
+> project or generation of hardware.
+>
+> **What we share here is code, documentation, and synthetic tests.** GTA VI's
+> executables, original assets, decryption keys, and ready-to-play game packages
+> are neither included nor offered. Ambrosia provides no package-decryption
+> facility or directions for sourcing game files.
+>
+> Experiments that depend on the game begin with your own locally readable files.
+> Keep those files, exported content, game-derived shaders and caches, and logs
+> that reproduce game content outside the repository. They must also stay out of
+> pull requests, issue attachments, and community uploads. Share reproducible
+> synthetic examples, counts, and redacted error summaries instead.
+>
+> Preservation, scientific inquiry, and better technology are reasons to support
+> this effort. They are also why we stand against attempts to intimidate its
+> contributors or suppress the research.
 
 ## Project status
 
