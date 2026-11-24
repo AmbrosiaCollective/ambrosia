@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 428 checks under a
+as errors. Each build's native shared-object entry passed 435 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `__acrt_iob_func`, after passing DLL thread-notification
-policy, sequenced-list initialization, CRT tables and the earlier TEB access. This occurs during module initialization; the game's
+and now stop at `malloc`, after passing the CRT standard-stream accessor,
+DLL notification policy, sequenced-list initialization and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -326,3 +326,13 @@ unimplemented and blocked by the current sandbox. Synthetic DLL initialization
 checks exercise the service ABI, state change, scope restoration and process
 detach. They do not establish multithreaded behavior. The graph must outlive its
 service scope.
+
+## UCRT standard-stream identities
+
+`__acrt_iob_func` supplies stable, distinct runtime-owned opaque FILE identities
+for stdin/stdout/stderr. UCRT's public x64 FILE is pointer-sized; host libc FILE
+is never exposed or reinterpreted. Recognition uses exact owned addresses and
+rejects foreign or other-runtime identities without dereferencing them. The
+accessor preserves last error and follows the scoped runtime across nested calls.
+Unsupported indices or access without a scoped runtime stop diagnostics. Other
+stream operations remain unresolved; this is not yet a complete stdio adapter.

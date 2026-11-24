@@ -1,6 +1,7 @@
 #pragma once
 #include "critical_sections.h"
 #include "crt_lifecycle.h"
+#include "crt_streams.h"
 #include "fls_slots.h"
 #include "import_registry.h"
 #include "memory_services.h"
@@ -30,11 +31,16 @@ class Runtime {
         return on_exit_;
     }
 
+    StandardStreams &streams() {
+        return streams_;
+    }
+
   private:
     MemoryServices memory_;
     CriticalSections critical_sections_;
     FlsSlots fls_;
     OnExitTables on_exit_;
+    StandardStreams streams_;
     ImportRegistry registry_;
 };
 

@@ -76,3 +76,8 @@ same pinned SDK revision. Wine kernelbase/ntdll loader.c at the existing Wine
 revision provides failure/status and per-module notification-state references.
 The native graph owns its policy and scopes; no Wine implementation or header
 is imported, and no Wine/Proton runtime is used.
+
+UCRT's opaque pointer-sized FILE and standard-stream indices follow Wine's
+public-domain corecrt_wstdio.h/stdio.h declarations at the existing pinned Wine
+revision. Its file.c was read for accessor behavior. No header, implementation
+or host FILE layout is imported by the owned stream identities.

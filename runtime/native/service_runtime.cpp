@@ -86,6 +86,7 @@ Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
     register_crt_lifecycle(registry_);
     register_slist_services(registry_);
     register_loader_services(registry_);
+    register_crt_streams(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",
