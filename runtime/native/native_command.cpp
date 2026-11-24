@@ -68,6 +68,7 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         const auto paths = host::resolve_paths(options.image, options.package, options.work);
         pe::ModuleLimits module_limits;
         if (!options.run) {
+            module_limits.image.mode = pe::LoadMode::inspect;
             module_limits.image.file_bytes = 128 * 1024 * 1024;
             module_limits.image.mapped_bytes = 256 * 1024 * 1024;
             module_limits.source_bytes = 256 * 1024 * 1024;
@@ -100,6 +101,11 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         output << "{\"modules\":" << statistics.modules << ",\"mapped_bytes\":" << statistics.mapped_bytes
                << ",\"imports\":" << statistics.imports << ",\"files_read\":" << package.files_read() + 1
                << ",\"bytes_read\":" << package.bytes_read() + root_bytes;
+        if (statistics.inspection_only) {
+            output << ",\"inspection_only\":true,\"unresolved_imports\":" << statistics.unresolved_imports
+                   << ",\"unwind_records\":" << statistics.unwind_records
+                   << ",\"unsupported_directories\":" << statistics.unsupported_directories;
+        }
         if (result) {
             output << ",\"bootstrap_result\":" << *result;
         }

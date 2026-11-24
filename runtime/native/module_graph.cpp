@@ -252,12 +252,16 @@ std::vector<std::string> ModuleGraph::initialization_order() const {
 ModuleStatistics ModuleGraph::statistics() const {
     state_->require_owner();
     ModuleStatistics result;
+    result.inspection_only = state_->limits.image.mode == LoadMode::inspect;
     result.mapped_bytes = state_->mapped_bytes;
     for (const auto &[name, node] : state_->modules) {
         (void)name;
         if (node.image) {
             ++result.modules;
             result.imports += node.image->imports().size();
+            result.unresolved_imports += node.image->state_->unresolved_imports;
+            result.unwind_records += node.image->state_->unwind.entries().size();
+            result.unsupported_directories |= node.image->state_->unsupported_directories;
             if (name == state_->root) {
                 result.executable_root = !node.image->state_->dll;
             }
@@ -268,6 +272,9 @@ ModuleStatistics ModuleGraph::statistics() const {
 
 ModuleGraph::Execution ModuleGraph::start() const {
     state_->require_owner();
+    if (state_->limits.image.mode == LoadMode::inspect) {
+        throw std::runtime_error("inspection-only module graph cannot execute");
+    }
     if (state_->order.empty()) {
         throw std::runtime_error("module graph is not loaded");
     }

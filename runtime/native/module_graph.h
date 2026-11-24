@@ -9,6 +9,10 @@ struct ModuleStatistics {
     std::size_t modules = 0;
     std::size_t mapped_bytes = 0;
     std::size_t imports = 0;
+    std::size_t unresolved_imports = 0;
+    std::size_t unwind_records = 0;
+    std::uint32_t unsupported_directories = 0;
+    bool inspection_only = false;
     bool executable_root = false;
 };
 
