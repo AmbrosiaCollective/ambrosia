@@ -58,7 +58,11 @@ class LaunchConfiguration(unittest.TestCase):
             with self.subTest(workflow=path.name):
                 text = path.read_text(encoding="utf-8")
                 self.assertNotRegex(text, re.compile(r"^  pull_request_target:", re.M))
-                self.assertNotIn("${{ secrets.", text)
+                if path.name == "sync-personal-fork.yml":
+                    self.assertEqual(re.findall(r"\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}", text),
+                                     ["FORK_SYNC_SSH_KEY"])
+                else:
+                    self.assertNotIn("${{ secrets.", text)
                 for use in re.findall(r"\buses:\s+([^\s#]+)", text):
                     self.assertRegex(use, r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$")
 

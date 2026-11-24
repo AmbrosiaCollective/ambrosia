@@ -40,6 +40,8 @@ jobs:
         run: python -I tests/test_ambrosia_launch.py
       - name: Synthetic import-readiness diagnostics
         run: python -I tests/test_boot_readiness.py
+      - name: Fork-sync security contracts
+        run: python -I tests/test_fork_sync.py
       - name: Python syntax
         run: python -m compileall -q ambrosia.py make_game.py tools tests
       - name: State validation scope
