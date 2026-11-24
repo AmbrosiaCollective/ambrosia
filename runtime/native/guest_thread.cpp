@@ -8,6 +8,10 @@ thread_local ThreadContext *active_context = nullptr;
 }
 
 ThreadContext::ThreadContext() : owner_(std::this_thread::get_id()) {
+    const auto stack = host::current_stack_bounds();
+    anchor_.stack_base = stack.upper;
+    anchor_.stack_limit = stack.lower;
+    anchor_.self = &anchor_;
     anchor_.tls = slots_.data();
 }
 

@@ -41,13 +41,21 @@ class ThreadContext {
     std::array<std::unique_ptr<Block>, 64> blocks_{};
 
     struct Anchor {
-        std::array<std::byte, 0x58> reserved{};
+        std::array<std::byte, 8> reserved_exception{};
+        std::uintptr_t stack_base = 0;
+        std::uintptr_t stack_limit = 0;
+        std::array<std::byte, 0x18> reserved_tib{};
+        void *self = nullptr;
+        std::array<std::byte, 0x20> reserved_client{};
         void **tls = nullptr;
         std::array<std::byte, 8> reserved_error{};
         std::uint32_t last_error = 0;
     } anchor_;
 
     static_assert(offsetof(Anchor, tls) == 0x58);
+    static_assert(offsetof(Anchor, stack_base) == 8);
+    static_assert(offsetof(Anchor, stack_limit) == 0x10);
+    static_assert(offsetof(Anchor, self) == 0x30);
     static_assert(offsetof(Anchor, last_error) == 0x68);
     std::thread::id owner_;
     bool sealed_ = false;
