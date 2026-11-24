@@ -22,23 +22,35 @@ struct Import {
     std::uint16_t ordinal = 0;
     bool by_ordinal = false;
 };
+
 // Only explicit adapters may resolve imports. Never fall back to host dlopen.
-using Resolver = std::function<std::uintptr_t(const Import&)>;
+using Resolver = std::function<std::uintptr_t(const Import &)>;
 
 class Image {
-public:
-    static Image load(std::span<const std::byte> bytes, const Resolver& resolver);
-    Image(Image&&) noexcept = default;
-    Image& operator=(Image&&) noexcept = default;
-    Image(const Image&) = delete;
-    Image& operator=(const Image&) = delete;
+  public:
+    static Image load(std::span<const std::byte> bytes, const Resolver &resolver);
+    Image(Image &&) noexcept = default;
+    Image &operator=(Image &&) noexcept = default;
+    Image(const Image &) = delete;
+    Image &operator=(const Image &) = delete;
     // Bootstrap ABI only: no arguments, uint64 result; not a retail entry contract.
     std::uint64_t run_bootstrap() const;
-    const std::byte* base() const { return memory_.data(); }
-    std::size_t size() const { return memory_.size(); }
-    const std::vector<Import>& imports() const { return imports_; }
-private:
+
+    const std::byte *base() const {
+        return memory_.data();
+    }
+
+    std::size_t size() const {
+        return memory_.size();
+    }
+
+    const std::vector<Import> &imports() const {
+        return imports_;
+    }
+
+  private:
     explicit Image(std::size_t size) : memory_(size) {}
+
     host::Mapping memory_;
     std::uint32_t entry_ = 0;
     std::vector<Import> imports_;
