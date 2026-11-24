@@ -22,4 +22,4 @@ Launch preparation uses a source snapshot with explicit provenance. The local
 checkout is shallow; it does not contain the upstream project's complete Git
 history. Do not describe a snapshot import as a full-history mirror or rewrite
 upstream credit to imply otherwise. The existing fork and preserved source
-archives are not modified by creating a separate private organization repository.
+archives remain unchanged by this independent organization repository.
