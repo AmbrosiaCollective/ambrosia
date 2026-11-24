@@ -119,7 +119,17 @@ template <class Function> void bad(Function mutation, const char *label) {
     check(rejected(bytes), label);
 }
 
+template <class Function> bool runtime_rejected(Function operation) {
+    try {
+        operation();
+    } catch (const std::runtime_error &) {
+        return true;
+    }
+    return false;
+}
+
 #include "lifecycle_tests.h"
+#include "limit_tests.h"
 #include "module_tests.h"
 #include "package_tests.h"
 #include "service_tests.h"
@@ -266,6 +276,7 @@ extern "C" int ambrosia_native_tests() {
         package_checks();
         memory_service_checks();
         service_dispatch_checks();
+        limit_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
@@ -273,6 +284,24 @@ extern "C" int ambrosia_native_tests() {
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << ",\"skipped\":0}\n";
     return failures ? 1 : 0;
 }
+
+// Inspection-only bridge for the strict in-process launcher. It never selects
+// bootstrap mode or invokes initialization/entry callbacks.
+extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
+    if (!image || !package) {
+        return 2;
+    }
+    try {
+        const std::vector<std::filesystem::path> arguments{
+            "--inspect", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(image))),
+            "--package", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(package)))};
+        return ambrosia::run_native_command(arguments, std::cout, std::cerr);
+    } catch (...) {
+        std::cerr << "inspection probe argument construction failed\n";
+        return 2;
+    }
+}
+
 #ifdef AMBROSIA_STANDALONE_TESTS
 int main() {
     return ambrosia_native_tests();

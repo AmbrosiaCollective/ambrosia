@@ -5,15 +5,6 @@ void write_fixture(const std::filesystem::path &path, const Bytes &bytes) {
     }
 }
 
-template <class Function> bool runtime_rejected(Function operation) {
-    try {
-        operation();
-    } catch (const std::runtime_error &) {
-        return true;
-    }
-    return false;
-}
-
 void package_checks() {
     using ambrosia::host::PackageLimits;
     using ambrosia::host::PackageModules;
