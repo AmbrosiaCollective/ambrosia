@@ -109,7 +109,7 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
             if (!statistics.executable_root) {
                 throw std::runtime_error("bootstrap mode requires an executable root");
             }
-            services::Scope scope(service_runtime);
+            services::Scope scope(service_runtime, &graph);
             if (options.trace) {
                 stops->seal();
                 diagnostics::ImportStopScope import_scope(*stops);

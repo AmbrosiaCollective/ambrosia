@@ -3,6 +3,7 @@
 #include "critical_services.h"
 #include "fls_services.h"
 #include "guest_thread.h"
+#include "loader_services.h"
 #include "slist_services.h"
 #include <array>
 
@@ -10,6 +11,7 @@ namespace ambrosia::services {
 namespace {
 struct NativeState {
     Runtime *runtime = nullptr;
+    pe::ModuleGraph *modules = nullptr;
     std::uint32_t fallback_error = 0;
 };
 
@@ -83,6 +85,7 @@ Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
     register_fls_services(registry_);
     register_crt_lifecycle(registry_);
     register_slist_services(registry_);
+    register_loader_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",
@@ -112,11 +115,18 @@ Runtime *current_runtime() noexcept {
     return native_state().runtime;
 }
 
-Scope::Scope(Runtime &runtime) : saved_(native_state().runtime) {
+pe::ModuleGraph *current_modules() noexcept {
+    return native_state().modules;
+}
+
+Scope::Scope(Runtime &runtime, pe::ModuleGraph *modules)
+    : saved_(native_state().runtime), saved_modules_(native_state().modules) {
     native_state().runtime = &runtime;
+    native_state().modules = modules;
 }
 
 Scope::~Scope() {
     native_state().runtime = saved_;
+    native_state().modules = saved_modules_;
 }
 } // namespace ambrosia::services

@@ -117,6 +117,11 @@ void Image::Execution::require_open() const {
 }
 
 bool Image::Execution::notify(std::uint32_t reason) {
+    // Process notifications remain mandatory. A future worker-thread path must
+    // use this same policy when dispatching thread attach/detach (2/3).
+    if ((reason == 2 || reason == 3) && !state_->thread_notifications) {
+        return true;
+    }
     auto dispatch = [&] {
         auto *base = state_->memory.data();
         for (const auto callback_rva : state_->callbacks) {

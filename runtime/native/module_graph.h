@@ -41,6 +41,8 @@ class ModuleGraph {
     std::vector<std::string> initialization_order() const;
     ModuleStatistics statistics() const;
     std::vector<ModuleRange> diagnostic_ranges() const;
+    bool disable_thread_notifications(std::uintptr_t module);
+    std::optional<bool> thread_notifications_enabled(std::uintptr_t module) const;
     Execution start() const;
 
   private:

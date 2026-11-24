@@ -39,12 +39,13 @@ class Runtime {
 };
 
 Runtime *current_runtime() noexcept;
+pe::ModuleGraph *current_modules() noexcept;
 
 // The host-side service context is scoped independently of guest GS/TEB state.
 // It must enclose module initialization, entry and detach notifications.
 class Scope {
   public:
-    explicit Scope(Runtime &runtime);
+    explicit Scope(Runtime &runtime, pe::ModuleGraph *modules = nullptr);
     ~Scope();
     Scope(const Scope &) = delete;
     Scope &operator=(const Scope &) = delete;
@@ -53,5 +54,6 @@ class Scope {
 
   private:
     Runtime *saved_;
+    pe::ModuleGraph *saved_modules_;
 };
 } // namespace ambrosia::services

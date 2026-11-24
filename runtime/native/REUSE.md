@@ -70,3 +70,9 @@ Sequenced-list head initialization follows the pinned Microsoft SDK
 InitializeSListHead contract and the existing Wine x64 SLIST_HEADER layout.
 Wine ntdll sync.c at the same pinned revision verifies the 16-byte format
 selector. These are references only; no implementation/header is ported.
+
+Module notification policy follows Microsoft DisableThreadLibraryCalls at the
+same pinned SDK revision. Wine kernelbase/ntdll loader.c at the existing Wine
+revision provides failure/status and per-module notification-state references.
+The native graph owns its policy and scopes; no Wine implementation or header
+is imported, and no Wine/Proton runtime is used.

@@ -12,6 +12,7 @@ struct Image::State {
     std::uint32_t entry = 0;
     bool dll = false;
     bool has_tls = false;
+    bool thread_notifications = true;
     bool inspection_only = false;
     std::uint32_t unsupported_directories = 0;
     std::size_t unresolved_imports = 0;

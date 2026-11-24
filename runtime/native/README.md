@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 415 checks under a
+as errors. Each build's native shared-object entry passed 428 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `DisableThreadLibraryCalls`, after passing sequenced-list
-initialization, CRT on-exit tables and the previously faulting TEB access. This occurs during module initialization; the game's
+and now stop at `__acrt_iob_func`, after passing DLL thread-notification
+policy, sequenced-list initialization, CRT tables and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -313,3 +313,16 @@ cleanup. Synthetic callback tests do not establish guest exception support.
 including its format selector, through Win32/API-set and native aliases. It
 requires a valid 16-byte-aligned destination and preserves last error. Subsequent
 interlocked push/pop/flush operations remain unsupported and unresolved.
+
+## Module thread-notification policy
+
+`DisableThreadLibraryCalls` resolves only exact loaded DLL bases through a scoped
+module graph. Unknown/interior/executable handles, inspection-only images and
+static-TLS modules fail. Success records a persistent per-image notification flag
+and preserves last error; failure reports module-not-found. Process attach/detach
+remain active. The notification dispatch boundary checks this flag for thread
+reasons, but a worker-thread launcher and thread attach/detach execution are still
+unimplemented and blocked by the current sandbox. Synthetic DLL initialization
+checks exercise the service ABI, state change, scope restoration and process
+detach. They do not establish multithreaded behavior. The graph must outlive its
+service scope.

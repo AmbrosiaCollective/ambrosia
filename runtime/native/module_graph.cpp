@@ -291,6 +291,33 @@ std::vector<ModuleRange> ModuleGraph::diagnostic_ranges() const {
     return ranges;
 }
 
+bool ModuleGraph::disable_thread_notifications(std::uintptr_t module) {
+    state_->require_owner();
+    for (auto &[name, node] : state_->modules) {
+        (void)name;
+        if (node.image && reinterpret_cast<std::uintptr_t>(node.image->base()) == module) {
+            auto &image = *node.image->state_;
+            if (!image.dll || image.has_tls || image.inspection_only) {
+                return false;
+            }
+            image.thread_notifications = false;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::optional<bool> ModuleGraph::thread_notifications_enabled(std::uintptr_t module) const {
+    state_->require_owner();
+    for (const auto &[name, node] : state_->modules) {
+        (void)name;
+        if (node.image && reinterpret_cast<std::uintptr_t>(node.image->base()) == module) {
+            return node.image->state_->thread_notifications;
+        }
+    }
+    return std::nullopt;
+}
+
 ModuleGraph::Execution ModuleGraph::start() const {
     state_->require_owner();
     if (state_->limits.image.mode == LoadMode::inspect) {
