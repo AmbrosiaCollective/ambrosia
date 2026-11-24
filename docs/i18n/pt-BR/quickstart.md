@@ -170,4 +170,4 @@ da instalação. No Windows, `--runtime-build` também permite reutilizar um bui
 O [guia de testes em GPU](../../testing.md) mostra como executar os testes sem arquivos do jogo.
 Publique os resultados de GPU na [issue #166](https://github.com/ItsNotRexed/Leonida/issues/166).
 
-[coord]: https://discord.gg/xEaVQtW5jH
+[coord]: https://discord.gg/Bdguf59NvB

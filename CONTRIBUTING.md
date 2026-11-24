@@ -13,7 +13,7 @@ Thanks for helping. A few rules keep the project safe to host:
 ## Before you start
 
 Coordinate Ambrosia work through this repository's issues and the
-[Ambrosia community](https://discord.gg/xEaVQtW5jH). Check for an existing claim or
+[Ambrosia community](https://discord.gg/Bdguf59NvB). Check for an existing claim or
 implementation before starting, and describe the scope and any dependencies in
 your pull request. Keep changes focused and say whether they need game files or
 specific hardware. Report exact revisions, commands and limitations.

@@ -8,7 +8,7 @@ issue][claims] helps more.
 
 This page collects the setup steps and the problems testers have run into so far.
 
-[claims]: https://discord.gg/xEaVQtW5jH
+[claims]: https://discord.gg/Bdguf59NvB
 
 ## What you need
 

@@ -19,7 +19,7 @@
   <a href="tools/"><img alt="Python 3.12 or newer" src="https://img.shields.io/badge/Python-3.12%2B-3776ab?style=flat-square&amp;logo=python&amp;logoColor=white"></a>
   <a href="runtime/"><img alt="C++20" src="https://img.shields.io/badge/C%2B%2B-20-00599c?style=flat-square&amp;logo=cplusplus&amp;logoColor=white"></a>
   <a href="runtime/xma_decoder/"><img alt="Rust decoder" src="https://img.shields.io/badge/Rust-decoder-ce6f44?style=flat-square&amp;logo=rust&amp;logoColor=white"></a>
-  <a href="https://discord.gg/xEaVQtW5jH"><img alt="Join Discord" src="https://img.shields.io/badge/Discord-join_us-5865f2?style=flat-square&amp;logo=discord&amp;logoColor=white"></a>
+  <a href="https://discord.gg/Bdguf59NvB"><img alt="Join Discord" src="https://img.shields.io/badge/Discord-join_us-5865f2?style=flat-square&amp;logo=discord&amp;logoColor=white"></a>
 </p>
 
 <p align="center">
@@ -157,7 +157,7 @@ hardware. Synthetic checks alone cannot establish that.
 Keep contributions small: one problem, clear acceptance checks, and enough
 information to reproduce the result. Check for existing work before starting,
 then follow [CONTRIBUTING.md](CONTRIBUTING.md). Join the
-[Discord](https://discord.gg/xEaVQtW5jH) to coordinate.
+[Discord](https://discord.gg/Bdguf59NvB) to coordinate.
 
 ## 📝 A note from the author
 

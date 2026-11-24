@@ -195,4 +195,4 @@ Windows этот же флаг пропускает сборку.
 складывают в [issue #166](https://github.com/ItsNotRexed/Leonida/issues/166), по одному комментарию на карту и
 драйвер.
 
-[coord]: https://discord.gg/xEaVQtW5jH
+[coord]: https://discord.gg/Bdguf59NvB

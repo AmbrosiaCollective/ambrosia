@@ -174,4 +174,4 @@ GPU der Runtime es kann, denn dieser Treiber kann bei emuliertem LDS-Code abstü
 Die [Anleitung zu den GPU-Tests](../../testing.md) zeigt, wie sie ohne Spieldateien laufen.
 Ergebnisse von GPU-Tests gehören in [Issue #166](https://github.com/ItsNotRexed/Leonida/issues/166).
 
-[coord]: https://discord.gg/xEaVQtW5jH
+[coord]: https://discord.gg/Bdguf59NvB

@@ -13,6 +13,6 @@ keys or game-derived assets. Ask before sharing another person's private report
 or conversation.
 
 Report conduct concerns privately to a moderator or maintainer through the
-[community](https://discord.gg/xEaVQtW5jH). Maintainers may remove inappropriate
+[community](https://discord.gg/Bdguf59NvB). Maintainers may remove inappropriate
 content, limit participation or revoke access. Moderation decisions should be
 proportionate, consistent and handled without exposing the reporter publicly.

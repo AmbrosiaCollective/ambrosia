@@ -153,4 +153,4 @@ risultati (conteggi, esito dei test, classi di errore).
 La [guida ai test GPU](../../testing.md) spiega come eseguirli senza i file del gioco. I risultati dei test GPU
 vanno pubblicati nell'[issue #166](https://github.com/ItsNotRexed/Leonida/issues/166).
 
-[coord]: https://discord.gg/xEaVQtW5jH
+[coord]: https://discord.gg/Bdguf59NvB

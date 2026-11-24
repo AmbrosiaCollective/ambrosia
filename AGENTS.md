@@ -42,7 +42,7 @@ The planned GitHub home is `AmbrosiaCollective/ambrosia`; remote creation/access
 and branch-rule enforcement are separate from these local repository files.
 
 - This is the independent Ambrosia fork. Check this repository's issues and
-  [community](https://discord.gg/xEaVQtW5jH) for existing work before proposing a fix.
+  [community](https://discord.gg/Bdguf59NvB) for existing work before proposing a fix.
 - Keep scope, dependencies and exact tested revisions in the task/PR description.
   Existing upstream issue links are historical technical references.
 - Work locally and obtain task-specific approval before remote publication.

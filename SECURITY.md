@@ -1,7 +1,7 @@
 # Reporting security concerns
 
 For a suspected vulnerability, contact a maintainer privately through the
-[Ambrosia community](https://discord.gg/xEaVQtW5jH) and request a private reporting
+[Ambrosia community](https://discord.gg/Bdguf59NvB) and request a private reporting
 route. Do not post exploit details, credentials or private paths in a public
 channel or issue. If direct contact is unavailable, ask for a private contact
 without including technical details.

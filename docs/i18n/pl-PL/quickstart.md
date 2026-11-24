@@ -171,4 +171,4 @@ tylko wynikami (liczby, wyniki testów, klasy błędów).
 [Przewodnik po testach GPU](../../testing.md) pokazuje, jak uruchomić testy bez plików gry. Wyniki testów GPU
 publikuj w [issue #166](https://github.com/ItsNotRexed/Leonida/issues/166).
 
-[coord]: https://discord.gg/xEaVQtW5jH
+[coord]: https://discord.gg/Bdguf59NvB

@@ -130,4 +130,4 @@ Aşamalar şu sırayla çalışır: `check` → `shaders` → `assets` → `runt
 sonuçlarını [issue #166](https://github.com/ItsNotRexed/Leonida/issues/166) altında (GPU ve sürücü başına bir yorum)
 paylaşabilirsiniz.
 
-[coord]: https://discord.gg/xEaVQtW5jH
+[coord]: https://discord.gg/Bdguf59NvB

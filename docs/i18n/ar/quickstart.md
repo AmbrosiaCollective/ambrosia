@@ -91,6 +91,6 @@ python -I make_game.py --game "D:\path\to\package" --out "D:\Games\Ambrosia" --w
 يوضح [دليل اختبارات GPU](../../testing.md) طريقة تشغيل الاختبارات من دون ملفات اللعبة.
 يمكن نشر النتائج في [مسألة الاختبارات رقم 166](https://github.com/ItsNotRexed/Leonida/issues/166).
 
-[coord]: https://discord.gg/xEaVQtW5jH
+[coord]: https://discord.gg/Bdguf59NvB
 
 </div>

@@ -177,4 +177,4 @@ Le [guide des tests GPU](../../testing.md) explique comment lancer les tests san
 résultats dans l'[issue #166](https://github.com/ItsNotRexed/Leonida/issues/166), un commentaire par GPU et par
 pilote.
 
-[coord]: https://discord.gg/xEaVQtW5jH
+[coord]: https://discord.gg/Bdguf59NvB

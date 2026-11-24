@@ -16,5 +16,5 @@ change. The planned destination is `AmbrosiaCollective/ambrosia`; clone examples
 will work only after that private repository exists and access is granted. For optional dashboard GitHub metadata, supply `--repo OWNER/REPO`
 or `AMBROSIA_GITHUB_REPO` explicitly.
 
-Discord: https://discord.gg/xEaVQtW5jH
+Discord: https://discord.gg/Bdguf59NvB
 Server description: Ambrosia — GTA VI recompilation, tools and research.

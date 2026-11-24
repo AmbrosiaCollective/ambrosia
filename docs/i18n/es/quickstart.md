@@ -221,4 +221,4 @@ La [guía de pruebas de GPU](../../testing.md) explica cómo ejecutarlas sin nin
 resultados en la [issue #166](https://github.com/ItsNotRexed/Leonida/issues/166), un comentario por GPU y por
 controlador.
 
-[coord]: https://discord.gg/xEaVQtW5jH
+[coord]: https://discord.gg/Bdguf59NvB

@@ -75,7 +75,7 @@ class LaunchConfiguration(unittest.TestCase):
             self.assertTrue(text.strip())
         security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
         self.assertIn("privately", security)
-        self.assertIn("https://discord.gg/xEaVQtW5jH", security)
+        self.assertIn("https://discord.gg/Bdguf59NvB", security)
         template = (ROOT / ".github/pull_request_template.md").read_text(encoding="utf-8")
         self.assertNotIn("AI-assisted:", template)
         self.assertIn("Exact revision", template)
