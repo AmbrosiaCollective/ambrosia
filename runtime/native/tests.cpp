@@ -5,6 +5,7 @@
 #include "package_modules.h"
 #include "pe_image.h"
 #include "service_runtime.h"
+#include "unwind_table.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -134,6 +135,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "package_tests.h"
 #include "service_tests.h"
 #include "thread_tests.h"
+#include "unwind_tests.h"
 
 void pe_checks() {
     const auto bytes = fixture();
@@ -277,6 +279,7 @@ extern "C" int ambrosia_native_tests() {
         memory_service_checks();
         service_dispatch_checks();
         limit_checks();
+        unwind_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
@@ -299,6 +302,37 @@ extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
     } catch (...) {
         std::cerr << "inspection probe argument construction failed\n";
         return 2;
+    }
+}
+
+// Metadata-only probe. The buffer is table data, never an executable mapping.
+extern "C" int ambrosia_native_check_unwind(const void *data, std::size_t bytes, std::uint32_t image_bytes) {
+    if (!data && bytes) {
+        return 2;
+    }
+    try {
+        const auto table =
+            ambrosia::pe::UnwindTable::parse({static_cast<const std::byte *>(data), bytes}, image_bytes);
+        const auto entries = table.entries();
+        std::size_t samples = 0;
+        if (!entries.empty()) {
+            for (const auto index : {std::size_t{0}, entries.size() / 2, entries.size() - 1}) {
+                const auto &entry = entries[index];
+                if (entry.begin == entry.end) {
+                    continue;
+                }
+                if (table.find(entry.begin) != &entry || table.find(entry.end - 1) != &entry ||
+                    table.find(entry.end) == &entry) {
+                    throw std::runtime_error("unwind table lookup sample failed");
+                }
+                ++samples;
+            }
+        }
+        std::cout << "{\"unwind_records\":" << entries.size() << ",\"lookup_samples\":" << samples << "}\n";
+        return 0;
+    } catch (const std::exception &error) {
+        std::cerr << "unwind metadata probe: " << error.what() << '\n';
+        return 1;
     }
 }
 
