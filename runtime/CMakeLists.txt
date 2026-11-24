@@ -541,6 +541,10 @@ if(BUILD_TESTING)
     if(NOT CMAKE_CROSSCOMPILING)
       find_package(Python3 COMPONENTS Interpreter QUIET)
       if(Python3_FOUND)
+        add_test(NAME strict_imports COMMAND "${Python3_EXECUTABLE}" -I
+          "${CMAKE_CURRENT_SOURCE_DIR}/test/check_strict_imports.py"
+          "--loader=$<TARGET_FILE:gta6rt>" "--work-dir=${CMAKE_CURRENT_BINARY_DIR}")
+        set_tests_properties(strict_imports PROPERTIES TIMEOUT 90)
         add_test(NAME run_module_names COMMAND "${Python3_EXECUTABLE}" -I
           "${CMAKE_CURRENT_SOURCE_DIR}/test/check_module_names.py"
           "--loader=$<TARGET_FILE:gta6rt>" "--guest=$<TARGET_FILE:tiny_module_names>"

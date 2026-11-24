@@ -11,6 +11,8 @@
 //   {"seq":7,"t":0.020,"kind":"exception","code":"0xc0000005","at":"a.dll+0x4a00","access":"read","address":"0x0",
 //        "stack":["a.dll+0x4a00","a.dll+0x2210"]}
 //   {"seq":8,"t":0.030,"kind":"exit","code":0}
+// Before initialisation, binding_summary records modules/shim/host/module/unimplemented counts, strict and mode.
+// A --strict-imports rejection adds startup_blocked (reason: unimplemented_imports), then exit code 3.
 //
 // The exception handler is vectored, logs and returns EXCEPTION_CONTINUE_SEARCH: it never changes what the process
 // does (except AMBROSIA_SKIP_INT3, below).

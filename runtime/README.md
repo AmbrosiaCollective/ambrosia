@@ -5,6 +5,18 @@ executable is still missing from the package used here, so this directory contai
 can be built and tested without it — the PE loader, the measured import shims, and the GPU/Vulkan test
 tools.
 
+## Initial import baseline
+
+For an initial import baseline, `--strict-imports` works with `--dry-run`, `--init`
+and `--run`. It rejects unresolved initial bindings with exit code 3 before
+mapped TLS callbacks, DLL process attach or the executable entry point. Normal
+and eagerly bound delay imports are checked; later dynamic imports are not.
+Without this flag the existing behavior is unchanged. When tracing is enabled,
+`binding_summary` records counts before initialisation; rejection adds
+`startup_blocked` and `exit` events. Resolved bindings do not prove compatible
+service behavior or successful gameplay. Mapping still loads host DLLs: this
+check does not sandbox arbitrary executables.
+
 ## Build
 
 The normal path is the repository build script:

@@ -14,6 +14,8 @@
 //       command line are <exe name> plus the arguments after "--"; exit/ExitProcess from the game end the run
 //       (shims/process.cpp). gta6rt prints the binding report first and returns the game's exit code.
 //
+// --strict-imports rejects initial unimplemented bindings (exit 3) before any mapped image code runs.
+// It covers normal and eagerly bound delay imports, not future GetProcAddress/LoadLibrary requests.
 // --game-dir is also where a title's GAME: paths read from; anything it writes or deletes goes to the overlay
 // (--overlay, default <game-dir>/overlay) so the package is never modified (shims/file_system.cpp).
 #include <windows.h>
@@ -50,9 +52,10 @@ const char* binding_name(rt::Binding b) {
 
 int usage() {
     std::fprintf(stderr,
-                 "usage: gta6rt --dry-run <image> [--game-dir DIR] [--overlay DIR] [--mods DIR] [--archetype-lookup RVA[,ARG]] [--view-mode-getter RVA] [--trace FILE]\n"
+                 "usage: gta6rt --dry-run <image> [--strict-imports] [--game-dir DIR] [--overlay DIR] [--mods DIR] [--archetype-lookup RVA[,ARG]] [--view-mode-getter RVA] [--trace FILE]\n"
                  "       gta6rt --init <image> [--game-dir DIR] [--overlay DIR] [--mods DIR] [--archetype-lookup RVA[,ARG]] [--view-mode-getter RVA] [--trace-d3d12] [--trace FILE]\n"
-                 "       gta6rt --run <exe> [--game-dir DIR] [--overlay DIR] [--mods DIR] [--archetype-lookup RVA[,ARG]] [--view-mode-getter RVA] [--trace-d3d12] [--trace FILE] [-- game arguments...]\n");
+                 "       gta6rt --run <exe> [--strict-imports] [--game-dir DIR] [--overlay DIR] [--mods DIR] [--archetype-lookup RVA[,ARG]] [--view-mode-getter RVA] [--trace-d3d12] [--trace FILE] [-- game arguments...]\n"
+                 "       --strict-imports also applies to --init; rejects initial missing bindings before TLS/DllMain/entry (exit 3).\n");
     return 2;
 }
 
@@ -64,6 +67,7 @@ int wmain(int argc, wchar_t** argv) {
     int archetype_lookup_arg = 0;
     uint32_t view_mode_getter_rva = 0;  // --view-mode-getter RVA: the game's view mode of a camera context
     bool dry_run = false, init = false, run = false, trace_d3d12 = false;
+    bool strict_imports = false;
     std::vector<std::wstring> game_args;  // wide: path::string() throws on a character the code page lacks (RT-84)
     std::wstring trace_file;
     for (int i = 1; i < argc; ++i) {
@@ -75,6 +79,7 @@ int wmain(int argc, wchar_t** argv) {
         if (a == L"--dry-run") dry_run = true;
         else if (a == L"--init") init = true;
         else if (a == L"--run") run = true;
+        else if (a == L"--strict-imports") strict_imports = true;
         else if (a == L"--trace-d3d12") trace_d3d12 = true;
         else if (a == L"--trace" && i + 1 < argc) trace_file = argv[++i];
         else if (a == L"--game-dir" && i + 1 < argc) game_dir = argv[++i];
@@ -156,6 +161,35 @@ int wmain(int argc, wchar_t** argv) {
     try {
         rt::Loader loader(game_dir);
         rt::Module& main_module = loader.load(image);  // maps, binds and installs TLS; runs no image code
+        // Snapshot the complete initial import graph before hooks or initialisation. Delay imports are bound
+        // eagerly by Loader::bind_imports; later dynamic loads/lookups are outside this initial check.
+        size_t shim_bindings = 0, host_bindings = 0, module_bindings = 0, missing_bindings = 0;
+        for (const auto* m : loader.modules()) {
+            for (const auto& r : m->imports) {
+                switch (r.binding) {
+                    case rt::Binding::Shim: ++shim_bindings; break;
+                    case rt::Binding::Host: ++host_bindings; break;
+                    case rt::Binding::Module: ++module_bindings; break;
+                    default: ++missing_bindings; break;
+                }
+            }
+        }
+        const std::string binding_fields =
+            "\"modules\":" + std::to_string(loader.modules().size()) +
+            ",\"shim\":" + std::to_string(shim_bindings) +
+            ",\"host\":" + std::to_string(host_bindings) +
+            ",\"module\":" + std::to_string(module_bindings) +
+            ",\"unimplemented\":" + std::to_string(missing_bindings) +
+            ",\"strict\":" + (strict_imports ? "true" : "false") +
+            ",\"mode\":\"" + (dry_run ? "dry-run" : init ? "init" : "run") + "\"";
+        rt::startup_trace::event("binding_summary", binding_fields);
+        if (strict_imports && missing_bindings) {
+            std::fprintf(stderr, "error: --strict-imports blocked %zu unimplemented initial binding(s); "
+                                 "no mapped TLS callbacks, DllMain or entry point were run\n", missing_bindings);
+            rt::startup_trace::event("startup_blocked", "\"reason\":\"unimplemented_imports\"");
+            rt::startup_trace::event("exit", "\"code\":3");
+            return 3;
+        }
         // The mods' archetype swaps (docs/modding.md): hooked here, before any image code runs, when the lookup's RVA
         // for this executable is given. The count of redirected calls shows whether the RVA is the real lookup.
         if (view_mode_getter_rva) {
