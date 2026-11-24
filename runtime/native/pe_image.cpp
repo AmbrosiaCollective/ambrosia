@@ -1,4 +1,5 @@
 #include "pe_image.h"
+#include "image_state.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -54,6 +55,19 @@ struct Section {
     std::uint32_t rva, size, raw, raw_size, flags;
     std::size_t pages;
 };
+
+host::Access section_access(std::uint32_t characteristics) {
+    if (characteristics & 0x20000000) {
+        return host::Access::read_execute;
+    }
+    if (characteristics & 0x80000000) {
+        return host::Access::read_write;
+    }
+    if (characteristics & 0x40000000) {
+        return host::Access::read;
+    }
+    return host::Access::none;
+}
 } // namespace
 
 Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
@@ -71,9 +85,10 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
     const auto count = read<std::uint16_t>(bytes, nt + 6);
     const auto optional_size = read<std::uint16_t>(bytes, nt + 20);
     const auto characteristics = read<std::uint16_t>(bytes, nt + 22);
-    if (!count || count > 96 || !(characteristics & 2) || (characteristics & 0x2000)) {
-        fail("bootstrap requires an executable, not a DLL");
+    if (!count || count > 96 || !(characteristics & 2)) {
+        fail("bootstrap requires an executable PE image");
     }
+    const bool dll = (characteristics & 0x2000) != 0;
     const std::size_t optional = nt + 24;
     range(optional, optional_size, bytes.size());
     if (optional_size < 112 || read<std::uint16_t>(bytes, optional) != 0x20b) {
@@ -109,8 +124,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
         if (!dirs[i].rva || !dirs[i].size) {
             fail("incomplete PE directory");
         }
-        // Reject unsupported initialization/lifecycle features rather than
-        // calling a retail entry point without TLS, SEH or delayed imports.
+        // Guest exception/unwind handling and delayed imports remain unsupported.
         if (i != 1 && i != 5 && i != 12) {
             fail("PE directory needs an unimplemented guest service");
         }
@@ -152,12 +166,14 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
         }
         sections.push_back(section);
     }
-    if (!executable_entry) {
+    if (!executable_entry && !(dll && entry == 0)) {
         fail("PE entry is not in an executable section");
     }
     Image image(image_size);
-    image.entry_ = entry;
-    std::span<std::byte> mapped(image.memory_.data(), image_size);
+    auto &state = *image.state_;
+    state.entry = entry;
+    state.dll = dll;
+    std::span<std::byte> mapped(state.memory.data(), image_size);
     std::memcpy(mapped.data(), bytes.data(), headers);
     for (const auto &section : sections) {
         if (section.raw_size) {
@@ -249,7 +265,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
                     fail("unresolved PE import; execution refused");
                 }
                 write64(mapped, std::size_t(values[4]) + index * 8, address);
-                image.imports_.push_back(import);
+                state.imports.push_back(import);
             }
             if (!thunk_end) {
                 fail("unterminated PE import thunk table");
@@ -260,27 +276,16 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
         }
     }
 
+
     // No page is writable and executable at once. Parsing/binding completes
     // before code becomes executable; gaps remain inaccessible.
-    image.memory_.flush_instructions();
-    image.memory_.protect(0, image_size, host::Access::none);
-    image.memory_.protect(0, header_pages, host::Access::read);
+    state.memory.flush_instructions();
+    state.memory.protect(0, image_size, host::Access::none);
+    state.memory.protect(0, header_pages, host::Access::read);
     for (const auto &section : sections) {
-        const auto access = section.flags & 0x20000000   ? host::Access::read_execute
-                            : section.flags & 0x80000000 ? host::Access::read_write
-                            : section.flags & 0x40000000 ? host::Access::read
-                                                         : host::Access::none;
-        image.memory_.protect(section.rva, section.pages, access);
+        state.memory.protect(section.rva, section.pages, section_access(section.flags));
     }
     return image;
 }
 
-std::uint64_t Image::run_bootstrap() const {
-    if (!memory_.data() || !entry_) {
-        fail("bootstrap image is not mapped");
-    }
-    using Entry = std::uint64_t(AMBROSIA_GUEST_ABI *)();
-    const auto function = reinterpret_cast<Entry>(memory_.data() + entry_);
-    return function();
-}
 } // namespace ambrosia::pe
