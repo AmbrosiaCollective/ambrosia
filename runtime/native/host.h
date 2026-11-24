@@ -12,6 +12,13 @@ inline constexpr std::int64_t performance_frequency = 1000000000;
 std::uint32_t current_process_id();
 std::uint32_t current_thread_id();
 
+struct StackBounds {
+    std::uintptr_t lower = 0;
+    std::uintptr_t upper = 0;
+};
+
+StackBounds current_stack_bounds();
+
 // A thread-local guest segment scope. Linux uses GS and leaves native FS TLS
 // untouched. Unsupported hosts fail before changing their thread environment.
 std::uintptr_t guest_segment_base();
