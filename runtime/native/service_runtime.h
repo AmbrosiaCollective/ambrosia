@@ -1,5 +1,6 @@
 #pragma once
 #include "critical_sections.h"
+#include "fls_slots.h"
 #include "import_registry.h"
 #include "memory_services.h"
 
@@ -20,9 +21,14 @@ class Runtime {
         return critical_sections_;
     }
 
+    FlsSlots &fls() {
+        return fls_;
+    }
+
   private:
     MemoryServices memory_;
     CriticalSections critical_sections_;
+    FlsSlots fls_;
     ImportRegistry registry_;
 };
 
