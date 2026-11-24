@@ -98,6 +98,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
     const auto section_table = optional + optional_size;
     require_range(section_table, std::size_t(count) * 40, headers);
     std::array<Directory, 16> dirs{};
+    std::uint32_t unsupported_directories = 0;
     for (std::uint32_t i = 0; i < directories; ++i) {
         dirs[i] = {read<std::uint32_t>(bytes, optional + 112 + i * 8),
                    read<std::uint32_t>(bytes, optional + 116 + i * 8)};
@@ -107,7 +108,8 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
         if (!dirs[i].rva || !dirs[i].size) {
             fail("incomplete PE directory");
         }
-        // Guest exception/unwind handling and delayed imports remain unsupported.
+        // Inspection can retain selected passive metadata. It is never eligible
+        // for execution, including when all imports happen to resolve.
         if (i != 0 && i != 1 && i != 5 && i != 9 && i != 12) {
             constexpr std::array names = {"exports",
                                           "imports",
@@ -125,9 +127,13 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
                                           "delay imports",
                                           "CLR",
                                           "reserved"};
-            throw std::runtime_error("unsupported PE directory " + std::to_string(i) + ": " + names[i]);
+            if (limits.mode != LoadMode::inspect || (i != 2 && i != 3 && i != 4 && i != 6 && i != 10)) {
+                throw std::runtime_error("unsupported PE directory " + std::to_string(i) + ": " + names[i]);
+            }
+            unsupported_directories |= std::uint32_t{1} << i;
         }
-        require_range(dirs[i].rva, dirs[i].size, image_size);
+        // The security directory uses a file offset, unlike every RVA directory.
+        require_range(dirs[i].rva, dirs[i].size, i == 4 ? bytes.size() : image_size);
     }
 
     const auto header_pages = (headers + page - 1) / page * page;
@@ -173,6 +179,8 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
     state.entry = entry;
     state.dll = dll;
     state.tls_slot = tls_slot;
+    state.inspection_only = limits.mode == LoadMode::inspect;
+    state.unsupported_directories = unsupported_directories;
     std::span<std::byte> mapped(state.memory.data(), image_size);
     std::memcpy(mapped.data(), bytes.data(), headers);
     for (const auto &section : sections) {
@@ -210,6 +218,17 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
             }
             cursor += block_size;
         }
+    }
+
+    if (dirs[3].size) {
+        state.unwind = UnwindTable::parse(mapped.subspan(dirs[3].rva, dirs[3].size), image_size);
+    }
+    if (dirs[6].size && dirs[6].size % 28) {
+        fail("truncated PE debug directory");
+    }
+    if (dirs[10].size && (dirs[10].size < 4 || read<std::uint32_t>(mapped, dirs[10].rva) > dirs[10].size ||
+                          read<std::uint32_t>(mapped, dirs[10].rva) < 4)) {
+        fail("invalid PE load configuration size");
     }
 
     if (dirs[1].size) {
@@ -262,7 +281,12 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
                 }
                 const auto address = resolver ? resolver(import) : 0;
                 if (!address) {
-                    fail("unresolved PE import; execution refused");
+                    if (!state.inspection_only) {
+                        throw std::runtime_error(
+                            "unresolved PE import: " + import.module + "!" +
+                            (import.by_ordinal ? "#" + std::to_string(import.ordinal) : import.name));
+                    }
+                    ++state.unresolved_imports;
                 }
                 write64(mapped, std::size_t(values[4]) + index * 8, address);
                 state.imports.push_back(import);
@@ -370,7 +394,8 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
     state.memory.protect(0, image_size, host::Access::none);
     state.memory.protect(0, header_pages, host::Access::read);
     for (const auto &section : sections) {
-        state.memory.protect(section.rva, section.pages, section_access(section.flags));
+        const auto access = state.inspection_only ? host::Access::read : section_access(section.flags);
+        state.memory.protect(section.rva, section.pages, access);
     }
     return image;
 }

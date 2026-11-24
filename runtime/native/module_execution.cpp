@@ -71,6 +71,9 @@ std::uint64_t Image::run_bootstrap() const {
 
 Image::Execution::Execution(std::shared_ptr<State> state, std::shared_ptr<guest::ThreadContext> context)
     : state_(std::move(state)), thread_(std::move(context)), owner_(std::this_thread::get_id()) {
+    if (state_->inspection_only) {
+        throw std::runtime_error("inspection-only image cannot execute");
+    }
     if (state_->active.exchange(true)) {
         throw std::runtime_error("module already has an active execution session");
     }

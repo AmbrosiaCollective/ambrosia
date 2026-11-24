@@ -31,9 +31,12 @@ struct Import {
 // Only explicit adapters may resolve imports. Never fall back to host dlopen.
 using Resolver = std::function<std::uintptr_t(const Import &)>;
 
+enum class LoadMode { executable, inspect };
+
 struct ImageLimits {
     std::size_t file_bytes = 64 * 1024 * 1024;
     std::size_t mapped_bytes = 64 * 1024 * 1024;
+    LoadMode mode = LoadMode::executable;
 };
 
 class Image {

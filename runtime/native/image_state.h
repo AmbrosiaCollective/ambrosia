@@ -2,6 +2,7 @@
 #pragma once
 #include "pe_exports.h"
 #include "pe_image.h"
+#include "unwind_table.h"
 
 namespace ambrosia::pe {
 struct Image::State {
@@ -11,6 +12,10 @@ struct Image::State {
     std::uint32_t entry = 0;
     bool dll = false;
     bool has_tls = false;
+    bool inspection_only = false;
+    std::uint32_t unsupported_directories = 0;
+    std::size_t unresolved_imports = 0;
+    UnwindTable unwind;
     guest::TlsTemplate tls;
     std::uint32_t tls_slot = 0;
     ExportTable exports;
