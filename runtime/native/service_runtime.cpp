@@ -1,4 +1,5 @@
 #include "service_runtime.h"
+#include "clock_services.h"
 #include "guest_thread.h"
 #include <array>
 
@@ -74,6 +75,7 @@ void set_last_error(std::uint32_t error) noexcept {
 }
 
 Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
+    register_clock_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",
