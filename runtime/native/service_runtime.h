@@ -1,4 +1,5 @@
 #pragma once
+#include "critical_sections.h"
 #include "import_registry.h"
 #include "memory_services.h"
 
@@ -15,10 +16,17 @@ class Runtime {
         return memory_;
     }
 
+    CriticalSections &critical_sections() {
+        return critical_sections_;
+    }
+
   private:
     MemoryServices memory_;
+    CriticalSections critical_sections_;
     ImportRegistry registry_;
 };
+
+Runtime *current_runtime() noexcept;
 
 // The host-side service context is scoped independently of guest GS/TEB state.
 // It must enclose module initialization, entry and detach notifications.
