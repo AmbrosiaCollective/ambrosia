@@ -49,12 +49,13 @@ host::Access section_access(std::uint32_t characteristics) {
 }
 } // namespace
 
-Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, std::uint32_t tls_slot) {
+Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, std::uint32_t tls_slot,
+                  ImageLimits limits) {
     if (tls_slot >= 64) {
         fail("module TLS slot exceeds bootstrap limit");
     }
-    if (bytes.size() > 64 * 1024 * 1024) {
-        fail("bootstrap PE file exceeds 64 MiB limit");
+    if (!limits.file_bytes || !limits.mapped_bytes || bytes.size() > limits.file_bytes) {
+        fail("PE file exceeds its configured byte budget");
     }
     if (read<std::uint16_t>(bytes, 0) != 0x5a4d) {
         fail("not a DOS/PE image");
@@ -86,7 +87,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
     const auto page = host::Mapping::page_size();
     if (!power_of_two(alignment) || alignment < page || alignment % page || !power_of_two(file_alignment) ||
         file_alignment < 512 || file_alignment > 65536 || file_alignment > alignment || !image_size ||
-        image_size > 64 * 1024 * 1024 || image_size % alignment || !headers || headers % file_alignment ||
+        image_size > limits.mapped_bytes || image_size % alignment || !headers || headers % file_alignment ||
         headers > image_size) {
         fail("unsupported PE size/alignment");
     }
@@ -108,7 +109,23 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
         }
         // Guest exception/unwind handling and delayed imports remain unsupported.
         if (i != 0 && i != 1 && i != 5 && i != 9 && i != 12) {
-            fail("PE directory needs an unimplemented guest service");
+            constexpr std::array names = {"exports",
+                                          "imports",
+                                          "resources",
+                                          "exception/unwind",
+                                          "certificates",
+                                          "relocations",
+                                          "debug",
+                                          "architecture",
+                                          "global pointer",
+                                          "TLS",
+                                          "load configuration",
+                                          "bound imports",
+                                          "IAT",
+                                          "delay imports",
+                                          "CLR",
+                                          "reserved"};
+            throw std::runtime_error("unsupported PE directory " + std::to_string(i) + ": " + names[i]);
         }
         require_range(dirs[i].rva, dirs[i].size, image_size);
     }

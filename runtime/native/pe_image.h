@@ -31,13 +31,19 @@ struct Import {
 // Only explicit adapters may resolve imports. Never fall back to host dlopen.
 using Resolver = std::function<std::uintptr_t(const Import &)>;
 
+struct ImageLimits {
+    std::size_t file_bytes = 64 * 1024 * 1024;
+    std::size_t mapped_bytes = 64 * 1024 * 1024;
+};
+
 class Image {
     struct State;
     friend class ModuleGraph;
 
   public:
     class Execution;
-    static Image load(std::span<const std::byte> bytes, const Resolver &resolver, std::uint32_t tls_slot = 0);
+    static Image load(std::span<const std::byte> bytes, const Resolver &resolver, std::uint32_t tls_slot = 0,
+                      ImageLimits limits = {});
     Image(Image &&) noexcept = default;
     Image &operator=(Image &&) noexcept = default;
     Image(const Image &) = delete;
