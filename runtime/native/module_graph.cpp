@@ -66,6 +66,7 @@ struct ModuleGraph::State {
     std::string root;
     Resolver external;
     ModuleProvider provider;
+    ModuleLimits limits;
     std::thread::id owner = std::this_thread::get_id();
     std::size_t source_bytes = 0;
     std::size_t mapped_bytes = 0;
@@ -74,7 +75,7 @@ struct ModuleGraph::State {
     bool failed = false;
 
     void register_source(std::string name, std::span<const std::byte> source) {
-        if (modules.size() >= 64 || source.size() > 64 * 1024 * 1024 - source_bytes ||
+        if (modules.size() >= 64 || source.size() > limits.source_bytes - source_bytes ||
             modules.contains(name)) {
             throw std::runtime_error("module registration is ambiguous or exceeds bootstrap budget");
         }
@@ -109,8 +110,10 @@ struct ModuleGraph::State {
             }
             return address;
         };
-        auto image = Image::load(node.source, resolve_import, slot);
-        if (image.size() > 128 * 1024 * 1024 - mapped_bytes) {
+        auto image_limits = limits.image;
+        image_limits.mapped_bytes = std::min(image_limits.mapped_bytes, limits.mapped_bytes - mapped_bytes);
+        auto image = Image::load(node.source, resolve_import, slot, image_limits);
+        if (image.size() > limits.mapped_bytes - mapped_bytes) {
             throw std::runtime_error("module mappings exceed bootstrap budget");
         }
         mapped_bytes += image.size();
@@ -191,7 +194,13 @@ struct ModuleGraph::State {
     }
 };
 
-ModuleGraph::ModuleGraph(Resolver external, ModuleProvider provider) : state_(std::make_shared<State>()) {
+ModuleGraph::ModuleGraph(Resolver external, ModuleProvider provider, ModuleLimits limits)
+    : state_(std::make_shared<State>()) {
+    if (!limits.source_bytes || !limits.mapped_bytes || !limits.image.file_bytes ||
+        !limits.image.mapped_bytes) {
+        throw std::invalid_argument("module byte budgets must be nonzero");
+    }
+    state_->limits = limits;
     state_->external = std::move(external);
     state_->provider = std::move(provider);
 }

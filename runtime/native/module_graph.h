@@ -12,12 +12,18 @@ struct ModuleStatistics {
     bool executable_root = false;
 };
 
+struct ModuleLimits {
+    ImageLimits image;
+    std::size_t source_bytes = 64 * 1024 * 1024;
+    std::size_t mapped_bytes = 128 * 1024 * 1024;
+};
+
 class ModuleGraph {
     struct State;
 
   public:
     class Execution;
-    explicit ModuleGraph(Resolver external = {}, ModuleProvider provider = {});
+    explicit ModuleGraph(Resolver external = {}, ModuleProvider provider = {}, ModuleLimits limits = {});
     void add(std::string name, std::span<const std::byte> source);
     void load(std::string root);
     std::uintptr_t export_address(std::string module, const Import &symbol);
