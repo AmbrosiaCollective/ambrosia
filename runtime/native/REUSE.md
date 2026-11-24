@@ -53,3 +53,8 @@ contracts. Pinned Wine kernelbase/ntdll thread sources at
 `ff2631c6ed3d1721cd050d951671c307ade32b90` inform last-error and exit-cleanup
 behavior only. The native owned registry/context hooks import no Wine code,
 headers or runtime. These components do not provide fiber switching.
+
+The TIB field layout follows the already pinned Wine winnt.h NT_TIB64 declaration.
+Native Linux stack discovery calls installed pthread APIs; glibc sources at
+`ef321e23c20eebc6d6fb4044425c00e6df27b05f` were read to verify bounds semantics.
+No glibc/Wine implementation or header is imported into host_stack.cpp.

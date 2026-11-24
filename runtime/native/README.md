@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 384 checks under a
+as errors. Each build's native shared-object entry passed 392 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,7 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now fault on the missing TEB self/stack-base fields after FLS allocation. This occurs during module initialization; the game's
+and now stop at `_initialize_onexit_table`, after passing the TEB self/stack-base
+access that previously faulted. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -185,7 +186,7 @@ The ABI bridge keeps native TLS resolution in a non-inlined host call because a
 GCC shared-library build otherwise lost a live guest argument in synthetic tests.
 
 Inspection allows a 128 MiB file and 256 MiB image, with graph budgets of 256 MiB
-source bytes and 384 MiB mappings. The CLI releases its redundant input buffer
+source bytes and 392 MiB mappings. The CLI releases its redundant input buffer
 before mapping. API defaults and bootstrap execution retain the original 64 MiB
 per-file/image/source and 128 MiB graph-mapping limits. Unsupported directories
 report their index and required service. These budgets do not imply a supported
@@ -270,6 +271,16 @@ reentrant callback/index replacement patterns need further coverage. Exit hooks
 are owner-thread-bound, run in reverse registration order and are capped at 64.
 Guest execution/mappings and the service scope must enclose cleanup. Callback
 faults terminate diagnostic execution instead of pretending cleanup succeeded.
+
+`host_stack.cpp` discovers native stack bounds dynamically (Linux pthread
+attributes, with Windows/macOS extension points). Guest NT_TIB fields now include
+StackBase at 0x08, StackLimit at 0x10 and Self at 0x30; TLS at 0x58 and last error
+at 0x68 remain unchanged. Self refers to the guest anchor, never a host TEB.
+Linux bounds are the extent reported by pthreads, not an independent probe of
+Windows-style committed/guard pages. This does not create a separate guest stack
+or supply a complete TEB/PEB, exception list or fiber environment. Tests verify
+current-frame containment, generic self traversal, nested contexts and GS restore.
+Windows/macOS stack adapters remain unrun.
 
 The bootstrap still rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security
