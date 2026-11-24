@@ -5,6 +5,7 @@
 #include "package_modules.h"
 #include "pe_image.h"
 #include "service_runtime.h"
+#include "unwind_epilogue.h"
 #include "unwind_program.h"
 #include "unwind_table.h"
 #include <algorithm>
@@ -142,6 +143,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "unwind_tests.h"
 #include "inspection_tests.h"
 #include "unwind_program_tests.h"
+#include "unwind_walk_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -289,6 +291,7 @@ extern "C" int ambrosia_native_tests() {
         unwind_checks();
         inspection_checks();
         unwind_program_checks();
+        unwind_walk_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
@@ -354,11 +357,15 @@ extern "C" int ambrosia_native_decode_unwind(const void *data, std::size_t bytes
         const std::span<const std::byte> image(static_cast<const std::byte *>(data), bytes);
         const auto table = ambrosia::pe::UnwindTable::parse(image.subspan(table_rva, table_bytes),
                                                             static_cast<std::uint32_t>(bytes));
-        std::size_t decoded = 0, chained = 0, handlers = 0;
+        std::size_t decoded = 0, chained = 0, handlers = 0, max_chain = 0;
         std::map<std::string, std::size_t> unsupported;
         for (const auto &function : table.entries()) {
             try {
                 const auto program = ambrosia::pe::UnwindProgram::decode(image, function);
+                if (program.chained) {
+                    const auto chain = ambrosia::pe::decode_unwind_chain(image, function);
+                    max_chain = std::max(max_chain, chain.size());
+                }
                 ++decoded;
                 chained += program.chained.has_value();
                 handlers += program.handler_rva != 0;
@@ -367,7 +374,8 @@ extern "C" int ambrosia_native_decode_unwind(const void *data, std::size_t bytes
             }
         }
         std::cout << "{\"records\":" << table.entries().size() << ",\"decoded\":" << decoded
-                  << ",\"chained\":" << chained << ",\"handlers\":" << handlers << ",\"unsupported\":{";
+                  << ",\"chained\":" << chained << ",\"handlers\":" << handlers
+                  << ",\"max_chain\":" << max_chain << ",\"unsupported\":{";
         bool separator = false;
         for (const auto &[reason, count] : unsupported) {
             if (separator) {
