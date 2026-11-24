@@ -1,5 +1,6 @@
 #include "pe_image.h"
 #include "image_state.h"
+#include "pe_bytes.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -8,39 +9,17 @@
 
 namespace ambrosia::pe {
 namespace {
+using detail::read;
+using detail::require_range;
+using detail::string_at;
+
 [[noreturn]] void fail(const char *reason) {
     throw std::runtime_error(reason);
 }
 
-void range(std::size_t offset, std::size_t count, std::size_t size) {
-    if (offset > size || count > size - offset) {
-        fail("PE range exceeds its container");
-    }
-}
-
-template <class T> T read(std::span<const std::byte> bytes, std::size_t offset) {
-    range(offset, sizeof(T), bytes.size());
-    std::uint64_t value = 0;
-    for (std::size_t i = 0; i < sizeof(T); ++i) {
-        value |= std::uint64_t(std::to_integer<unsigned char>(bytes[offset + i])) << (i * 8);
-    }
-    return static_cast<T>(value);
-}
-
 void write64(std::span<std::byte> bytes, std::size_t offset, std::uint64_t value) {
-    range(offset, sizeof(value), bytes.size());
+    require_range(offset, sizeof(value), bytes.size());
     std::memcpy(bytes.data() + offset, &value, sizeof(value));
-}
-
-std::string string_at(std::span<const std::byte> bytes, std::uint32_t offset) {
-    range(offset, 1, bytes.size());
-    const auto *begin = reinterpret_cast<const char *>(bytes.data() + offset);
-    const auto count = std::min<std::size_t>(4096, bytes.size() - offset);
-    const auto *end = static_cast<const char *>(std::memchr(begin, 0, count));
-    if (!end || end == begin) {
-        fail("PE string is empty or unterminated");
-    }
-    return {begin, end};
 }
 
 bool power_of_two(std::uint32_t value) {
@@ -78,7 +57,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
         fail("not a DOS/PE image");
     }
     const auto nt = read<std::uint32_t>(bytes, 0x3c);
-    range(nt, 24, bytes.size());
+    require_range(nt, 24, bytes.size());
     if (read<std::uint32_t>(bytes, nt) != 0x4550 || read<std::uint16_t>(bytes, nt + 4) != 0x8664) {
         fail("bootstrap requires an AMD64 PE image");
     }
@@ -90,7 +69,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
     }
     const bool dll = (characteristics & 0x2000) != 0;
     const std::size_t optional = nt + 24;
-    range(optional, optional_size, bytes.size());
+    require_range(optional, optional_size, bytes.size());
     if (optional_size < 112 || read<std::uint16_t>(bytes, optional) != 0x20b) {
         fail("bootstrap requires PE32+ headers");
     }
@@ -108,12 +87,12 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
         headers > image_size) {
         fail("unsupported PE size/alignment");
     }
-    range(0, headers, bytes.size());
+    require_range(0, headers, bytes.size());
     if (directories > 16 || 112 + directories * 8 > optional_size) {
         fail("PE directory table exceeds optional header");
     }
     const auto section_table = optional + optional_size;
-    range(section_table, std::size_t(count) * 40, headers);
+    require_range(section_table, std::size_t(count) * 40, headers);
     std::array<Directory, 16> dirs{};
     for (std::uint32_t i = 0; i < directories; ++i) {
         dirs[i] = {read<std::uint32_t>(bytes, optional + 112 + i * 8),
@@ -128,7 +107,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
         if (i != 1 && i != 5 && i != 9 && i != 12) {
             fail("PE directory needs an unimplemented guest service");
         }
-        range(dirs[i].rva, dirs[i].size, image_size);
+        require_range(dirs[i].rva, dirs[i].size, image_size);
     }
 
     const auto header_pages = (headers + page - 1) / page * page;
@@ -145,10 +124,10 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
              (section.raw < headers || section.raw % file_alignment || section.raw_size % file_alignment))) {
             fail("invalid PE section placement");
         }
-        range(section.rva, section.size, image_size);
-        range(section.raw, section.raw_size, bytes.size());
+        require_range(section.rva, section.size, image_size);
+        require_range(section.raw, section.raw_size, bytes.size());
         section.pages = (section.size + page - 1) / page * page;
-        range(section.rva, section.pages, image_size);
+        require_range(section.rva, section.pages, image_size);
         if ((section.flags & 0xa0000000u) == 0xa0000000u) {
             fail("writable executable section refused");
         }
@@ -189,13 +168,13 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
     if (dirs[5].size) {
         std::size_t cursor = dirs[5].rva, end = cursor + dirs[5].size;
         while (cursor < end) {
-            range(cursor, 8, end);
+            require_range(cursor, 8, end);
             const auto block_page = read<std::uint32_t>(mapped, cursor);
             const auto block_size = read<std::uint32_t>(mapped, cursor + 4);
             if (block_page % 4096 || block_size < 8 || block_size % 2) {
                 fail("invalid PE relocation block");
             }
-            range(cursor, block_size, end);
+            require_range(cursor, block_size, end);
             for (std::size_t at = cursor + 8; at < cursor + block_size; at += 2) {
                 const auto item = read<std::uint16_t>(mapped, at);
                 if (!(item >> 12)) {
@@ -205,7 +184,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
                     fail("unsupported PE relocation type");
                 }
                 const std::uint64_t target = std::uint64_t(block_page) + (item & 0xfff);
-                range(target, 8, mapped.size());
+                require_range(target, 8, mapped.size());
                 write64(mapped, target, read<std::uint64_t>(mapped, target) + delta);
             }
             cursor += block_size;
@@ -257,7 +236,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
                     if (thunk > 0xfffffffdull) {
                         fail("invalid PE import name RVA");
                     }
-                    range(thunk, 2, mapped.size());
+                    require_range(thunk, 2, mapped.size());
                     import.name = string_at(mapped, static_cast<std::uint32_t>(thunk + 2));
                 }
                 const auto address = resolver ? resolver(import) : 0;
@@ -301,7 +280,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
                 fail("TLS address is outside the mapped image");
             }
             const auto rva = address - base;
-            range(rva, size, mapped.size());
+            require_range(rva, size, mapped.size());
             const bool valid = std::any_of(sections.begin(), sections.end(), [&](const auto &section) {
                 return rva >= section.rva && rva - section.rva <= section.size &&
                        size <= section.size - (rva - section.rva) && (section.flags & access) == access;
