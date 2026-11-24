@@ -113,6 +113,12 @@ Shard runs write `index.part*.json`; merge them into `index.json` with `--merge`
 
 ## Conventions
 
+- Keep code human-readable, clean and non-compact. Use descriptive names,
+  explicit control flow and small focused functions. Let ordinary behavior speak
+  for itself; document ABI, ownership, ordering and other non-obvious constraints.
+  Avoid compressed one-line logic, redundant comments and unrelated formatting
+  churn. Keep commits short and focused. Native runtime formatting is defined in
+  `runtime/native/.clang-format`; follow it when editing those files.
 - Python tools run with `python -I` and use only the standard library unless a file says otherwise; the exceptions
   are the texture and model tools that import numpy or Pillow: `bc_feature.py`, `amd_swizzle.py`, `tile_probe.py`,
   `swizzle_search.py`, `tex_export.py`, `tex_mode_probe.py`, `calibrated_texture.py`, `world_grid_atlas.py`,
