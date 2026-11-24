@@ -148,6 +148,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "trace_tests.h"
 #include "clock_tests.h"
 #include "critical_tests.h"
+#include "fls_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -299,6 +300,7 @@ extern "C" int ambrosia_native_tests() {
         trace_configuration_checks();
         clock_service_checks();
         critical_section_checks();
+        fls_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
