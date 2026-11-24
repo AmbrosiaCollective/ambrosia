@@ -5,12 +5,14 @@
 #include "package_modules.h"
 #include "pe_image.h"
 #include "service_runtime.h"
+#include "unwind_program.h"
 #include "unwind_table.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -139,6 +141,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "limit_tests.h"
 #include "unwind_tests.h"
 #include "inspection_tests.h"
+#include "unwind_program_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -285,6 +288,7 @@ extern "C" int ambrosia_native_tests() {
         limit_checks();
         unwind_checks();
         inspection_checks();
+        unwind_program_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
@@ -337,6 +341,45 @@ extern "C" int ambrosia_native_check_unwind(const void *data, std::size_t bytes,
         return 0;
     } catch (const std::exception &error) {
         std::cerr << "unwind metadata probe: " << error.what() << '\n';
+        return 1;
+    }
+}
+
+extern "C" int ambrosia_native_decode_unwind(const void *data, std::size_t bytes, std::uint32_t table_rva,
+                                             std::uint32_t table_bytes) {
+    if (!data || bytes > 256 * 1024 * 1024 || table_rva > bytes || table_bytes > bytes - table_rva) {
+        return 2;
+    }
+    try {
+        const std::span<const std::byte> image(static_cast<const std::byte *>(data), bytes);
+        const auto table = ambrosia::pe::UnwindTable::parse(image.subspan(table_rva, table_bytes),
+                                                            static_cast<std::uint32_t>(bytes));
+        std::size_t decoded = 0, chained = 0, handlers = 0;
+        std::map<std::string, std::size_t> unsupported;
+        for (const auto &function : table.entries()) {
+            try {
+                const auto program = ambrosia::pe::UnwindProgram::decode(image, function);
+                ++decoded;
+                chained += program.chained.has_value();
+                handlers += program.handler_rva != 0;
+            } catch (const std::runtime_error &error) {
+                ++unsupported[error.what()];
+            }
+        }
+        std::cout << "{\"records\":" << table.entries().size() << ",\"decoded\":" << decoded
+                  << ",\"chained\":" << chained << ",\"handlers\":" << handlers << ",\"unsupported\":{";
+        bool separator = false;
+        for (const auto &[reason, count] : unsupported) {
+            if (separator) {
+                std::cout << ',';
+            }
+            std::cout << '\"' << reason << "\":" << count;
+            separator = true;
+        }
+        std::cout << "}}\n";
+        return 0;
+    } catch (const std::exception &error) {
+        std::cerr << "unwind program probe: " << error.what() << '\n';
         return 1;
     }
 }
