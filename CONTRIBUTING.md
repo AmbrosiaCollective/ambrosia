@@ -28,11 +28,16 @@ should complete one focused PR before taking additional work. Coordinate changes
 to shared modules and consolidate duplicate findings rather than opening another
 implementation. Use [the roadmap](ROADMAP.md) to choose useful work.
 
-Open a branch and a PR, describe the resulting behavior and list exact tested
-revisions/commands. At least one maintainer reviews code and evidence before a
-merge. Address or resolve review discussions; a new change after approval needs
-another look. Do not push directly to `main`, force-push shared branches or merge
-your own unreviewed change. Keep dependencies and unrelated refactors separate.
+Develop on a branch and describe the resulting behavior with exact tested
+revisions/commands. Local integration follows review and relevant checks. Keep
+dependencies and unrelated refactors separate.
+
+Publication is currently on hold. Do not push, open a PR or change GitHub until
+the owner explicitly requests the concrete action. Do not prompt to publish at
+each task boundary. When publication resumes, at least one maintainer reviews
+code and evidence before a GitHub merge. Resolve review discussions; changed
+code needs another look. Do not push directly to remote `main`, force-push shared
+branches or merge your own unreviewed GitHub PR.
 
 Contributor CI is the initial check gate. Extended native/full-suite jobs are
 opt-in and their absence is unrun coverage. See [CI policy](docs/ci-policy.md).

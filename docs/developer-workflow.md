@@ -102,7 +102,10 @@ behavior. Runtime/translator changes still need their component-specific checks.
 
 ## Contribution handoff
 
-Claim a small task through the repository or [community](https://discord.gg/Bdguf59NvB).
+Publication is on hold until the owner explicitly instructs otherwise. Keep
+development, reviews and integration local; do not prompt to publish after tasks.
+Record scope and overlap checks locally. When publication resumes, coordinate a
+small task through the repository or [community](https://discord.gg/Bdguf59NvB).
 Include the exact revision, command, selected suite, outcome and platform in a
 review. State additional coverage and limitations separately. Keep one focused
 change per PR and distinguish inherited capabilities from newly verified results.

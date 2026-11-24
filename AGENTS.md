@@ -45,7 +45,11 @@ branch settings; these repository files alone do not enforce permissions.
   [community](https://discord.gg/Bdguf59NvB) for existing work before proposing a fix.
 - Keep scope, dependencies and exact tested revisions in the task/PR description.
   Existing upstream issue links are historical technical references.
-- Work locally and obtain task-specific approval before remote publication.
+- Work locally. Do not push, open PRs or change GitHub until the user explicitly
+  instructs publication for the concrete change. Do not ask to publish at task
+  boundaries. Keep commits small, reviewed and accompanied by local evidence.
+- Reviewed local integration is authorized. Keep remote-tracking/publication
+  branches and historical source snapshots intact; use a separate local baseline.
 - Use synthetic inputs without game files where possible. Inspect executable
   paths before running them; preserve isolation and do not install dependencies
   or weaken controls without approval.
@@ -115,5 +119,10 @@ Shard runs write `index.part*.json`; merge them into `index.json` with `--merge`
   `tex_headers.py` and `skinned_glb.py` (which fall back to the standard library when numpy is absent).
 - A text file a tool writes names its line ending - `open(path, "w", encoding="utf-8", newline="\n")` - so the same
   input gives the same bytes on every platform; `tests/test_text_write_line_endings.py` catches a writer that forgets.
-- Keep `make_game.py` working on Windows first: paths through `os.path`, no bash in the build.
+- Native Linux is the current runtime priority. Keep portable algorithms and
+  guest ABI code separate from host memory, threading, files and presentation.
+  Prefer standard C++/Python facilities and the existing Vulkan execution core.
+  Keep OS calls behind narrow host adapters; preserve Windows/macOS extension
+  points without claiming those backends are tested. Resolve paths dynamically
+  with `std::filesystem`/`pathlib` or `os.path`, never developer drive/home paths.
 - In the pull request, say what you tested, the exact revision, platform and any GPU/driver used. Omit optional personal and authorship labels; do not make false authorship claims.

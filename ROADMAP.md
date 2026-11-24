@@ -1,8 +1,11 @@
 # Ambrosia roadmap
 
-Target: **native x86-64 Linux, Vulkan, stable 30 fps**. No Wine or Proton in the
+Primary target: **native x86-64 Linux, Vulkan, stable 30 fps**. No Wine or Proton in the
 target runtime. The first game milestone is an interactive menu; world rendering
-and stable gameplay follow it. No playable release or completion date is claimed.
+and stable gameplay with minimal stutter follow it. Frame-rate unlocking and
+further optimization come later. No playable release or completion date is claimed.
+Keep guest/runtime logic portable and OS calls behind narrow adapters so future
+platforms can reuse the core. This does not imply their runtime builds work today.
 
 ## What exists
 
@@ -67,5 +70,6 @@ by a defined-resolution 30-minute stability run. Track frame times against the
 and resolution must be stated; average fps alone does not establish stability.
 
 The [native Linux plan](docs/native-linux-plan.md) explains the implementation
-boundaries, research findings and immediate first task. Publish focused changes
-only after their task-specific review and approval.
+boundaries, research findings and immediate first task. Continue in focused local
+commits. Publication is on hold until the owner explicitly requests it; do not
+prompt for publication at task boundaries.
