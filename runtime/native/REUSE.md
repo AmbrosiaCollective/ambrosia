@@ -65,3 +65,8 @@ Wine exit.c, data.c, msvcrt.h and public-domain CRT header declarations at
 no Wine implementation, header or runtime is imported by the owned C++ tables
 and Microsoft ABI adapters. The initializer routines retain forward ordering,
 null skipping and first-error propagation.
+
+Sequenced-list head initialization follows the pinned Microsoft SDK
+InitializeSListHead contract and the existing Wine x64 SLIST_HEADER layout.
+Wine ntdll sync.c at the same pinned revision verifies the 16-byte format
+selector. These are references only; no implementation/header is ported.

@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 411 checks under a
+as errors. Each build's native shared-object entry passed 415 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `InitializeSListHead`, after passing CRT on-exit table
-initialization and the TEB self/stack-base access that previously faulted. This occurs during module initialization; the game's
+and now stop at `DisableThreadLibraryCalls`, after passing sequenced-list
+initialization, CRT on-exit tables and the previously faulting TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -308,3 +308,8 @@ the latter returns the first nonzero initializer result. Microsoft x64 wrappers
 are registered for ucrtbase, msvcrt and the CRT runtime API set. This does not yet
 provide process-global atexit, full CRT startup or automatic process termination
 cleanup. Synthetic callback tests do not establish guest exception support.
+
+`InitializeSListHead` initializes the x64 16-byte empty sequenced-list header,
+including its format selector, through Win32/API-set and native aliases. It
+requires a valid 16-byte-aligned destination and preserves last error. Subsequent
+interlocked push/pop/flush operations remain unsupported and unresolved.

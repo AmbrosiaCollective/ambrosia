@@ -3,6 +3,7 @@
 #include "critical_services.h"
 #include "fls_services.h"
 #include "guest_thread.h"
+#include "slist_services.h"
 #include <array>
 
 namespace ambrosia::services {
@@ -81,6 +82,7 @@ Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
     register_critical_services(registry_);
     register_fls_services(registry_);
     register_crt_lifecycle(registry_);
+    register_slist_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",
