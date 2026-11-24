@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 362 checks under a
+as errors. Each build's native shared-object entry passed 384 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,7 +154,7 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `FlsAlloc` after critical-section initialization. This occurs during module initialization; the game's
+and now fault on the missing TEB self/stack-base fields after FLS allocation. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -200,7 +200,8 @@ file offsets. Code and data pages in inspected images are read-only and NX.
 All image/graph execution entry points reject inspection mode, even when imports
 resolve. Missing inspected IAT cells stay null, never success-return stubs.
 
-The measured graph contains 1,186 static import entries, 861 unresolved entries
+At the inspection-only milestone the graph contained 1,186 static import entries,
+861 unresolved entries
 and 304,274 unwind records. These are entry counts including DLL dependencies,
 not unique APIs or a boot percentage. Inspection success does not mean the game
 can execute. JSON includes `inspection_only`, `unresolved_imports`,
@@ -254,6 +255,21 @@ hints; exact Windows spin scheduling and debugger internals are not reproduced.
 Recursive single-thread behavior is verified; contention/fairness and worker
 thread teardown remain unrun under the current process/thread-denying profile.
 Runtime teardown requires all locks released and guest users finished.
+
+`fls_slots.*` owns 128 reusable process-local FLS indices with separate values
+for up to 64 guest contexts. FlsAlloc/GetValue/SetValue/Free and the observed
+API-set aliases are implemented. Free invokes callbacks for all non-null context
+values; context exit invokes remaining callbacks with guest GS/TLS active and
+module mappings retained. Values clear before callback dispatch, callback code
+runs outside the registry lock and freed indices cannot carry stale values into
+reuse. FlsGetValue clears last error on success, including a null value.
+
+The current guest context represents one primary fiber; actual fiber creation,
+switching and worker-thread contention are not implemented or validated. Highly
+reentrant callback/index replacement patterns need further coverage. Exit hooks
+are owner-thread-bound, run in reverse registration order and are capped at 64.
+Guest execution/mappings and the service scope must enclose cleanup. Callback
+faults terminate diagnostic execution instead of pretending cleanup succeeded.
 
 The bootstrap still rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security

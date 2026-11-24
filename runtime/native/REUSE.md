@@ -46,3 +46,10 @@ revision, including [InitializeCriticalSectionEx](https://github.com/MicrosoftDo
 and [EnterCriticalSection](https://github.com/MicrosoftDocs/sdk-api/blob/656e9656bfaef34dd29cd7ee9e1146aec17e924c/sdk-api-src/content/synchapi/nf-synchapi-entercriticalsection.md).
 The existing pinned Wine winnt.h is an x64 field-layout reference. No Wine code,
 header, native handle or debugger implementation is imported by this component.
+
+FLS adapters follow the pinned Microsoft [FlsAlloc](https://github.com/MicrosoftDocs/sdk-api/blob/656e9656bfaef34dd29cd7ee9e1146aec17e924c/sdk-api-src/content/fibersapi/nf-fibersapi-flsalloc.md)
+and [FlsFree](https://github.com/MicrosoftDocs/sdk-api/blob/656e9656bfaef34dd29cd7ee9e1146aec17e924c/sdk-api-src/content/fibersapi/nf-fibersapi-flsfree.md)
+contracts. Pinned Wine kernelbase/ntdll thread sources at
+`ff2631c6ed3d1721cd050d951671c307ade32b90` inform last-error and exit-cleanup
+behavior only. The native owned registry/context hooks import no Wine code,
+headers or runtime. These components do not provide fiber switching.
