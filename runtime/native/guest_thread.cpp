@@ -11,6 +11,35 @@ ThreadContext::ThreadContext() : owner_(std::this_thread::get_id()) {
     anchor_.tls = slots_.data();
 }
 
+ThreadContext::~ThreadContext() {
+    if (exit_callbacks_.empty()) {
+        return;
+    }
+    try {
+        require_owner();
+        if (active_context == this) {
+            std::terminate();
+        }
+        exiting_ = true;
+        // Cleanup sees the final guest TLS/error state while all blocks and
+        // callback-providing modules are still retained by the execution owner.
+        auto activation = activate();
+        for (auto callback = exit_callbacks_.rbegin(); callback != exit_callbacks_.rend(); ++callback) {
+            (*callback)();
+        }
+    } catch (...) {
+        std::terminate();
+    }
+}
+
+void ThreadContext::on_exit(std::function<void()> callback) {
+    require_owner();
+    if (!callback || exiting_ || exit_callbacks_.size() >= 64) {
+        throw std::runtime_error("invalid guest exit callback or callback budget");
+    }
+    exit_callbacks_.push_back(std::move(callback));
+}
+
 void ThreadContext::require_owner() const {
     if (owner_ != std::this_thread::get_id()) {
         throw std::runtime_error("guest context used on another host thread");

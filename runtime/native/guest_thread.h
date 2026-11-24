@@ -2,6 +2,7 @@
 #pragma once
 #include "host.h"
 #include <array>
+#include <functional>
 #include <memory>
 #include <span>
 #include <thread>
@@ -18,6 +19,7 @@ class ThreadContext {
   public:
     class Activation;
     ThreadContext();
+    ~ThreadContext();
     ThreadContext(const ThreadContext &) = delete;
     ThreadContext &operator=(const ThreadContext &) = delete;
     void install(std::size_t slot, const TlsTemplate &spec);
@@ -25,6 +27,7 @@ class ThreadContext {
     std::span<std::byte> block(std::size_t slot);
     static ThreadContext *current() noexcept;
     std::uint32_t &last_error();
+    void on_exit(std::function<void()> callback);
 
   private:
     void require_owner() const;
@@ -48,6 +51,8 @@ class ThreadContext {
     static_assert(offsetof(Anchor, last_error) == 0x68);
     std::thread::id owner_;
     bool sealed_ = false;
+    bool exiting_ = false;
+    std::vector<std::function<void()>> exit_callbacks_;
 };
 
 class ThreadContext::Activation {
