@@ -114,6 +114,7 @@ template <class Function> void bad(Function mutation, const char *label) {
     check(rejected(bytes), label);
 }
 
+#include "lifecycle_tests.h"
 #include "thread_tests.h"
 
 void pe_checks() {
@@ -250,6 +251,7 @@ extern "C" int ambrosia_native_tests() {
         host_checks();
         thread_checks();
         pe_checks();
+        lifecycle_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
