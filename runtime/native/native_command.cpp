@@ -2,6 +2,7 @@
 #include "host.h"
 #include "module_graph.h"
 #include "package_modules.h"
+#include "service_runtime.h"
 #include <optional>
 #include <stdexcept>
 
@@ -70,7 +71,9 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         host::PackageLimits limits;
         limits.total_bytes = source_limit - bytes.size();
         host::PackageModules package(paths.package, limits);
-        pe::ModuleGraph graph({}, [&](const auto &name) { return package.read(name); });
+        services::Runtime service_runtime;
+        pe::ModuleGraph graph([&](const auto &symbol) { return service_runtime.resolve(symbol); },
+                              [&](const auto &name) { return package.read(name); });
         const auto filename = paths.image.filename().u8string();
         const std::string root(reinterpret_cast<const char *>(filename.data()), filename.size());
         graph.add(root, bytes);
@@ -81,6 +84,7 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
             if (!statistics.executable_root) {
                 throw std::runtime_error("bootstrap mode requires an executable root");
             }
+            services::Scope scope(service_runtime);
             auto execution = graph.start();
             result = execution.run_bootstrap();
         }
