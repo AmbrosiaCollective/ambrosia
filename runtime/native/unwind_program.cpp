@@ -2,6 +2,7 @@
 #include "pe_bytes.h"
 #include <algorithm>
 #include <limits>
+#include <set>
 #include <stdexcept>
 
 namespace ambrosia::pe {
@@ -146,11 +147,14 @@ UnwindProgram UnwindProgram::decode(std::span<const std::byte> image, const Runt
     return result;
 }
 
-UnwindStep restore_prologue(const UnwindProgram &program, const RegisterContext &context, StackView stack,
-                            std::uint32_t pc_offset) {
-    if (program.chained) {
-        throw std::runtime_error("chained frame restoration needs the chain walker");
-    }
+namespace {
+struct RestoredOperations {
+    UnwindStep step;
+    bool machine_frame = false;
+};
+
+RestoredOperations restore_operations(const UnwindProgram &program, const RegisterContext &context,
+                                      StackView stack, std::uint32_t pc_offset) {
     if (program.frame_register >= context.integer.size()) {
         throw std::runtime_error("invalid decoded unwind frame register");
     }
@@ -211,11 +215,65 @@ UnwindStep restore_prologue(const UnwindProgram &program, const RegisterContext 
             throw std::runtime_error("unwind program contains an unsupported operation");
         }
     }
-    if (!machine_frame) {
+    (void)stack_range(stack, registers[4], 0);
+    return {result, machine_frame};
+}
+
+UnwindStep finish_return(RestoredOperations restored, StackView stack) {
+    auto &result = restored.step;
+    auto &registers = result.context.integer;
+    if (!restored.machine_frame) {
         result.context.rip = stack_word(stack, registers[4]);
         registers[4] = add_address(registers[4], 8);
     }
     (void)stack_range(stack, registers[4], 0);
     return result;
+}
+} // namespace
+
+UnwindStep restore_prologue(const UnwindProgram &program, const RegisterContext &context, StackView stack,
+                            std::uint32_t pc_offset) {
+    if (program.chained) {
+        throw std::runtime_error("chained frame restoration needs the chain walker");
+    }
+    return finish_return(restore_operations(program, context, stack, pc_offset), stack);
+}
+
+std::vector<UnwindProgram> decode_unwind_chain(std::span<const std::byte> image, RuntimeFunction function) {
+    std::vector<UnwindProgram> programs;
+    std::set<std::uint32_t> visited;
+    for (;;) {
+        if (visited.size() >= 32 || !visited.insert(function.unwind).second) {
+            throw std::runtime_error("unwind chain cycle or depth limit");
+        }
+        auto program = UnwindProgram::decode(image, function);
+        if (!programs.empty() && (program.frame_register != programs.front().frame_register ||
+                                  program.frame_offset != programs.front().frame_offset)) {
+            throw std::runtime_error("inconsistent chained unwind frame register");
+        }
+        const auto next = program.chained;
+        programs.push_back(std::move(program));
+        if (!next) {
+            break;
+        }
+        function = *next;
+    }
+    return programs;
+}
+
+UnwindStep restore_chained_prologue(std::span<const std::byte> image, RuntimeFunction function,
+                                    const RegisterContext &context, StackView stack,
+                                    std::uint32_t pc_offset) {
+    const auto programs = decode_unwind_chain(image, function);
+    auto restored = restore_operations(programs.front(), context, stack, pc_offset);
+    const auto frame = restored.step.establisher_frame;
+    const auto in_prologue = restored.step.in_prologue;
+    for (std::size_t index = 1; index < programs.size(); ++index) {
+        restored = restore_operations(programs[index], restored.step.context, stack,
+                                      std::numeric_limits<std::uint32_t>::max());
+    }
+    restored.step.establisher_frame = frame;
+    restored.step.in_prologue = in_prologue;
+    return finish_return(std::move(restored), stack);
 }
 } // namespace ambrosia::pe

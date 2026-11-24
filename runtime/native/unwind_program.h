@@ -48,4 +48,9 @@ struct UnwindStep {
 // process chained metadata. This is not a complete RtlVirtualUnwind adapter.
 UnwindStep restore_prologue(const UnwindProgram &program, const RegisterContext &context, StackView stack,
                             std::uint32_t pc_offset);
+
+// Follow checked CHAININFO records and pop the caller return address once.
+std::vector<UnwindProgram> decode_unwind_chain(std::span<const std::byte> image, RuntimeFunction function);
+UnwindStep restore_chained_prologue(std::span<const std::byte> image, RuntimeFunction function,
+                                    const RegisterContext &context, StackView stack, std::uint32_t pc_offset);
 } // namespace ambrosia::pe
