@@ -129,13 +129,17 @@ template <class Function> bool runtime_rejected(Function operation) {
     return false;
 }
 
+// These fixture fragments depend on helpers defined by the preceding fragment.
+// clang-format off
 #include "lifecycle_tests.h"
-#include "limit_tests.h"
 #include "module_tests.h"
 #include "package_tests.h"
-#include "service_tests.h"
 #include "thread_tests.h"
+#include "service_tests.h"
+#include "limit_tests.h"
 #include "unwind_tests.h"
+#include "inspection_tests.h"
+// clang-format on
 
 void pe_checks() {
     const auto bytes = fixture();
@@ -280,6 +284,7 @@ extern "C" int ambrosia_native_tests() {
         service_dispatch_checks();
         limit_checks();
         unwind_checks();
+        inspection_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
