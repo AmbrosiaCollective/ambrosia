@@ -27,3 +27,9 @@ No upstream Python script, pefile dependency, setup/build helper, binary or game
 data is imported. Original native fixtures supply the PE bytes and execute the
 cases in isolation. Reused cases keep their original technical meaning; native
 execution coverage does not claim retail-game validation.
+
+The unwind-program component consults the same pinned Wine x64 behavior reference
+for opcode meaning, stack offsets and partial-prologue semantics. Its checked
+span-based decoder, owned operations and bounded stack restoration are implemented
+in the native core; no Wine source/header or runtime is imported. It remains a
+component, with chained restoration and epilogue/exception handling unfinished.

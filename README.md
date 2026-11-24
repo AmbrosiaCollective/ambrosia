@@ -69,7 +69,7 @@ SPIR-V for Vulkan. Game files and generated outputs stay on the player's machine
 | Local checks | 106 synthetic test methods passed on Linux with Python 3.12.3: 78 contributor checks, 22 import-readiness checks, and six launch-policy checks. |
 | Runtime | A separate native CPU bootstrap maps and executes tiny synthetic PEs through a shared core and host-memory adapters. The inherited full loader/shims still depend on Windows; native retail services and graphics integration remain unfinished. |
 | Shaders and formats | Translation, archive, model, texture, and audio tools are inherited from earlier work. Their recorded measurements are not new Ambrosia validation. |
-| Native builds | The CPU bootstrap builds with GCC, Clang and offline CMake on Linux; 264 native checks pass under each compiler, including package discovery, CLI modes and bounded memory services. CLI logic is tested in-process; the standalone executable was built, not launched. No verified menu result exists. |
+| Native builds | The CPU bootstrap builds with GCC, Clang and offline CMake on Linux; 293 native checks pass under each compiler, including package discovery, CLI modes and bounded memory services. CLI logic is tested in-process; the standalone executable was built, not launched. No verified menu result exists. |
 | CI and delivery | Contributor CI runs on GitHub for Windows and Linux. Extended builds are opt-in. No continuous deployment or release pipeline is configured. |
 | Game and GPU | No Ambrosia menu, in-game rendering, performance, or stability result has been verified. |
 
@@ -172,7 +172,7 @@ citations remain part of the project. See [UPSTREAM.md](UPSTREAM.md) for provena
 - [libHttpClient](https://github.com/microsoft/libHttpClient) (MIT), by Microsoft: the vendored XTaskQueue/XAsync implementation.
 - [LLVM](https://llvm.org/): AMDGPU disassembly.
 - [SPIRV-Tools](https://github.com/KhronosGroup/SPIRV-Tools): assembly and validation.
-- Historical artwork reference: [SlyDevil's GTA VI icon](https://www.steamgriddb.com/icon/126418).
+- Historical artwork reference: [SlyDevil's GTA VI icon](https://www.steamgriddb.com/icon/129318).
 
 Grand Theft Auto and related names belong to their respective trademark owners.
 Ambrosia is not affiliated with or endorsed by them.

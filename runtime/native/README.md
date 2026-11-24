@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 264 checks under a
+as errors. Each build's native shared-object entry passed 293 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -190,6 +190,19 @@ does not validate the unwind bytecode or implement RtlVirtualUnwind. Indirect
 records, partial entries and invalid references fail explicitly. The loader's
 exception execution restriction remains in place until the required machinery
 exists; this parser is not a substitute for it.
+
+`unwind_program.*` decodes direct UNWIND_INFO and restores prologue/body frames
+against an explicitly bounded stack view, preserving the caller's input context
+on failure. It covers nonvolatile integer/XMM saves, small/large allocations,
+frame registers, partial prologues and machine frames. Handler/chain metadata is
+retained but never invoked. Chain walking, epilogue recognition, full CONTEXT
+adapters and exception dispatch remain necessary before RtlVirtualUnwind can be
+exposed. Version-two epilogue opcodes fail explicitly.
+
+A non-executable RAM image of non-code sections lets both compiler builds decode
+all 299,257 unwind programs in the actual executable: 515 have chains and 596
+have handlers. This establishes metadata coverage, not runtime frame-unwind
+correctness or game execution. No game bytes are saved in fixtures or Git.
 
 The bootstrap still rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security
