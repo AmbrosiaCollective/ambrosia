@@ -1,45 +1,71 @@
 # Ambrosia roadmap
 
-Ambrosia focuses on a reproducible development experience, careful validation
-and small reviewed contributions. This roadmap describes this fork's work;
-inherited technical measurements remain attributed to their original sources.
+Target: **native x86-64 Linux, Vulkan, stable 30 fps**. No Wine or Proton in the
+target runtime. The first game milestone is an interactive menu; world rendering
+and stable gameplay follow it. No playable release or completion date is claimed.
 
-## 1. Reliable offline setup
+## What exists
 
-Delivered locally: an offline doctor checks Python, contributor sources, optional
-repository configuration and tool discovery. Reports exclude host paths and
-credentials. It does not execute tools, install anything or certify builds.
+The repository includes inherited shader/format tools, a Windows-dependent PE
+loader and compatibility shims, portable C++ tests and substantial Vulkan
+execution code. Contributor CI runs on GitHub, including the synthetic
+import-readiness checks. It does not verify a native Linux game runtime.
 
-Acceptance: a clean checkout can explain a missing contributor prerequisite with
-an actionable message; JSON contains no host/account values; a failing check
-returns nonzero. Record the exact revision and test environment.
+Ambrosia-specific local validation includes 78 curated contributor methods,
+22 readiness methods, six launch contracts and eight fork-sync contracts.
+These are synthetic/tooling checks, not retail boot or GPU evidence.
 
-Next: review a separate opt-in design for external tool version/target checks.
-No automatic downloads or game-folder scans belong in this milestone.
+## 1. One native Linux bootstrap
 
-## 2. Reproducible contributions
+Create one Linux executable target and a small host boundary for memory, files,
+threads, clocks and diagnostics. Reuse portable code before writing replacements.
+Do not start another renderer, launcher GUI or full asset-export pipeline.
 
-Delivered locally: 78 explicitly selected game-free tests, component suites,
-non-importing listing and redacted results. A separate old-behavior control
-produces four real failures. The final local Linux run passed 78/78 methods.
+Acceptance: a reproducible Linux build loads an original synthetic x64 PE image,
+resolves a known import through the Microsoft x64 calling convention and returns
+the expected result. Malformed images and missing imports fail explicitly. No
+game files, Wine, Proton, Windows SDK or host credentials are involved.
 
-Prepared: automatic Windows/Linux contributor CI and a small-task review policy.
-Remote CI has not run yet. These checks do not replace the full component suites.
+## 2. Correct guest execution and services
 
-Acceptance: both hosted OS jobs run the complete advertised selections; missing,
-skipped or failed coverage cannot produce a full pass; every PR names one task,
-an owner, scope and reproducible validation. Invite an initial two or three
-collaborators only after access and review rules are configured.
+Implement and test guest TLS/thread state, exceptions/unwinding and the required
+host-API semantics. Resolve names and ordinals, including dynamically requested
+imports. A guest's Windows API imports remain a compatibility requirement even
+though the host executable is Linux-native.
 
-## 3. Native build confidence
+Add live storage queues, physical-memory destinations, bounded decompression,
+offline user/save services, input and required audio/video paths. Scope each
+change to an observed requirement and a synthetic regression.
 
-Prepared: inherited runtime, full CI and decoder jobs remain available behind
-explicit opt-in. They have not been run for the Ambrosia rename locally.
+Acceptance: synthetic DLL initialization, thread/TLS behavior, file reads,
+queue completions/errors, input and save/restart cases pass in isolation.
+An implemented symbol or a zero-return stub is not proof of correct behavior.
 
-Acceptance: record Windows C++/Rust decoder results and the portable Linux build
-at an exact revision; account for dependencies, skips and platform differences;
-run relevant complete component tests; retain synthetic reproducible failures.
-Only then describe the renamed native components as build-verified.
+## 3. Native graphics to interactive menu
 
-No playable release, retail boot, GPU correctness or public delivery date is
-promised by these milestones. Runtime/game validation needs its own evidence.
+Connect the guest graphics ABI to the existing Vulkan execution components and
+a Linux presentation path. Validate shader lookup/translation, texture layout,
+resource visibility and descriptor lifetime on the target GPU. Keep required
+passes; do not hide missing functionality by silently dropping work.
+
+Acceptance: an isolated, read-only package run presents correctly rendered
+first-run/profile/start screens, responds to input and preserves settings across
+restart. Record exact source revision, hardware/driver, failures, missing shaders
+and memory use. Demonstrate consistent 30 fps menu pacing and a bounded soak.
+Synthetic presentation alone does not satisfy this gate.
+
+## 4. Correct world, then stable 30 fps
+
+Resolve mesh/indirect rendering, shader control-flow and wave64 semantics,
+packed-format coherence, lighting/composition, audio and streaming failures.
+Profile before optimizing; visible characters alone do not establish a correct
+scene. Native Linux must meet the same correctness bar as other backends.
+
+Acceptance: a visible controlled scene with working input/audio/saves, followed
+by a defined-resolution 30-minute stability run. Track frame times against the
+33.3 ms budget, memory growth, missing passes and driver/device resets. Hardware
+and resolution must be stated; average fps alone does not establish stability.
+
+The [native Linux plan](docs/native-linux-plan.md) explains the implementation
+boundaries, research findings and immediate first task. Publish focused changes
+only after their task-specific review and approval.

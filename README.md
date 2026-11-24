@@ -31,8 +31,9 @@
 </p>
 
 Ambrosia is an independent open-source project working toward running the Xbox
-Series version of GTA VI natively on PC. The goal is a working boot, interactive
-menus, and stable gameplay. **We are not there yet.**
+Series version of GTA VI natively on **x86-64 Linux with Vulkan**. The goal is
+interactive menus followed by stable 30 fps gameplay. Wine and Proton are outside
+the target runtime. **We are not there yet.**
 
 The CPU code is already x86-64. The runtime loads it and supplies the console
 services it expects, while the shader tools translate RDNA2 GPU programs to
@@ -66,9 +67,9 @@ SPIR-V for Vulkan. Game files and generated outputs stay on the player's machine
 | Area | What we can actually say |
 |---|---|
 | Local checks | 106 synthetic test methods passed on Linux with Python 3.12.3: 78 contributor checks, 22 import-readiness checks, and six launch-policy checks. |
-| Runtime | PE loader, import shims, and a D3D12-to-Vulkan backend are present. The new strict import gate has generated-PE regression cases, but those Windows cases have not run. |
+| Runtime | The inherited PE loader and import shims depend on Windows. Vulkan execution components and portable tests are present; a native Linux title loader is not implemented. |
 | Shaders and formats | Translation, archive, model, texture, and audio tools are inherited from earlier work. Their recorded measurements are not new Ambrosia validation. |
-| Native builds | The renamed Windows runtime has not been build-verified locally. |
+| Native builds | There is no native Linux game-runtime build or verified menu result yet. |
 | CI and delivery | Contributor CI runs on GitHub for Windows and Linux. Extended builds are opt-in. No continuous deployment or release pipeline is configured. |
 | Game and GPU | No Ambrosia menu, in-game rendering, performance, or stability result has been verified. |
 
@@ -117,41 +118,32 @@ results and fixing the next failure, not just increasing counts.
 
 ## 🛠️ Build and platform notes
 
-Game-free contributor work needs Python, not a full asset export. Native runtime
-work needs the toolchain described in [runtime/README.md](runtime/README.md).
+Start with the game-free contributor commands above. The next runtime milestone
+is a native Linux executable that loads an original synthetic PE fixture and
+returns its expected result without Wine or Proton. It is not a game build.
 
-For game-derived build experiments, the existing tooling targets Xbox Series
-package version **1.0.2.1**. The main Windows prerequisites are Python 3.12+,
-.NET 8 SDK, the Vulkan SDK, LLVM 21+ with the AMDGPU target, and Visual Studio
-2022 C++ tools with Windows SDK **10.0.26100 or newer**. Asset tooling also needs
-the pinned `rpf9-explorer` submodule; ffmpeg is used for XMA2 decoding.
+We are keeping one target host, one Vulkan backend, and one eventual build/run
+entry point. Game data stays read-only; builds, caches and saves stay outside the
+source tree. Full asset export is not part of the menu milestone.
 
-`Build.bat` provides interactive setup. To choose the package and work locations
-explicitly, use the terminal entry point:
-
-```powershell
-python -I make_game.py --game "D:\MyPackage" --check
-python -I make_game.py --game "D:\MyPackage" --work "E:\ambrosia-work" --out "D:\Ambrosia" --stages check,shaders,runtime
-```
-
-These commands prepare experimental build outputs, not a playable release.
-Full asset exports can take hundreds of GiB; the contributor checks above do
-not need them. Keep package files read-only where possible and generated outputs
-outside the repository. Shader fallbacks, hardware limits, and GPU test setup
-are documented in [design notes](docs/design.md) and [testing](docs/testing.md).
+The [native Linux plan](docs/native-linux-plan.md) lists the execution, service
+and graphics work required before a real menu is possible. Existing Windows
+build scripts and notes remain as inherited technical references, not the
+supported direction. Shader contracts and hardware limits are in
+[design notes](docs/design.md) and [testing](docs/testing.md).
 
 ### Running the loader on Linux
 
-The runtime is Windows code. Existing cross-build and Wine/Proton paths are
-research options, not verified Ambrosia game support. Linux can run the Python
-tools and portable tests natively; macOS GPU experiments depend on its Vulkan
-translation layer and have additional limits. See the
-[runtime guide](runtime/README.md) and [testing notes](docs/testing.md).
+There is no supported native game-launch command yet. A Linux build of the
+portable tests does not build the Windows-dependent game loader. See the
+[milestones and acceptance checks](docs/native-linux-plan.md) before attempting
+game execution. Existing Wine examples in older notes are historical references.
 
 ## 🤝 What needs work
 
-The next steps are a reproducible boot baseline, live DirectStorage queues,
-console audio integration, CPU compatibility, and shader/memory correctness.
+The next steps are the native Linux host/loader boundary, a reproducible boot
+baseline, live DirectStorage queues, console audio integration, CPU compatibility,
+and shader/memory correctness.
 Stable gameplay also needs testing by people using their own copies on real
 hardware. Synthetic checks alone cannot establish that.
 
