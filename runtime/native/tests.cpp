@@ -1,5 +1,6 @@
 // Original tiny PE byte fixtures only. No SDK, game, driver or network needed.
 #include "guest_thread.h"
+#include "module_graph.h"
 #include "pe_image.h"
 #include <algorithm>
 #include <array>
@@ -115,6 +116,7 @@ template <class Function> void bad(Function mutation, const char *label) {
 }
 
 #include "lifecycle_tests.h"
+#include "module_tests.h"
 #include "thread_tests.h"
 
 void pe_checks() {
@@ -252,6 +254,9 @@ extern "C" int ambrosia_native_tests() {
         thread_checks();
         pe_checks();
         lifecycle_checks();
+        export_checks();
+        forwarder_checks();
+        graph_tls_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
