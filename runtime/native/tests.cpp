@@ -4,6 +4,7 @@
 #include "native_command.h"
 #include "package_modules.h"
 #include "pe_image.h"
+#include "service_runtime.h"
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -121,6 +122,7 @@ template <class Function> void bad(Function mutation, const char *label) {
 #include "lifecycle_tests.h"
 #include "module_tests.h"
 #include "package_tests.h"
+#include "service_tests.h"
 #include "thread_tests.h"
 
 void pe_checks() {
@@ -262,6 +264,8 @@ extern "C" int ambrosia_native_tests() {
         forwarder_checks();
         graph_tls_checks();
         package_checks();
+        memory_service_checks();
+        service_dispatch_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
