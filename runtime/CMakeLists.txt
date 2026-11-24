@@ -4,6 +4,20 @@ project(gta6rt LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Small offline native host target. It has no SDK, package, shader or GPU
+# dependencies. The standalone runtime/native configuration is equivalent.
+set(_ambrosia_native_default OFF)
+if(UNIX AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+  set(_ambrosia_native_default ON)
+endif()
+option(AMBROSIA_BUILD_NATIVE_HOST "Build the portable native PE bootstrap" ${_ambrosia_native_default})
+option(AMBROSIA_NATIVE_HOST_ONLY "Configure only the native bootstrap and its CPU fixtures" OFF)
+if(AMBROSIA_NATIVE_HOST_ONLY)
+  include(CTest)
+  add_subdirectory(native)
+  return()
+endif()
+
 # The sources are UTF-8. Without /utf-8, MSVC reads them in the system's ANSI code page, so on code page 936 (or
 # any other non-1252 locale) it prints C4819 for every non-ASCII comment. Many targets set /utf-8 themselves; this
 # covers every target, including those that don't. clang-cl accepts it too. Only C and C++: ml64 (abi_probe.asm) has
@@ -432,10 +446,13 @@ if(WIN32 AND AMBROSIA_BUILD_WINDOWS_RUNTIME)
   endif()
 
 elseif(NOT WIN32)
-  message(STATUS "gta6rt requires Windows; only Vulkan tools are available on Linux")
+  message(STATUS "The inherited gta6rt loader requires Windows; the native bootstrap is a separate target")
 endif()
 
 include(CTest)
+if(AMBROSIA_BUILD_NATIVE_HOST)
+  add_subdirectory(native)
+endif()
 if(BUILD_TESTING)
   add_executable(gfx10_tiling_test test/gfx10_tiling_test.cpp)
   add_test(NAME gfx10_tiling COMMAND gfx10_tiling_test)
