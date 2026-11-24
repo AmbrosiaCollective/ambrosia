@@ -219,4 +219,63 @@ std::vector<std::string> ModuleGraph::initialization_order() const {
     return state_->order;
 }
 
+ModuleGraph::Execution ModuleGraph::start() const {
+    state_->require_owner();
+    if (state_->order.empty()) {
+        throw std::runtime_error("module graph is not loaded");
+    }
+    return Execution(state_);
+}
+
+ModuleGraph::Execution::Execution(std::shared_ptr<State> state)
+    : state_(std::move(state)), thread_(std::make_shared<guest::ThreadContext>()) {
+    if (state_->active) {
+        throw std::runtime_error("module graph already has an active session");
+    }
+    state_->active = true;
+    closed_ = false;
+    try {
+        for (const auto &name : state_->order) {
+            auto &image = *state_->modules.at(name).image;
+            if (image.state_->has_tls) {
+                thread_->install(image.state_->tls_slot, image.state_->tls);
+            }
+        }
+        for (const auto &name : state_->order) {
+            sessions_.push_back(state_->modules.at(name).image->start_in(thread_));
+        }
+    } catch (...) {
+        close();
+        throw;
+    }
+}
+
+ModuleGraph::Execution::~Execution() {
+    try {
+        close();
+    } catch (...) {
+        std::terminate();
+    }
+}
+
+std::uint64_t ModuleGraph::Execution::run_bootstrap() {
+    state_->require_owner();
+    if (closed_) {
+        throw std::runtime_error("module graph session is closed");
+    }
+    return sessions_.back()->run_bootstrap();
+}
+
+void ModuleGraph::Execution::close() {
+    if (closed_) {
+        return;
+    }
+    state_->require_owner();
+    for (auto session = sessions_.rbegin(); session != sessions_.rend(); ++session) {
+        (*session)->close();
+    }
+    sessions_.clear();
+    closed_ = true;
+    state_->active = false;
+}
 } // namespace ambrosia::pe
