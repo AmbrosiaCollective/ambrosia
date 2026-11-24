@@ -1,5 +1,5 @@
 #if defined(__linux__)
-bool inspection_page_is_read_only(const std::byte *address) {
+std::string inspection_page_permissions(const std::byte *address) {
     std::ifstream maps("/proc/self/maps");
     std::string line;
     const auto pointer = reinterpret_cast<std::uintptr_t>(address);
@@ -10,10 +10,14 @@ bool inspection_page_is_read_only(const std::byte *address) {
         std::string permissions;
         fields >> std::hex >> begin >> separator >> end >> permissions;
         if (fields && separator == '-' && pointer >= begin && pointer < end) {
-            return permissions.starts_with("r--");
+            return permissions;
         }
     }
-    return false;
+    return {};
+}
+
+bool inspection_page_is_read_only(const std::byte *address) {
+    return inspection_page_permissions(address).starts_with("r--");
 }
 #endif
 

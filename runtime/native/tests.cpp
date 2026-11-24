@@ -5,6 +5,7 @@
 #include "package_modules.h"
 #include "pe_image.h"
 #include "service_runtime.h"
+#include "startup_trace.h"
 #include "unwind_epilogue.h"
 #include "unwind_program.h"
 #include "unwind_table.h"
@@ -144,6 +145,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "inspection_tests.h"
 #include "unwind_program_tests.h"
 #include "unwind_walk_tests.h"
+#include "trace_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -292,6 +294,7 @@ extern "C" int ambrosia_native_tests() {
         inspection_checks();
         unwind_program_checks();
         unwind_walk_checks();
+        trace_configuration_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
@@ -315,6 +318,39 @@ extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
         std::cerr << "inspection probe argument construction failed\n";
         return 2;
     }
+}
+
+extern "C" int ambrosia_native_trace(const char *image, const char *package) {
+    if (!image || !package) {
+        return 2;
+    }
+    const std::vector<std::filesystem::path> arguments{
+        "--trace-startup", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(image))),
+        "--package", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(package)))};
+    return ambrosia::run_native_command(arguments, std::cout, std::cerr);
+}
+
+extern "C" int ambrosia_native_trace_fixture(unsigned scenario) {
+    auto bytes = fixture();
+    if (scenario == 1) {
+        bytes = error_fixture();
+    } else if (scenario == 2) {
+        put<std::uint32_t>(bytes, 0x98 + 120, 0);
+        put<std::uint32_t>(bytes, 0x98 + 124, 0);
+        const unsigned char fault[] = {0x31, 0xc0, 0x8b, 0, 0xc3};
+        std::memcpy(bytes.data() + 0x200, fault, sizeof(fault));
+    } else if (scenario != 0) {
+        return 2;
+    }
+    const auto root = std::filesystem::temp_directory_path() / "ambrosia-trace-fixture";
+    std::filesystem::create_directories(root);
+    const auto path = root / "trace.exe";
+    write_fixture(path, bytes);
+    const auto path_text = path.string();
+    const auto root_text = root.string();
+    const auto result = ambrosia_native_trace(path_text.c_str(), root_text.c_str());
+    std::filesystem::remove_all(root);
+    return result;
 }
 
 // Metadata-only probe. The buffer is table data, never an executable mapping.
