@@ -34,3 +34,9 @@ span-based decoder, owned operations and bounded stack restoration are implement
 in the native core; no Wine source/header or runtime is imported. It remains a
 component; checked chain restoration and selected epilogues now have original
 synthetic coverage. Guest CONTEXT adapters and exception handling are unfinished.
+
+Clock and identity adapters follow Microsoft API contracts at SDK documentation
+revision `656e9656bfaef34dd29cd7ee9e1146aec17e924c`, including
+[FILETIME](https://github.com/MicrosoftDocs/sdk-api/blob/656e9656bfaef34dd29cd7ee9e1146aec17e924c/sdk-api-src/content/minwinbase/ns-minwinbase-filetime.md)
+and [QueryPerformanceCounter](https://github.com/MicrosoftDocs/sdk-api/blob/656e9656bfaef34dd29cd7ee9e1146aec17e924c/sdk-api-src/content/profileapi/nf-profileapi-queryperformancecounter.md).
+No external implementation or header is imported by these adapters.

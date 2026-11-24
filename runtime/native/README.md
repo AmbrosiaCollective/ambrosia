@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 323 checks under a
+as errors. Each build's native shared-object entry passed 341 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -153,8 +153,8 @@ return. Current usage is single-threaded, with process/thread/network creation
 denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
-Both native builds execute supplied PE startup code far enough to stop at
-`GetSystemTimeAsFileTime`. This occurs during module initialization; the game's
+Both native builds execute supplied PE startup code beyond the first clock call
+and now stop at `InitializeCriticalSectionEx`. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -233,6 +233,16 @@ all 299,257 unwind programs in the actual executable: 515 have chains and 596
 have handlers. All chains validate under both builds, with a maximum depth of
 four records. This establishes metadata coverage, not runtime frame-unwind
 correctness or game execution. No game bytes are saved in fixtures or Git.
+
+`clock_services.*` supplies UTC GetSystemTimeAsFileTime, monotonic
+QueryPerformanceCounter/Frequency and current process/thread IDs through
+`host_time.cpp`. FILETIME uses 100 ns ticks since 1601, preserves four-byte output
+alignment and performs checked epoch conversion. Performance counts are native
+steady-clock nanoseconds with a fixed 1 GHz unit; this does not claim nanosecond
+hardware resolution. Linux IDs come from the isolated process/thread namespace.
+Only valid output addresses are supported; null outputs fail explicitly, other
+bad guest pointers may fault. Successful queries preserve last error. Worker
+thread behavior and Windows/macOS adapters remain untested.
 
 The bootstrap still rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security
