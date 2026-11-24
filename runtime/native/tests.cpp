@@ -1,5 +1,7 @@
 // Original tiny PE byte fixtures only. No SDK, game, driver or network needed.
 #include "pe_image.h"
+#include "guest_thread.h"
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <fstream>
@@ -96,6 +98,7 @@ template<class Function> void bad(Function mutation, const char* label) {
     mutation(bytes);
     check(rejected(bytes), label);
 }
+#include "thread_tests.h"
 void pe_checks() {
     const auto bytes = fixture();
     auto image = ambrosia::pe::Image::load(bytes, resolve);
@@ -184,7 +187,7 @@ void host_checks() {
 
 extern "C" int ambrosia_native_tests() {
     checks = failures = 0;
-    try { host_checks(); pe_checks(); }
+    try { host_checks(); thread_checks(); pe_checks(); }
     catch (const std::exception& error) { ++failures; std::cerr << "unexpected: " << error.what() << '\n'; }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << ",\"skipped\":0}\n";
     return failures ? 1 : 0;
