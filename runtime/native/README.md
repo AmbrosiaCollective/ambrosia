@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 244 checks under a
+as errors. Each build's native shared-object entry passed 264 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -166,11 +166,21 @@ per-file/image/source and 128 MiB graph-mapping limits. Unsupported directories
 report their index and required service. These budgets do not imply a supported
 retail startup contract.
 
-The actual supplied executable has now been read through the native inspection
-engine under strict isolation. It passes the inspection size budget and stops at
-unsupported exception/unwind metadata before mapping or initialization. This is
-a measured loading blocker, not a game launch or menu result. Inputs stay
-read-only and private diagnostics stay outside Git.
+The actual supplied executable and seven requested bundled DLLs now complete
+inspection through the native engine under strict isolation. Inspection retains
+checked unwind tables and bounded resource, security, debug and load-configuration
+metadata, reporting their unsupported-service bits. Resource/certificate contents
+remain opaque; signatures are not authenticated. Security-directory extents use
+file offsets. Code and data pages in inspected images are read-only and NX.
+All image/graph execution entry points reject inspection mode, even when imports
+resolve. Missing inspected IAT cells stay null, never success-return stubs.
+
+The measured graph contains 1,186 static import entries, 861 unresolved entries
+and 304,274 unwind records. These are entry counts including DLL dependencies,
+not unique APIs or a boot percentage. Inspection success does not mean the game
+can execute. JSON includes `inspection_only`, `unresolved_imports`,
+`unwind_records` and `unsupported_directories` (a bit mask of directory indices).
+Raw private diagnostics and game data remain outside Git.
 
 The separate unwind-table component validates order, non-overlap, image bounds
 and direct header references. Tiny fixtures cover empty records and exclusive
