@@ -14,6 +14,31 @@ credentials and do not initialize submodules. The workflows use hosted runners,
 read-only source access and no repository secrets. Running tests in a hosted
 runner does not turn the contributor command into an OS sandbox.
 
+## Personal fork synchronization
+
+`Sync personal fork` is a separate, credential-bearing maintenance workflow.
+It runs only in the official org repository on main pushes or an explicit
+main-branch dispatch. It never runs on PRs or in forks, checks out no source,
+and executes no repository scripts. Contributor jobs have no access to its key.
+
+Repository variable `FORK_SYNC_REPOSITORY` names the destination personal fork.
+Secret `FORK_SYNC_SSH_KEY` holds a write-enabled SSH deploy key attached only
+to that fork, not an account-wide token or a key granting org write access.
+The workflow pins GitHub's Ed25519 host key, writes its credential to private
+temporary storage, removes it on exit and unsets it before running Git.
+Deploy keys do not expire automatically; revoke the fork key and delete the
+org secret when retiring the automation. Replace both when rotating credentials.
+
+The destination's main branch must be an ancestor of org main. Divergence stops
+the job without a merge, reset or force push. Keep personal experiments on other
+branches. A normal non-force push also protects against concurrent changes.
+Only main is synchronized; other branches, tags, issues and repository settings
+are not mirrored. Runs are serialized and bounded to five minutes.
+
+The profile fork can have Actions disabled to avoid duplicating the org's CI.
+The official Contributor workflow remains the source of its README CI badge.
+The sync workflow becomes active only after its reviewed change lands on main.
+
 ## Extended validation
 
 The inherited **CI**, **Runtime** and **XMA2 decoder** jobs are retained, with their

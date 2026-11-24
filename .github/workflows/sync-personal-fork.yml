@@ -1,0 +1,58 @@
+name: Sync personal fork
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-personal-fork
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'AmbrosiaCollective/ambrosia' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # No checkout: code from the source or destination repository never runs.
+      # The SSH credential grants write access to the destination fork only.
+      - name: Fast-forward the configured fork
+        shell: bash
+        env:
+          FORK_SYNC_REPOSITORY: ${{ vars.FORK_SYNC_REPOSITORY }}
+          FORK_SYNC_SSH_KEY: ${{ secrets.FORK_SYNC_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$FORK_SYNC_REPOSITORY" =~ ^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+$ ]] ||
+             [[ "${FORK_SYNC_REPOSITORY,,}" == "ambrosiacollective/ambrosia" ]]; then
+            echo 'Configure FORK_SYNC_REPOSITORY to name a separate personal fork.' >&2
+            exit 1
+          fi
+          if [[ -z "$FORK_SYNC_SSH_KEY" ]]; then
+            echo 'Configure the fork-scoped FORK_SYNC_SSH_KEY secret.' >&2
+            exit 1
+          fi
+          umask 077
+          work=$(mktemp -d "$RUNNER_TEMP/fork-sync.XXXXXX")
+          trap 'rm -rf -- "$work"' EXIT
+          printf '%s\n' "$FORK_SYNC_SSH_KEY" > "$work/key"
+          unset FORK_SYNC_SSH_KEY
+          # Official github.com Ed25519 host key; do not trust an unauthenticated keyscan.
+          printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$work/known_hosts"
+          printf -v GIT_SSH_COMMAND 'ssh -i %q -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%q' "$work/key" "$work/known_hosts"
+          export GIT_SSH_COMMAND
+          export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0
+          git -c core.hooksPath=/dev/null init --bare "$work/repository.git"
+          cd "$work/repository.git"
+          git -c core.hooksPath=/dev/null fetch --no-tags https://github.com/AmbrosiaCollective/ambrosia.git refs/heads/main:refs/remotes/upstream/main
+          git -c core.hooksPath=/dev/null fetch --no-tags "https://github.com/$FORK_SYNC_REPOSITORY.git" refs/heads/main:refs/remotes/mirror/main
+          if ! git merge-base --is-ancestor refs/remotes/mirror/main refs/remotes/upstream/main; then
+            echo 'Fork main has diverged. Sync stopped; keep experiments on separate branches.' >&2
+            exit 1
+          fi
+          git -c core.hooksPath=/dev/null push --no-follow-tags "git@github.com:$FORK_SYNC_REPOSITORY.git" refs/remotes/upstream/main:refs/heads/main
+          echo 'Personal fork main is synchronized with the org repository.'
