@@ -125,7 +125,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
             fail("incomplete PE directory");
         }
         // Guest exception/unwind handling and delayed imports remain unsupported.
-        if (i != 1 && i != 5 && i != 12) {
+        if (i != 1 && i != 5 && i != 9 && i != 12) {
             fail("PE directory needs an unimplemented guest service");
         }
         range(dirs[i].rva, dirs[i].size, image_size);
@@ -276,6 +276,80 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
         }
     }
 
+    if (dirs[9].size) {
+        if (dirs[9].size < 40) {
+            fail("truncated PE TLS directory");
+        }
+        const auto directory = dirs[9].rva;
+        const auto start = read<std::uint64_t>(mapped, directory);
+        const auto end = read<std::uint64_t>(mapped, directory + 8);
+        const auto index = read<std::uint64_t>(mapped, directory + 16);
+        const auto callbacks = read<std::uint64_t>(mapped, directory + 24);
+        const auto zero_fill = read<std::uint32_t>(mapped, directory + 32);
+        const auto flags = read<std::uint32_t>(mapped, directory + 36);
+        if (flags & ~0x00f00000u) {
+            fail("unsupported PE TLS flags");
+        }
+        const auto alignment_code = (flags >> 20) & 15;
+        if (alignment_code == 15) {
+            fail("invalid PE TLS alignment");
+        }
+        state.tls.alignment = alignment_code ? std::size_t(1) << (alignment_code - 1) : 16;
+
+        auto rva_for = [&](std::uint64_t address, std::size_t size, std::uint32_t access) {
+            if (address < base) {
+                fail("TLS address is outside the mapped image");
+            }
+            const auto rva = address - base;
+            range(rva, size, mapped.size());
+            const bool valid = std::any_of(sections.begin(), sections.end(), [&](const auto &section) {
+                return rva >= section.rva && rva - section.rva <= section.size &&
+                       size <= section.size - (rva - section.rva) && (section.flags & access) == access;
+            });
+            if (!valid) {
+                fail("TLS address has no compatible section");
+            }
+            return static_cast<std::uint32_t>(rva);
+        };
+        (void)rva_for(base + directory, 40, 0x40000000);
+        if (start || end || index || callbacks || zero_fill) {
+            state.has_tls = true;
+            if (end < start || end - start > 1024 * 1024 || zero_fill > 1024 * 1024 - (end - start)) {
+                fail("invalid PE TLS template size");
+            }
+            if (start || end) {
+                const auto rva = rva_for(start, end - start, 0x40000000);
+                state.tls.initial.assign(mapped.begin() + rva, mapped.begin() + rva + (end - start));
+            }
+            state.tls.zero_fill = zero_fill;
+            const auto index_rva = rva_for(index, 4, 0x80000000);
+            if (index_rva % 4) {
+                fail("unaligned PE TLS index");
+            }
+            // A session currently hosts one module, so its stable module index
+            // is zero. A shared multi-module slot allocator is a later gate.
+            const std::uint32_t slot = 0;
+            std::memcpy(mapped.data() + index_rva, &slot, sizeof(slot));
+            if (callbacks) {
+                bool terminated = false;
+                for (std::size_t i = 0; i <= 64; ++i) {
+                    const auto callback_rva = rva_for(callbacks + i * 8, 8, 0x40000000);
+                    const auto callback = read<std::uint64_t>(mapped, callback_rva);
+                    if (!callback) {
+                        terminated = true;
+                        break;
+                    }
+                    if (i == 64) {
+                        fail("too many PE TLS callbacks");
+                    }
+                    state.callbacks.push_back(rva_for(callback, 1, 0x20000000));
+                }
+                if (!terminated) {
+                    fail("unterminated PE TLS callback table");
+                }
+            }
+        }
+    }
 
     // No page is writable and executable at once. Parsing/binding completes
     // before code becomes executable; gaps remain inaccessible.
