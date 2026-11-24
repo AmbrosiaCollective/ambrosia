@@ -26,13 +26,15 @@ enum class Access { none, read, read_write, read_execute };
 
 class Mapping {
   public:
-    explicit Mapping(std::size_t bytes);
+    explicit Mapping(std::size_t bytes, Access initial = Access::read_write, std::size_t alignment = 0);
     ~Mapping();
     Mapping(const Mapping &) = delete;
     Mapping &operator=(const Mapping &) = delete;
     Mapping(Mapping &&other) noexcept;
     Mapping &operator=(Mapping &&other) noexcept;
     void protect(std::size_t offset, std::size_t bytes, Access access);
+    void commit(std::size_t offset, std::size_t bytes, Access access);
+    void decommit(std::size_t offset, std::size_t bytes);
     void flush_instructions();
 
     std::byte *data() const {
@@ -47,6 +49,7 @@ class Mapping {
 
   private:
     void release() noexcept;
+    void require_page_range(std::size_t offset, std::size_t bytes) const;
     std::byte *data_ = nullptr;
     std::size_t size_ = 0;
 };

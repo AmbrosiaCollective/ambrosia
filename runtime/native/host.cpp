@@ -22,23 +22,88 @@ std::size_t Mapping::page_size() {
     return info.dwPageSize;
 #else
     const auto size = sysconf(_SC_PAGESIZE);
-    if (size <= 0) throw std::runtime_error("cannot determine host page size");
+    if (size <= 0) {
+        throw std::runtime_error("cannot determine host page size");
+    }
     return static_cast<std::size_t>(size);
 #endif
 }
 
-Mapping::Mapping(std::size_t bytes) {
+namespace {
+#ifdef _WIN32
+DWORD native_access(Access access) {
+    switch (access) {
+    case Access::none:
+        return PAGE_NOACCESS;
+    case Access::read:
+        return PAGE_READONLY;
+    case Access::read_write:
+        return PAGE_READWRITE;
+    case Access::read_execute:
+        return PAGE_EXECUTE_READ;
+    }
+    throw std::runtime_error("invalid host access mode");
+}
+#else
+int native_access(Access access) {
+    switch (access) {
+    case Access::none:
+        return PROT_NONE;
+    case Access::read:
+        return PROT_READ;
+    case Access::read_write:
+        return PROT_READ | PROT_WRITE;
+    case Access::read_execute:
+        return PROT_READ | PROT_EXEC;
+    }
+    throw std::runtime_error("invalid host access mode");
+}
+#endif
+} // namespace
+
+Mapping::Mapping(std::size_t bytes, Access initial, std::size_t alignment) {
     const auto page = page_size();
-    if (!bytes || bytes > std::numeric_limits<std::size_t>::max() - (page - 1))
-        throw std::runtime_error("invalid mapping size");
+    if (!alignment) {
+        alignment = page;
+    }
+    if (!bytes || bytes > std::numeric_limits<std::size_t>::max() - (page - 1) || alignment < page ||
+        alignment % page || (alignment & (alignment - 1))) {
+        throw std::runtime_error("invalid mapping size or alignment");
+    }
     size_ = (bytes + page - 1) / page * page;
 #ifdef _WIN32
-    data_ = static_cast<std::byte*>(VirtualAlloc(nullptr, size_, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));
-    if (!data_) throw std::runtime_error("host memory allocation failed");
+    SYSTEM_INFO info{};
+    GetSystemInfo(&info);
+    if (alignment > info.dwAllocationGranularity) {
+        throw std::runtime_error("requested host alignment is unsupported");
+    }
+    const auto flags = MEM_RESERVE | (initial == Access::none ? 0 : MEM_COMMIT);
+    data_ = static_cast<std::byte *>(VirtualAlloc(nullptr, size_, flags, native_access(initial)));
+    if (!data_) {
+        throw std::runtime_error("host memory allocation failed");
+    }
 #else
-    void* memory = mmap(nullptr, size_, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (memory == MAP_FAILED) throw std::runtime_error("host memory allocation failed");
-    data_ = static_cast<std::byte*>(memory);
+    if (size_ > std::numeric_limits<std::size_t>::max() - (alignment - page)) {
+        throw std::runtime_error("aligned mapping size overflows");
+    }
+    const auto reserved_size = size_ + alignment - page;
+    void *memory = mmap(nullptr, reserved_size, native_access(initial), MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (memory == MAP_FAILED) {
+        throw std::runtime_error("host memory allocation failed");
+    }
+    const auto address = reinterpret_cast<std::uintptr_t>(memory);
+    const auto padding = (alignment - address % alignment) % alignment;
+    auto *aligned = static_cast<std::byte *>(memory) + padding;
+    if (padding && munmap(memory, padding)) {
+        munmap(memory, reserved_size);
+        throw std::runtime_error("cannot trim aligned host reservation");
+    }
+    const auto suffix = reserved_size - padding - size_;
+    if (suffix && munmap(aligned + size_, suffix)) {
+        munmap(aligned, size_ + suffix);
+        throw std::runtime_error("cannot trim aligned host reservation");
+    }
+    data_ = aligned;
 #endif
 }
 
@@ -53,10 +118,15 @@ void Mapping::release() noexcept {
     data_ = nullptr;
     size_ = 0;
 }
-Mapping::~Mapping() { release(); }
-Mapping::Mapping(Mapping&& other) noexcept
+
+Mapping::~Mapping() {
+    release();
+}
+
+Mapping::Mapping(Mapping &&other) noexcept
     : data_(std::exchange(other.data_, nullptr)), size_(std::exchange(other.size_, 0)) {}
-Mapping& Mapping::operator=(Mapping&& other) noexcept {
+
+Mapping &Mapping::operator=(Mapping &&other) noexcept {
     if (this != &other) {
         release();
         data_ = std::exchange(other.data_, nullptr);
@@ -64,32 +134,62 @@ Mapping& Mapping::operator=(Mapping&& other) noexcept {
     }
     return *this;
 }
-void Mapping::protect(std::size_t offset, std::size_t bytes, Access access) {
+
+void Mapping::require_page_range(std::size_t offset, std::size_t bytes) const {
     const auto page = page_size();
-    if (!data_ || !bytes || offset % page || bytes % page || offset > size_ || bytes > size_ - offset)
-        throw std::runtime_error("invalid host protection range");
+    if (!data_ || !bytes || offset % page || bytes % page || offset > size_ || bytes > size_ - offset) {
+        throw std::runtime_error("invalid host page range");
+    }
+}
+
+void Mapping::protect(std::size_t offset, std::size_t bytes, Access access) {
+    require_page_range(offset, bytes);
 #ifdef _WIN32
-    DWORD protection = PAGE_NOACCESS;
-    if (access == Access::read) protection = PAGE_READONLY;
-    if (access == Access::read_write) protection = PAGE_READWRITE;
-    if (access == Access::read_execute) protection = PAGE_EXECUTE_READ;
     DWORD previous;
-    if (!VirtualProtect(data_ + offset, bytes, protection, &previous))
+    if (!VirtualProtect(data_ + offset, bytes, native_access(access), &previous)) {
         throw std::runtime_error("host protection failed");
+    }
 #else
-    int protection = PROT_NONE;
-    if (access == Access::read) protection = PROT_READ;
-    if (access == Access::read_write) protection = PROT_READ | PROT_WRITE;
-    if (access == Access::read_execute) protection = PROT_READ | PROT_EXEC;
-    if (mprotect(data_ + offset, bytes, protection)) throw std::runtime_error("host protection failed");
+    if (mprotect(data_ + offset, bytes, native_access(access))) {
+        throw std::runtime_error("host protection failed");
+    }
 #endif
 }
+
+void Mapping::commit(std::size_t offset, std::size_t bytes, Access access) {
+    require_page_range(offset, bytes);
+#ifdef _WIN32
+    if (!VirtualAlloc(data_ + offset, bytes, MEM_COMMIT, native_access(access))) {
+        throw std::runtime_error("host commit failed");
+    }
+#else
+    protect(offset, bytes, access);
+#endif
+}
+
+void Mapping::decommit(std::size_t offset, std::size_t bytes) {
+    require_page_range(offset, bytes);
+#ifdef _WIN32
+    if (!VirtualFree(data_ + offset, bytes, MEM_DECOMMIT)) {
+        throw std::runtime_error("host decommit failed");
+    }
+#else
+    // Replace only this mapping's owned pages. Fresh anonymous backing ensures
+    // recommit observes zeros, without relying on platform-specific madvise behavior.
+    void *result = mmap(data_ + offset, bytes, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if (result == MAP_FAILED) {
+        throw std::runtime_error("host decommit failed");
+    }
+#endif
+}
+
 void Mapping::flush_instructions() {
 #ifdef _WIN32
-    if (!FlushInstructionCache(GetCurrentProcess(), data_, size_))
+    if (!FlushInstructionCache(GetCurrentProcess(), data_, size_)) {
         throw std::runtime_error("instruction cache flush failed");
+    }
 #else
-    __builtin___clear_cache(reinterpret_cast<char*>(data_), reinterpret_cast<char*>(data_ + size_));
+    __builtin___clear_cache(reinterpret_cast<char *>(data_), reinterpret_cast<char *>(data_ + size_));
 #endif
 }
 
