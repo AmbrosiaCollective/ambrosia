@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 217 checks under a
+as errors. Each build's native shared-object entry passed 226 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -157,7 +157,20 @@ nested scopes restore the previous context and GS base. Native TLS stays on FS.
 The ABI bridge keeps native TLS resolution in a non-inlined host call because a
 GCC shared-library build otherwise lost a live guest argument in synthetic tests.
 
-The bootstrap still caps images/files at 64 MiB and rejects exception registration,
+Inspection allows a 128 MiB file and 256 MiB image, with graph budgets of 256 MiB
+source bytes and 384 MiB mappings. The CLI releases its redundant input buffer
+before mapping. API defaults and bootstrap execution retain the original 64 MiB
+per-file/image/source and 128 MiB graph-mapping limits. Unsupported directories
+report their index and required service. These budgets do not imply a supported
+retail startup contract.
+
+The actual supplied executable has now been read through the native inspection
+engine under strict isolation. It passes the inspection size budget and stops at
+unsupported exception/unwind metadata before mapping or initialization. This is
+a measured loading blocker, not a game launch or menu result. Inputs stay
+read-only and private diagnostics stay outside Git.
+
+The bootstrap still rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security
 boundary or support claim for arbitrary PE files. Guest exceptions/unwinding,
 guest file/storage services, audio and graphics remain future work. Existing

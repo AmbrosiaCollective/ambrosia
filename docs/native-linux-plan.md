@@ -9,7 +9,7 @@ there is no available native game build.
 
 The [native CPU bootstrap](../runtime/native/README.md) shares PE parsing,
 relocation/import binding and path policy across hosts, with OS memory operations
-behind one adapter. Linux builds pass 217 synthetic checks under GCC and Clang.
+behind one adapter. Linux builds pass 226 synthetic checks under GCC and Clang.
 The CLI engine is tested in-process with synthetic package files; the standalone
 executable builds through offline CMake but has not been launched. This does
 not implement the retail entry contract, exceptions or graphics. Single-module
@@ -20,7 +20,10 @@ discovers requested DLLs in an explicit package root without scanning asset cont
 Windows/macOS guest thread adapters fail explicitly until implemented.
 The first explicit native service slice supplies bounded reserve/commit/decommit/
 release and per-context last error. Fixed-address reservations, protection changes
-and many other guest services remain unsupported. Unknown imports stay fatal.
+and many other guest services remain unsupported. Unknown imports stay fatal. The supplied executable now passes the larger,
+bounded inspection file budget and stops at unsupported exception/unwind metadata,
+before mapping or initialization. Its actual imports now guide service priorities.
+No game entry, graphics or menu has been executed through this native path.
 
 ## What the comparison establishes
 
