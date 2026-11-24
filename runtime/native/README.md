@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 41 checks under a
+as errors. Each build's native shared-object entry passed 84 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. Those standalone executables have not been run.
@@ -39,6 +39,11 @@ Windows/macOS builds and the parent CMake configuration remain unverified.
   code does not call those APIs directly. No page is writable and executable.
 - `main.cpp`: narrow inspect/bootstrap CLI, with wide-character Windows paths.
   There is no native host-DLL fallback or success-return stub for missing imports.
+- `guest_thread.*` and `host_tls.cpp`: aligned, independent TLS storage and a
+  scoped Linux GS adapter. Native C++ TLS remains on FS. Other host thread
+  adapters fail explicitly until implemented.
+- `module_execution.cpp`: explicit dynamic module lifetime, ordered TLS/DLL
+  notifications and mapping ownership through detach.
 
 Explicit package/work paths are supported. Otherwise the image's parent is the
 package root and the work root follows host cache conventions, falling back to
@@ -47,13 +52,31 @@ preserves host Unicode paths and rejects a work root overlapping the package or
 executable. Resolution creates nothing and does not change the current directory.
 Guest Windows path syntax/case rules are a later service-layer task.
 
-The bootstrap deliberately caps images/files at 64 MiB and rejects DLLs, TLS,
-exception registration, delayed imports and other unsupported directories.
-It accepts only its no-argument/uint64 bootstrap entry contract. Its parser is
-not a security boundary or support claim for arbitrary PE files. Full guest
-TLS/thread state, bundled DLL lifecycle, exceptions/unwinding, storage/audio and
-graphics remain future work. Existing Vulkan code should be reused behind a
-platform surface/input adapter; no second renderer is introduced here.
+## TLS and module lifetime
+
+Mapping never runs callbacks. `Image::start()` creates an execution session,
+copies/zero-fills the TLS template and delivers TLS callbacks before DLL process
+attach. Failed DLL attach performs detach cleanup. Explicit close or destruction
+delivers detach before releasing the mapping. The session retains its mapping if
+the original image handle is moved or destroyed. Only one session per image is
+allowed, and it must remain on its creating host thread.
+
+Executable sessions expose the no-argument/uint64 bootstrap entry. DLL entries
+use their separate Microsoft x64 lifecycle ABI and dynamic-load reserved argument.
+TLS persists across calls within a session and starts fresh in a new session.
+The guest GS base is restored after every call, including nested host scopes.
+
+Current limits: one module per session with TLS index zero, a minimal anchor
+exposing the TLS vector rather than a complete Windows TEB, at most 64 snapshotted
+callbacks and a 1 MiB TLS block. Worker threads, thread attach/detach notifications,
+shared multi-module TLS slots and static process startup are not implemented.
+The strict tests create no threads and do not validate concurrent behavior.
+
+The bootstrap still caps images/files at 64 MiB and rejects exception registration,
+delayed imports and other unsupported directories. Its parser is not a security
+boundary or support claim for arbitrary PE files. Guest exceptions/unwinding,
+bundled dependency loading, storage/audio and graphics remain future work. Existing
+Vulkan code should be reused behind a platform surface/input adapter.
 
 The next game milestone is a correctly presented interactive menu. Correct world
 rendering and stable 30 fps with minimal stutter follow. Performance unlocking
