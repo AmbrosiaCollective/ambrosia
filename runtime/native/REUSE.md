@@ -32,4 +32,5 @@ The unwind-program component consults the same pinned Wine x64 behavior referenc
 for opcode meaning, stack offsets and partial-prologue semantics. Its checked
 span-based decoder, owned operations and bounded stack restoration are implemented
 in the native core; no Wine source/header or runtime is imported. It remains a
-component, with chained restoration and epilogue/exception handling unfinished.
+component; checked chain restoration and selected epilogues now have original
+synthetic coverage. Guest CONTEXT adapters and exception handling are unfinished.

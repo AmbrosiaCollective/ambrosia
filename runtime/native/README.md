@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 293 checks under a
+as errors. Each build's native shared-object entry passed 311 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -195,13 +195,18 @@ exists; this parser is not a substitute for it.
 against an explicitly bounded stack view, preserving the caller's input context
 on failure. It covers nonvolatile integer/XMM saves, small/large allocations,
 frame registers, partial prologues and machine frames. Handler/chain metadata is
-retained but never invoked. Chain walking, epilogue recognition, full CONTEXT
-adapters and exception dispatch remain necessary before RtlVirtualUnwind can be
-exposed. Version-two epilogue opcodes fail explicitly.
+retained but never invoked. A bounded chain walker now rejects cycles, excessive
+depth and inconsistent frame registers, and pops the caller return only once.
+`unwind_epilogue.*` recognizes complete supported AMD64 epilogues before restoring
+any copied state: stack adjustments, frame LEA, integer pops, returns and selected
+tail jumps. Unsupported patterns do not match. Full CONTEXT adapters, remaining
+epilogue cases and exception dispatch are still needed before RtlVirtualUnwind
+can be exposed. Version-two epilogue opcodes fail explicitly.
 
 A non-executable RAM image of non-code sections lets both compiler builds decode
 all 299,257 unwind programs in the actual executable: 515 have chains and 596
-have handlers. This establishes metadata coverage, not runtime frame-unwind
+have handlers. All chains validate under both builds, with a maximum depth of
+four records. This establishes metadata coverage, not runtime frame-unwind
 correctness or game execution. No game bytes are saved in fixtures or Git.
 
 The bootstrap still rejects exception registration,
