@@ -35,19 +35,57 @@ Image::Execution Image::start() const {
     return Execution(state_);
 }
 
+std::unique_ptr<Image::Execution> Image::start_in(std::shared_ptr<guest::ThreadContext> context) const {
+    return std::unique_ptr<Execution>(new Execution(state_, std::move(context)));
+}
+
+std::uintptr_t Image::export_address(const Import &symbol) const {
+    if (!state_) {
+        throw std::runtime_error("image is not mapped");
+    }
+    const ExportTarget *target = nullptr;
+    if (symbol.by_ordinal) {
+        auto found = state_->exports.ordinals.find(symbol.ordinal);
+        if (found != state_->exports.ordinals.end()) {
+            target = &found->second;
+        }
+    } else {
+        auto found = state_->exports.names.find(symbol.name);
+        if (found != state_->exports.names.end()) {
+            target = &found->second;
+        }
+    }
+    if (!target) {
+        return 0;
+    }
+    if (!target->forwarder.empty()) {
+        throw std::runtime_error("forwarded export requires a module graph");
+    }
+    return reinterpret_cast<std::uintptr_t>(state_->memory.data() + target->rva);
+}
+
 std::uint64_t Image::run_bootstrap() const {
     auto execution = start();
     return execution.run_bootstrap();
 }
 
-Image::Execution::Execution(std::shared_ptr<State> state)
-    : state_(std::move(state)), owner_(std::this_thread::get_id()) {
+Image::Execution::Execution(std::shared_ptr<State> state, std::shared_ptr<guest::ThreadContext> context)
+    : state_(std::move(state)), thread_(std::move(context)), owner_(std::this_thread::get_id()) {
     if (state_->active.exchange(true)) {
         throw std::runtime_error("module already has an active execution session");
     }
     try {
+        const bool shared_context = bool(thread_);
+        needs_context_ = shared_context || state_->has_tls;
+        if (!thread_) {
+            thread_ = std::make_shared<guest::ThreadContext>();
+        }
         if (state_->has_tls) {
-            thread_.install(0, state_->tls);
+            if (shared_context) {
+                (void)thread_->block(state_->tls_slot);
+            } else {
+                thread_->install(state_->tls_slot, state_->tls);
+            }
         }
         closed_ = false;
         if (!notify(process_attach)) {
@@ -90,8 +128,8 @@ bool Image::Execution::notify(std::uint32_t reason) {
         }
         return true;
     };
-    if (state_->has_tls) {
-        auto scope = thread_.activate();
+    if (needs_context_) {
+        auto scope = thread_->activate();
         return dispatch();
     }
     return dispatch();
@@ -103,8 +141,8 @@ std::uint64_t Image::Execution::run_bootstrap() {
         throw std::runtime_error("DLL entry is not a bootstrap executable entry");
     }
     auto entry = reinterpret_cast<Entry>(state_->memory.data() + state_->entry);
-    if (state_->has_tls) {
-        auto scope = thread_.activate();
+    if (needs_context_) {
+        auto scope = thread_->activate();
         return entry();
     }
     return entry();
@@ -112,7 +150,7 @@ std::uint64_t Image::Execution::run_bootstrap() {
 
 std::span<std::byte> Image::Execution::tls_block() {
     require_open();
-    return thread_.block(0);
+    return thread_->block(state_->tls_slot);
 }
 
 void Image::Execution::close() {

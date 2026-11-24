@@ -19,6 +19,8 @@
 #endif
 
 namespace ambrosia::pe {
+class ModuleGraph;
+
 struct Import {
     std::string module;
     std::string name;
@@ -31,10 +33,11 @@ using Resolver = std::function<std::uintptr_t(const Import &)>;
 
 class Image {
     struct State;
+    friend class ModuleGraph;
 
   public:
     class Execution;
-    static Image load(std::span<const std::byte> bytes, const Resolver &resolver);
+    static Image load(std::span<const std::byte> bytes, const Resolver &resolver, std::uint32_t tls_slot = 0);
     Image(Image &&) noexcept = default;
     Image &operator=(Image &&) noexcept = default;
     Image(const Image &) = delete;
@@ -45,9 +48,11 @@ class Image {
     const std::byte *base() const;
     std::size_t size() const;
     const std::vector<Import> &imports() const;
+    std::uintptr_t export_address(const Import &symbol) const;
 
   private:
     explicit Image(std::size_t size);
+    std::unique_ptr<Execution> start_in(std::shared_ptr<guest::ThreadContext> context) const;
     std::shared_ptr<State> state_;
 };
 
@@ -67,11 +72,12 @@ class Image::Execution {
 
   private:
     friend class Image;
-    explicit Execution(std::shared_ptr<State> state);
+    explicit Execution(std::shared_ptr<State> state, std::shared_ptr<guest::ThreadContext> context = {});
     void require_open() const;
     bool notify(std::uint32_t reason);
     std::shared_ptr<State> state_;
-    guest::ThreadContext thread_;
+    std::shared_ptr<guest::ThreadContext> thread_;
+    bool needs_context_ = false;
     std::thread::id owner_;
     bool closed_ = true;
 };

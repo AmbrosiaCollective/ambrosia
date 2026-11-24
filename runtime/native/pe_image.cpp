@@ -49,7 +49,10 @@ host::Access section_access(std::uint32_t characteristics) {
 }
 } // namespace
 
-Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
+Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, std::uint32_t tls_slot) {
+    if (tls_slot >= 64) {
+        fail("module TLS slot exceeds bootstrap limit");
+    }
     if (bytes.size() > 64 * 1024 * 1024) {
         fail("bootstrap PE file exceeds 64 MiB limit");
     }
@@ -104,7 +107,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
             fail("incomplete PE directory");
         }
         // Guest exception/unwind handling and delayed imports remain unsupported.
-        if (i != 1 && i != 5 && i != 9 && i != 12) {
+        if (i != 0 && i != 1 && i != 5 && i != 9 && i != 12) {
             fail("PE directory needs an unimplemented guest service");
         }
         require_range(dirs[i].rva, dirs[i].size, image_size);
@@ -152,6 +155,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
     auto &state = *image.state_;
     state.entry = entry;
     state.dll = dll;
+    state.tls_slot = tls_slot;
     std::span<std::byte> mapped(state.memory.data(), image_size);
     std::memcpy(mapped.data(), bytes.data(), headers);
     for (const auto &section : sections) {
@@ -305,9 +309,7 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
             if (index_rva % 4) {
                 fail("unaligned PE TLS index");
             }
-            // A session currently hosts one module, so its stable module index
-            // is zero. A shared multi-module slot allocator is a later gate.
-            const std::uint32_t slot = 0;
+            const std::uint32_t slot = tls_slot;
             std::memcpy(mapped.data() + index_rva, &slot, sizeof(slot));
             if (callbacks) {
                 bool terminated = false;
@@ -327,6 +329,21 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver) {
                     fail("unterminated PE TLS callback table");
                 }
             }
+        }
+    }
+
+    state.exports = parse_exports(mapped, dirs[0].rva, dirs[0].size);
+    for (const auto &[ordinal, target] : state.exports.ordinals) {
+        (void)ordinal;
+        if (!target.forwarder.empty()) {
+            continue;
+        }
+        const bool mapped_target = std::any_of(sections.begin(), sections.end(), [&](const auto &section) {
+            return target.rva >= section.rva && target.rva - section.rva < section.size &&
+                   (section.flags & 0xe0000000u);
+        });
+        if (!mapped_target) {
+            fail("PE export target is outside mapped sections");
         }
     }
 
