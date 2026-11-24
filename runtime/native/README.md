@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 341 checks under a
+as errors. Each build's native shared-object entry passed 362 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,7 +154,7 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `InitializeCriticalSectionEx`. This occurs during module initialization; the game's
+and now stop at `FlsAlloc` after critical-section initialization. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -243,6 +243,17 @@ hardware resolution. Linux IDs come from the isolated process/thread namespace.
 Only valid output addresses are supported; null outputs fail explicitly, other
 bad guest pointers may fault. Successful queries preserve last error. Worker
 thread behavior and Windows/macOS adapters remain untested.
+
+`critical_sections.*` owns up to 4,096 native recursive mutexes per runtime.
+Guest critical-section objects retain their opaque 40-byte x64 layout, without
+embedding host mutexes. Initialize/enter/try/leave/delete/reinitialize and stored
+spin-count updates are implemented. Invalid lifecycle, foreign-runtime objects,
+unowned leaves, active deletion and unsupported flags fail explicitly. Void API
+failures terminate rather than returning invented success. Spin values remain
+hints; exact Windows spin scheduling and debugger internals are not reproduced.
+Recursive single-thread behavior is verified; contention/fairness and worker
+thread teardown remain unrun under the current process/thread-denying profile.
+Runtime teardown requires all locks released and guest users finished.
 
 The bootstrap still rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security

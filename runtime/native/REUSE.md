@@ -40,3 +40,9 @@ revision `656e9656bfaef34dd29cd7ee9e1146aec17e924c`, including
 [FILETIME](https://github.com/MicrosoftDocs/sdk-api/blob/656e9656bfaef34dd29cd7ee9e1146aec17e924c/sdk-api-src/content/minwinbase/ns-minwinbase-filetime.md)
 and [QueryPerformanceCounter](https://github.com/MicrosoftDocs/sdk-api/blob/656e9656bfaef34dd29cd7ee9e1146aec17e924c/sdk-api-src/content/profileapi/nf-profileapi-queryperformancecounter.md).
 No external implementation or header is imported by these adapters.
+
+Critical-section behavior follows pinned Microsoft SDK documentation at the same
+revision, including [InitializeCriticalSectionEx](https://github.com/MicrosoftDocs/sdk-api/blob/656e9656bfaef34dd29cd7ee9e1146aec17e924c/sdk-api-src/content/synchapi/nf-synchapi-initializecriticalsectionex.md)
+and [EnterCriticalSection](https://github.com/MicrosoftDocs/sdk-api/blob/656e9656bfaef34dd29cd7ee9e1146aec17e924c/sdk-api-src/content/synchapi/nf-synchapi-entercriticalsection.md).
+The existing pinned Wine winnt.h is an x64 field-layout reference. No Wine code,
+header, native handle or debugger implementation is imported by this component.
