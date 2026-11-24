@@ -48,6 +48,9 @@ branch settings; these repository files alone do not enforce permissions.
 - Work locally. Do not push, open PRs or change GitHub until the user explicitly
   instructs publication for the concrete change. Do not ask to publish at task
   boundaries. Keep commits small, reviewed and accompanied by local evidence.
+- Continuing, finishing or committing work does not authorize publication.
+  Historical task-boundary publication prompts remain superseded by the
+  standing local-only instruction.
 - Reviewed local integration is authorized. Keep remote-tracking/publication
   branches and historical source snapshots intact; use a separate local baseline.
 - Use synthetic inputs without game files where possible. Inspect executable
