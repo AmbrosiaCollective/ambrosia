@@ -3,6 +3,10 @@
 #include <stdexcept>
 
 namespace ambrosia::guest {
+namespace {
+thread_local ThreadContext *active_context = nullptr;
+}
+
 ThreadContext::ThreadContext() : owner_(std::this_thread::get_id()) {
     anchor_.tls = slots_.data();
 }
@@ -33,10 +37,28 @@ void ThreadContext::install(std::size_t slot, const TlsTemplate &spec) {
     blocks_[slot] = std::move(block);
 }
 
-host::GuestSegmentScope ThreadContext::activate() {
+ThreadContext::Activation ThreadContext::activate() {
     require_owner();
     sealed_ = true;
-    return host::GuestSegmentScope(&anchor_);
+    return Activation(*this);
+}
+
+ThreadContext *ThreadContext::current() noexcept {
+    return active_context;
+}
+
+std::uint32_t &ThreadContext::last_error() {
+    require_owner();
+    return anchor_.last_error;
+}
+
+ThreadContext::Activation::Activation(ThreadContext &context)
+    : segment_(&context.anchor_), saved_(active_context) {
+    active_context = &context;
+}
+
+ThreadContext::Activation::~Activation() {
+    active_context = saved_;
 }
 
 std::span<std::byte> ThreadContext::block(std::size_t slot) {

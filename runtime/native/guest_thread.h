@@ -16,12 +16,15 @@ struct TlsTemplate {
 
 class ThreadContext {
   public:
+    class Activation;
     ThreadContext();
     ThreadContext(const ThreadContext &) = delete;
     ThreadContext &operator=(const ThreadContext &) = delete;
     void install(std::size_t slot, const TlsTemplate &spec);
-    host::GuestSegmentScope activate();
+    Activation activate();
     std::span<std::byte> block(std::size_t slot);
+    static ThreadContext *current() noexcept;
+    std::uint32_t &last_error();
 
   private:
     void require_owner() const;
@@ -37,10 +40,28 @@ class ThreadContext {
     struct Anchor {
         std::array<std::byte, 0x58> reserved{};
         void **tls = nullptr;
+        std::array<std::byte, 8> reserved_error{};
+        std::uint32_t last_error = 0;
     } anchor_;
 
     static_assert(offsetof(Anchor, tls) == 0x58);
+    static_assert(offsetof(Anchor, last_error) == 0x68);
     std::thread::id owner_;
     bool sealed_ = false;
+};
+
+class ThreadContext::Activation {
+  public:
+    ~Activation();
+    Activation(const Activation &) = delete;
+    Activation &operator=(const Activation &) = delete;
+    Activation(Activation &&) = delete;
+    Activation &operator=(Activation &&) = delete;
+
+  private:
+    friend class ThreadContext;
+    explicit Activation(ThreadContext &context);
+    host::GuestSegmentScope segment_;
+    ThreadContext *saved_;
 };
 } // namespace ambrosia::guest
