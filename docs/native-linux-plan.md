@@ -9,7 +9,7 @@ there is no available native game build.
 
 The [native CPU bootstrap](../runtime/native/README.md) shares PE parsing,
 relocation/import binding and path policy across hosts, with OS memory operations
-behind one adapter. Linux builds pass 226 synthetic checks under GCC and Clang.
+behind one adapter. Linux builds pass 244 synthetic checks under GCC and Clang.
 The CLI engine is tested in-process with synthetic package files; the standalone
 executable builds through offline CMake but has not been launched. This does
 not implement the retail entry contract, exceptions or graphics. Single-module

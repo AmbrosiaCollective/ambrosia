@@ -21,7 +21,7 @@ These are synthetic/tooling checks, not retail boot or GPU evidence.
 ## 1. One native Linux bootstrap
 
 Delivered locally: portable PE mapping/relocation/import binding, Windows/POSIX
-memory adapters, dynamic host paths and an offline CMake target. The same 226 CPU
+memory adapters, dynamic host paths and an offline CMake target. The same 244 CPU
 fixture checks pass through native shared objects built with GCC and Clang on
 Linux. CLI logic is tested in-process; the standalone ELF is build-verified,
 not launch-verified. Windows and

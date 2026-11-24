@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 226 checks under a
+as errors. Each build's native shared-object entry passed 244 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -47,6 +47,8 @@ Windows/macOS builds and the parent CMake configuration remain unverified.
   notifications and mapping ownership through detach.
 - `import_registry.*`, `memory_services.*` and `service_runtime.*`: explicit
   service names, bounded memory semantics and scoped Microsoft-ABI adapters.
+- `unwind_table.*`: owned, checked x64 runtime-function metadata and range lookup.
+  This component does not register tables, unwind frames or dispatch exceptions.
 - `pe_exports.*` and `module_graph.*`: shared export/forwarder resolution,
   explicit in-memory module registration, dependency ordering and graph rollback.
   [Reuse provenance](REUSE.md) records the inherited implementation and licensed
@@ -169,6 +171,15 @@ engine under strict isolation. It passes the inspection size budget and stops at
 unsupported exception/unwind metadata before mapping or initialization. This is
 a measured loading blocker, not a game launch or menu result. Inputs stay
 read-only and private diagnostics stay outside Git.
+
+The separate unwind-table component validates order, non-overlap, image bounds
+and direct header references. Tiny fixtures cover empty records and exclusive
+function ends. A read-only probe validates all 299,257 records in the supplied
+executable's table and samples three lookups under both compiler builds. This
+does not validate the unwind bytecode or implement RtlVirtualUnwind. Indirect
+records, partial entries and invalid references fail explicitly. The loader's
+exception execution restriction remains in place until the required machinery
+exists; this parser is not a substitute for it.
 
 The bootstrap still rejects exception registration,
 delayed imports and other unsupported directories. Its parser is not a security
