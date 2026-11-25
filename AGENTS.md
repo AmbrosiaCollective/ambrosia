@@ -85,6 +85,15 @@ branch settings; these repository files alone do not enforce permissions.
   regression checks still use run_isolated.py. No GPU/display, process/thread
   creation, higher memory or other host integration is authorized by this profile.
 
+Task066's CPU/NUMA metadata profile is explicitly approved: outer-workspace
+run_topology_isolated.py and isolation_topology_bootstrap.py retain the approved
+8 GiB profile's limits and restrictions. Only a bounded read-only copy of CPU/
+core/package/cache and NUMA text is added, at most 4 KiB per field and 512 KiB
+total. No live sysfs, unique hardware identifiers or device handles are exposed.
+The copy must have no writable alias; fail-closed metadata/memory/isolation
+checks precede code. Earlier profiles remain unchanged. No GPU/display, threads,
+network, larger memory or other host integration is authorized by this profile.
+
 ## Before you guess, look
 
 - The format or behaviour may already be measured in `docs/design.md`. Quote the file and offset a claim comes from,

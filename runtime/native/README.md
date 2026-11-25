@@ -696,7 +696,10 @@ later external affinity changes.
 
 Original sysfs fixtures and direct Microsoft-ABI calls cover these contracts in
 the strict CPU-only sandbox. The existing boot profile intentionally hides sysfs:
-an actual startup trace now resolves this import and stops at unavailable topology
-metadata. A separate profile with a bounded read-only copy of CPU/NUMA text is
-prepared for review, but is not approved or executed. It does not expose live
-sysfs controls, unique hardware IDs or GPU devices. No menu is verified.
+an actual control trace resolves this import and stops at unavailable topology
+metadata. The separate profile with a bounded read-only copy of CPU/NUMA text is
+now explicitly approved and passes all isolation checks. It does not expose live
+sysfs controls, unique hardware IDs or GPU devices. Both GCC and Clang actual
+runs accept topology, proceed through subsequent allocation/semaphore steps and
+stop at unsupported SetUnhandledExceptionFilter. No window, rendering or menu
+is verified. The earlier profiles remain unchanged.
