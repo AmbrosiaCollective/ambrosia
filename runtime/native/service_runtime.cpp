@@ -10,6 +10,7 @@
 #include "math_services.h"
 #include "registry_services.h"
 #include "slist_services.h"
+#include "string_services.h"
 #include "xmem_services.h"
 #include <array>
 #include <stdexcept>
@@ -121,6 +122,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     register_sysinfo_services(registry_);
     register_exception_services(registry_);
     register_math_services(registry_);
+    register_string_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",

@@ -786,4 +786,27 @@ Unicode/non-BMP names, spaces, stable lifetime, independent runtime state and an
 original PE import have CPU coverage. Successful getters preserve error state;
 an unbound process fails explicitly. Future forwarded arguments must update argv,
 command-line quoting and the WinMain tail together. Actual startup now passes
-command-line retrieval and reaches strlen. No window or menu is verified.
+command-line retrieval and proceeded into CRT string operations. No window or
+menu is verified.
+
+## Stateless strings and C-locale classification
+
+The native registry covers ordinary length, compare, copy, bounded copy, append,
+span/search and C-locale case/collation operations required by the executable.
+Narrow lengths count bytes; wide operations use Windows UTF-16 code units rather
+than host wchar_t. Copies return the original destination, strncpy/wcsncpy pad
+their requested extent, and strncat terminates its bounded append without padding.
+Comparison orders unsigned units and honors prefixes and explicit count limits.
+
+The existing owned C-locale table supplies classification for bytes and EOF.
+Case conversion and insensitive comparisons fold ASCII; C-locale collation uses
+the corresponding unit comparison. No host locale/NLS state is borrowed. These
+operations must be extended with locale selection before non-C locales can be
+supported. Custom invalid-parameter handling, secure copies and tokenizers remain
+separate requirements. Ordinary non-secure buffer contracts still apply.
+
+Synthetic cases cover all registered operations, surrogate units, padding and
+termination, returned pointers, unsigned ordering, EOF/high-byte handling and
+error-state preservation. An original PE import exercises strlen through the
+Microsoft ABI. Both actual builds now pass the string stage and reach atan2f.
+No window, rendering or interactive menu is verified.

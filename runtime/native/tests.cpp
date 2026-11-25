@@ -183,6 +183,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "new_allocation_tests.h"
 #include "math_tests.h"
 #include "command_line_tests.h"
+#include "string_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -363,6 +364,7 @@ extern "C" int ambrosia_native_tests() {
         new_allocation_checks();
         tangent_checks();
         command_line_checks();
+        string_service_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {
         ++failures;
