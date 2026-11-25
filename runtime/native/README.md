@@ -4,12 +4,14 @@ This is the first part of a native Linux runtime, not a game launcher. The
 portable C++20 core maps tiny original AMD64 PE fixtures, applies DIR64
 relocations and binds imports through explicit adapters. Linux tests verify a
 six-argument Microsoft x64 ABI call, including stack arguments, returning 21.
-No Wine, Proton, Windows SDK, external packages or game data are involved.
+Synthetic checks require no game data or Windows SDK. Numeric formatting uses
+the portable fmt headers; guest execution does not use Wine or Proton.
 
 ## Build
 
-Use an existing C++20 compiler and CMake 3.24 or newer. These commands do not
-download dependencies. Choose a build path outside the source/package trees:
+Use an existing C++20 compiler, CMake 3.24 or newer and fmt 9.1 or newer
+headers/CMake package. Formatting links its header-only target. These commands
+do not download dependencies. Choose a build path outside the source/package trees:
 
 ```sh
 cmake -S runtime/native -B ../ambrosia-native-build -DBUILD_TESTING=ON
@@ -858,3 +860,36 @@ intended checks. Host-thread wakeup/race scheduling is untested under the curren
 thread-blocking profile. CreateMutexEx/OpenMutex, multiple-object waits and full
 Windows security remain unsupported. Actual startup now reaches CRT formatted
 output; no window, rendering or interactive menu is verified.
+
+## Windows argument slots and portable buffer formatting
+
+__stdio_common_vsprintf decodes the guest's consecutive eight-byte argument
+slots into typed values for the installed fmt header-only printf formatter.
+A Windows va_list is never passed to host libc. Integer widths follow LLP64,
+including promoted narrow arguments and I32/I64/I modifiers. Floating arguments
+and Windows long double use double. Narrow string width/precision count bytes;
+UTF-16 strings/characters currently cover C-locale ASCII only. The adapter corrects
+fmt 9's precision-zero integer behavior, preserving alternate octal and signs.
+
+Supported options include standard snprintf sizing, legacy termination for
+nontruncated output, the narrow API's legacy-wide-specifier flag and modern
+rounding. Floating conversions require modern rounding and FE_TONEAREST; legacy
+rounding and other FPU modes stop explicitly. Standard snprintf returns the full
+required count and terminates a nonempty destination. Legacy/default truncation,
+explicit locales, pointer/count/positional conversions, non-ASCII wide encoding
+errors, invalid-parameter dispatch and other options remain explicit stops.
+
+Formats/strings and fields are bounded to 32768, argument slots to 128 and final
+output to 1 MiB. These are runtime budgets, not full CRT size limits. Successful
+calls preserve host errno, guest errno and LastError. Format parsing, byte bounds,
+numeric results, signed zero/nonfinite output, standard truncation guards and a
+six-argument original PE call have CPU coverage. Both compilers pass 948 checks;
+a destination-bound control fails two intended checks. Seven unsupported-mode
+probes stop rather than returning invented results. Full Windows printf parity
+and all floating-point environments are unverified.
+
+Offline CMake builds the CLI/test executable with existing fmt 9.1 headers; no
+package is downloaded. GCC/Clang actual startup now reaches _time64. No window,
+rendering, frame loop or menu is verified. The compiler-only profile has a
+separately reviewed 120-second wall budget for larger translation units; tests
+retain the strict execution profile and no compiler output is run by that helper.

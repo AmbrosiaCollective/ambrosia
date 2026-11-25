@@ -13,6 +13,7 @@
 #include "unwind_table.h"
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cerrno>
 #include <cfenv>
 #include <cmath>
@@ -185,6 +186,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "math_tests.h"
 #include "command_line_tests.h"
 #include "string_tests.h"
+#include "format_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -368,6 +370,7 @@ extern "C" int ambrosia_native_tests() {
         math_family_checks();
         command_line_checks();
         string_service_checks();
+        format_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {
         ++failures;
@@ -420,6 +423,37 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
 
 extern "C" int ambrosia_native_trace(const char *image, const char *package) {
     return trace_native_image(image, package, 0);
+}
+
+extern "C" int ambrosia_native_invalid_format(unsigned mode) {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    Scope scope(runtime);
+    using Format = std::int32_t(AMBROSIA_GUEST_ABI *)(std::uint64_t, char *, std::size_t, const char *,
+                                                      void *, const std::byte *);
+    const auto format =
+        reinterpret_cast<Format>(runtime.resolve(service_symbol("__stdio_common_vsprintf", "ucrtbase.dll")));
+    char buffer[8]{};
+    char16_t wide[] = {0xe9, 0};
+    std::uint64_t slot = reinterpret_cast<std::uintptr_t>(wide);
+    const auto options = mode == 0 ? 8 : mode == 6 ? 32 : 1;
+    const char *pattern = "abc";
+    if (mode == 2) {
+        pattern = "%n";
+    } else if (mode == 3) {
+        pattern = "%ls";
+    } else if (mode == 4) {
+        pattern = "%d";
+    } else if (mode == 5 || mode == 6) {
+        pattern = "%.0f";
+        slot = std::bit_cast<std::uint64_t>(2.5);
+        if (mode == 6 && std::fesetround(FE_UPWARD)) {
+            return 98;
+        }
+    }
+    (void)format(options, buffer, mode == 1 ? 1 : sizeof(buffer), pattern, nullptr,
+                 mode == 4 ? nullptr : reinterpret_cast<const std::byte *>(&slot));
+    return 99; // Every selected unsupported path must stop instead of returning.
 }
 
 extern "C" int ambrosia_native_invalid_new_mode() {

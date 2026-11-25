@@ -2,6 +2,7 @@
 #include "clock_services.h"
 #include "critical_services.h"
 #include "fls_services.h"
+#include "format_services.h"
 #include "graphics_services.h"
 #include "guest_thread.h"
 #include "kernel_services.h"
@@ -122,6 +123,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     register_sysinfo_services(registry_);
     register_exception_services(registry_);
     register_math_services(registry_);
+    register_format_services(registry_);
     register_string_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",

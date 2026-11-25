@@ -165,3 +165,18 @@ semaphore.c at `ff2631c6ed3d1721cd050d951671c307ade32b90` were read for
 creation status, generic access mappings, validation order and release limits.
 The portable count model, owned typed directory and C++ wait adapter import no
 external implementation, header or runtime.
+
+## Portable buffer formatting dependency
+
+The native formatter uses [fmt 9.1](https://github.com/fmtlib/fmt/tree/9.1.0)
+through its header-only printf API. Validation uses the installed libfmt-dev
+9.1.0 package. No dependency source or build/install script is copied or run;
+CMake requires an existing fmt package. The upstream license is retained in
+LICENSE.fmt. Windows argument decoding, LLP64 widths, byte-oriented string
+bounds/padding and the zero-integer-precision correction are local adapters.
+
+The six-argument common formatter ABI and snprintf wrapper selection follow the
+already pinned public-domain Wine stdio.h. The supported UCRT option families
+also appear in pinned Wine msvcrt.h's UCRTBASE_PRINTF_MASK. This is reference
+use only; no Wine formatter code/runtime is imported. Tests and actual option
+observations do not certify all Windows CRT formatting or rounding behavior.
