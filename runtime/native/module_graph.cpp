@@ -291,6 +291,16 @@ std::vector<ModuleRange> ModuleGraph::diagnostic_ranges() const {
     return ranges;
 }
 
+std::uintptr_t ModuleGraph::loaded_module(std::optional<std::string> name) const {
+    state_->require_owner();
+    const auto key = name ? module_key(std::move(*name)) : state_->root;
+    const auto found = state_->modules.find(key);
+    if (found == state_->modules.end() || !found->second.image) {
+        return 0;
+    }
+    return reinterpret_cast<std::uintptr_t>(found->second.image->base());
+}
+
 std::uintptr_t ModuleGraph::module_base_for_address(std::uintptr_t address) const {
     state_->require_owner();
     for (const auto &[name, node] : state_->modules) {

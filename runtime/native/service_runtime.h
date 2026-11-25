@@ -22,6 +22,10 @@ class Runtime {
     explicit Runtime(std::size_t memory_budget = 64 * 1024 * 1024);
     std::uintptr_t resolve(const pe::Import &symbol) const;
 
+    bool has_service_module(std::string name) const {
+        return registry_.has_module(std::move(name));
+    }
+
     MemoryServices &memory() {
         return memory_;
     }

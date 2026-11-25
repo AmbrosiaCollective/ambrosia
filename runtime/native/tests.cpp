@@ -163,6 +163,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "crt_startup_tests.h"
 #include "crt_exit_tests.h"
 #include "context_locale_tests.h"
+#include "module_handle_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -329,6 +330,7 @@ extern "C" int ambrosia_native_tests() {
         crt_startup_checks();
         crt_exit_checks();
         context_locale_checks();
+        module_handle_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';

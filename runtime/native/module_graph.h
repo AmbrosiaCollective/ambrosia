@@ -42,6 +42,7 @@ class ModuleGraph {
     ModuleStatistics statistics() const;
     std::vector<ModuleRange> diagnostic_ranges() const;
     std::uintptr_t module_base_for_address(std::uintptr_t address) const;
+    std::uintptr_t loaded_module(std::optional<std::string> name = std::nullopt) const;
     bool disable_thread_notifications(std::uintptr_t module);
     std::optional<bool> thread_notifications_enabled(std::uintptr_t module) const;
     Execution start() const;

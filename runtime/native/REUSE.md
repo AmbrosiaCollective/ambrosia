@@ -104,3 +104,7 @@ CRT process cleanup registration/order was checked against the already pinned
 Wine exit.c and public callback declarations. The native list uses correctly
 typed void Microsoft ABI callbacks and retains its own bounded batches. No Wine
 implementation, header or runtime is imported by this component.
+
+Loaded module handle signatures/null-root/unchanged-reference semantics were
+checked against the already pinned Wine kernelbase loader.c. Native lookup uses
+only its own graph and registry; no implementation/header/runtime is imported.

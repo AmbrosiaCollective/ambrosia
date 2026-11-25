@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 549 checks under a
+as errors. Each build's native shared-object entry passed 559 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,7 +154,7 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `GetModuleHandleW`. Stage traces verify module initialization
+and now stop at a native-service module handle request. Stage traces verify module initialization
 completes and the executable PE entry runs. WinMain/the main game loop, graphics
 and the interactive menu remain unverified. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
@@ -463,3 +463,14 @@ launches are involved; independent contexts were tested sequentially.
 Diagnostic traces mark module initialization, executable entry and returned-entry
 cleanup separately. An original PE fixture checks these stages against real TLS/
 entry/cleanup/detach order. A stage marker is not interactive-menu evidence.
+
+## Loaded PE module handles
+
+GetModuleHandleA/W return actual mapped image bases for null/root and loaded
+basename queries. ASCII case and default DLL extension rules are shared with
+module registration; UTF-16 names convert to the native UTF-8 name policy.
+Queries do not load source-only images, read new files or increment references.
+Unknown modules return null/module-not-found; successful calls preserve errors.
+Handles remain stable while graph mappings are retained. Full-path lookups and
+native service-module handles currently stop explicitly. Native ABI adapters
+need real PE export facades before their handles can be exposed safely.
