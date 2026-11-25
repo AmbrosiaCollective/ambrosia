@@ -174,6 +174,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "module_handle_tests.h"
 #include "module_path_tests.h"
 #include "dynamic_library_tests.h"
+#include "gdk_bootstrap_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -366,6 +367,7 @@ extern "C" int ambrosia_native_tests() {
         module_handle_checks();
         module_path_checks();
         dynamic_library_checks();
+        gdk_bootstrap_checks();
         native_module_checks();
         event_checks();
         registry_checks();
@@ -436,6 +438,30 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
 
 extern "C" int ambrosia_native_trace(const char *image, const char *package) {
     return trace_native_image(image, package, 0);
+}
+
+extern "C" int ambrosia_native_gdk_probe(unsigned mode) {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    Scope scope(runtime);
+    using Init = std::int32_t(AMBROSIA_GUEST_ABI *)(std::uint32_t, std::uint32_t, std::uint8_t, const void *);
+    const auto init =
+        reinterpret_cast<Init>(runtime.resolve(service_symbol("InitializeApiImplEx2", "xgameruntime.dll")));
+    if (mode < 2) {
+        const std::uint64_t options[2]{};
+        (void)init(1, 2, mode == 0 ? 1 : 2, mode == 1 ? options : nullptr);
+    } else {
+        if (mode == 2) {
+            (void)init(1, 2, 2, nullptr);
+        }
+        using Query = std::int32_t(AMBROSIA_GUEST_ABI *)(const void *, const void *, void **);
+        const auto query =
+            reinterpret_cast<Query>(runtime.resolve(service_symbol("QueryApiImpl", "xgameruntime.dll")));
+        const std::uint64_t guid[2]{};
+        void *object = nullptr;
+        (void)query(guid, guid, &object);
+    }
+    return 99;
 }
 
 extern "C" int ambrosia_native_random_probe(unsigned mode) {

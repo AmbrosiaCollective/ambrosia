@@ -9,6 +9,7 @@
 #include "crt_streams.h"
 #include "exception_filter.h"
 #include "fls_slots.h"
+#include "gdk_bootstrap.h"
 #include "graphics_memory_policy.h"
 #include "import_registry.h"
 #include "kernel_objects.h"
@@ -58,6 +59,10 @@ class Runtime {
 
     GraphicsMemoryPolicy &graphics_memory() {
         return graphics_memory_;
+    }
+
+    GdkBootstrap &gdk_bootstrap() {
+        return gdk_bootstrap_;
     }
 
     ExceptionFilter &exception_filter() {
@@ -141,6 +146,7 @@ class Runtime {
     RegistryKeys registry_keys_;
     GraphicsMemoryPolicy graphics_memory_;
     ExceptionFilter exception_filter_;
+    GdkBootstrap gdk_bootstrap_;
     std::mutex processor_mutex_;
     std::optional<ProcessorInformation> processor_information_;
     std::unique_ptr<NativeModules> native_modules_;

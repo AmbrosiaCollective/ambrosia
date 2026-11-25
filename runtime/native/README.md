@@ -1049,3 +1049,25 @@ identify a required xgameruntime.dll bootstrap call; those observers are not
 production GDK implementations. Actual production startup currently reports that
 missing DLL and exits 133. Native GDK services remain required; no window, menu or
 rendering is verified. Do not replace this failure with a fabricated success.
+
+## Native offline GDK bootstrap
+
+The owned xgameruntime facade now exposes the initialization variants, cleanup,
+error reporting and an explicit unsupported-class query boundary. Initialization
+retains process-owned references and records requested SDK revision pairs; final
+cleanup clears the session without underflow. Limits are 4096 references and 64
+revision pairs. Error reports retain the latest owned code/text within the string
+budget instead of returning an empty success. Runtime instances remain independent.
+
+The observed Ex/Ex2 mode 2 with null options is supported. Other modes/options
+stop until modeled. This initializes only the offline bootstrap context, not the
+whole GDK: QueryApiImpl clears its output, identifies the requested class in private
+trace evidence and stops before returning an object. No placeholder vtable, online
+Gaming Services client or claim of working async queues is included here.
+
+Both compilers pass 1052 checks, including limits/cleanup, report ownership,
+dynamic/static PE facade identity, errors and a four-argument original PE call.
+Coalesced-initialization control fails six assertions; four unsupported-mode/query
+probes stop explicitly. Actual startup now initializes the bootstrap and requests
+XThreadingImpl, rather than failing to find the runtime DLL. Class/queue services
+remain required. No window, rendering, frame loop or interactive menu is verified.
