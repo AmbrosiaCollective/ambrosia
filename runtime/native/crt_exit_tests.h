@@ -137,3 +137,132 @@ void crt_exit_checks() {
     check(runtime_rejected([&] { execution.with_guest_context([] {}); }),
           "closed module execution cannot invoke guest cleanup");
 }
+
+std::string executable_exit_order;
+bool executable_exit_abi = true;
+ambrosia::services::ExitCallbacks *tls_registering_exit = nullptr;
+
+void AMBROSIA_GUEST_ABI executable_tls_exit(void *module, std::uint32_t reason, void *reserved) {
+    executable_exit_abi &= !module && reason == 0 && !reserved;
+    executable_exit_order += 'T';
+    if (tls_registering_exit && tls_registering_exit->add(&exit_first)) {
+        throw std::runtime_error("TLS cleanup synthetic exit registration failed");
+    }
+}
+
+void AMBROSIA_GUEST_ABI replaced_tls_exit(void *, std::uint32_t, void *) {
+    executable_exit_order += 'R';
+}
+
+void AMBROSIA_GUEST_ABI executable_tls_with_context(void *module, std::uint32_t reason, void *reserved) {
+    executable_exit_abi &= !module && reason == 0 && !reserved;
+    auto *tls = current_guest_tls();
+    exit_context_valid &= ambrosia::guest::ThreadContext::current() && tls[0] == 42;
+    exit_order += 'T';
+}
+
+std::uint64_t AMBROSIA_GUEST_ABI register_executable_tls_entry() {
+    const auto result = exit_registering_entry();
+    using Register = void(AMBROSIA_GUEST_ABI *)(ambrosia::services::TlsExitCallback);
+    auto *runtime = ambrosia::services::current_runtime();
+    const auto add = reinterpret_cast<Register>(runtime->resolve(
+        service_symbol("_register_thread_local_exe_atexit_callback", "api-ms-win-crt-runtime-l1-1-0.dll")));
+    add(&executable_tls_with_context);
+    return result;
+}
+
+void executable_tls_exit_checks() {
+    using namespace ambrosia;
+    using namespace services;
+    ExitCallbacks callbacks;
+    executable_exit_order.clear();
+    executable_exit_abi = true;
+    callbacks.set_tls(&replaced_tls_exit);
+    callbacks.set_tls(&executable_tls_exit);
+    check(executable_exit_order.empty(),
+          "executable TLS exit registration replaces its slot without executing guest code");
+    callbacks.execute();
+    callbacks.execute();
+    check(executable_exit_order == "T" && executable_exit_abi,
+          "executable TLS cleanup uses three correct arguments and consumes its owned callback once");
+    callbacks.set_tls(&executable_tls_exit);
+    callbacks.set_tls(nullptr);
+    callbacks.execute();
+    check(executable_exit_order == "T",
+          "a null executable TLS exit registration clears the previous callback");
+    callbacks.add(&exit_second);
+    callbacks.set_tls(&executable_tls_exit);
+    tls_registering_exit = &callbacks;
+    exit_events.clear();
+    callbacks.execute();
+    tls_registering_exit = nullptr;
+    check(
+        executable_exit_order == "TT" && exit_events == std::vector<unsigned>{1, 2},
+        "ordinary callbacks registered by executable TLS destructors join the same cleanup in reverse order");
+
+    Runtime runtime;
+    Scope scope(runtime);
+    using Register = void(AMBROSIA_GUEST_ABI *)(TlsExitCallback);
+    const auto address =
+        runtime.resolve(service_symbol("_register_thread_local_exe_atexit_callback", "ucrtbase.dll"));
+    const auto add = reinterpret_cast<Register>(address);
+    check(address &&
+              address == runtime.resolve(
+                             service_symbol("_register_thread_local_exe_atexit_callback", "msvcrt.dll")) &&
+              address == runtime.resolve(service_symbol("_register_thread_local_exe_atexit_callback",
+                                                        "api-ms-win-crt-runtime-l1-1-0.dll")),
+          "executable TLS registration aliases share the typed Microsoft ABI facade");
+    const auto saved_error = errno;
+    errno = E2BIG;
+    crt_error() = 19;
+    set_last_error(87);
+    add(&executable_tls_exit);
+    check(errno == E2BIG && crt_error() == 19 && get_last_error() == 87,
+          "TLS cleanup registration preserves native errno and both guest error states");
+    executable_exit_order.clear();
+    runtime.exit_callbacks().execute();
+    check(executable_exit_order == "T", "the service retains executable TLS cleanup in its active runtime");
+
+    auto caller = fixture();
+    text(caller, 0x440, "ucrtbase.dll");
+    text(caller, 0x4a2, "_register_thread_local_exe_atexit_callback");
+    // sub rsp,28h; RCX=null; call IAT; return constant 7 after the void setter.
+    constexpr unsigned char code[] = {0x48, 0x83, 0xec, 0x28, 0x31, 0xc9, 0xff, 0x15, 0,    0,    0,
+                                      0,    0xb8, 7,    0,    0,    0,    0x48, 0x83, 0xc4, 0x28, 0xc3};
+    std::memcpy(caller.data() + 0x200, code, sizeof(code));
+    put<std::uint32_t>(caller, 0x208, 0x2080 - (0x1000 + 12));
+    auto image = pe::Image::load(caller, [&](const auto &symbol) { return runtime.resolve(symbol); });
+    add(&replaced_tls_exit);
+    executable_exit_order.clear();
+    check(image.run_bootstrap() == 7,
+          "an original PE passes a TLS callback pointer through the void registration import");
+    runtime.exit_callbacks().execute();
+    check(executable_exit_order.empty(),
+          "the PE's null registration clears previously owned executable cleanup");
+
+    auto bytes = tls_fixture();
+    put<std::uint32_t>(bytes, 0x98 + 120, 0);
+    put<std::uint32_t>(bytes, 0x98 + 124, 0);
+    jump_to_host(bytes, 0x200, reinterpret_cast<std::uintptr_t>(&register_executable_tls_entry));
+    jump_to_host(bytes, 0x300, reinterpret_cast<std::uintptr_t>(&exit_tls_notify));
+    const std::filesystem::path path = "/work/tmp/executable-tls-exit.exe";
+    {
+        std::ofstream file(path, std::ios::binary);
+        file.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        if (!file) {
+            throw std::runtime_error("synthetic executable TLS fixture write failed");
+        }
+    }
+    exit_order.clear();
+    exit_context_valid = true;
+    executable_exit_abi = true;
+    const auto original_gs = host::guest_segment_base();
+    std::ostringstream output, errors;
+    const std::array<std::filesystem::path, 2> arguments{"--run-bootstrap", path};
+    check(run_native_command(arguments, output, errors) == 0 && errors.str().empty() &&
+              exit_order == "AETCD" && executable_exit_abi && exit_context_valid &&
+              host::guest_segment_base() == original_gs,
+          "executable TLS cleanup retains guest context and precedes ordinary exit then module detach with "
+          "GS restored");
+    errno = saved_error;
+}

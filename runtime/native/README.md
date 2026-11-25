@@ -943,3 +943,20 @@ Synthetic tests cover unit boundaries, malformed/overflow values, uptime beyond
 Both compilers pass 969 checks. Suspend/resume and a live 32-bit wrap were not
 forced; Windows compilation remains unverified. Actual startup now reaches
 executable TLS cleanup registration. No window or interactive menu is verified.
+
+## Executable CRT TLS cleanup
+
+_register_thread_local_exe_atexit_callback retains one typed process-owned TLS
+cleanup callback. Registration replaces the slot; null clears it. Cleanup consumes
+it before ordinary process callbacks, with null module/reserved and process-detach
+reason zero. The CLI already retains guest TLS and mapped modules through this
+stage; PE loader TLS notifications remain a separate lifetime boundary.
+
+A TLS destructor may register an ordinary callback for the current cleanup;
+callbacks registered by ordinary callbacks retain the existing later-batch
+policy. Directory locks never span guest code; recursion/callback budgets remain.
+Replacement/clearing/once behavior, aliases/errors, original PE registration and
+full CLI attach/entry/TLS/ordinary/detach order have CPU coverage, including GS
+restoration. Both compilers pass 979 checks; wrong-reason control fails two checks.
+Worker-thread detach/creation and full Windows CRT exit parity remain unverified.
+Actual startup now reaches GetStartupInfoW. No window/menu is verified.
