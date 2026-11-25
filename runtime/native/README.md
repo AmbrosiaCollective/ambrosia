@@ -1061,9 +1061,9 @@ budget instead of returning an empty success. Runtime instances remain independe
 
 The observed Ex/Ex2 mode 2 with null options is supported. Other modes/options
 stop until modeled. This initializes only the offline bootstrap context, not the
-whole GDK: QueryApiImpl clears its output, identifies the requested class in private
-trace evidence and stops before returning an object. No placeholder vtable, online
-Gaming Services client or claim of working async queues is included here.
+whole GDK: QueryApiImpl resolves only explicitly supplied native classes. Other
+class requests clear the output and stop with private diagnostic evidence.
+No online Gaming Services client or claim of working async queues is included here.
 
 Both compilers pass 1052 checks, including limits/cleanup, report ownership,
 dynamic/static PE facade identity, errors and a four-argument original PE call.
@@ -1071,3 +1071,26 @@ Coalesced-initialization control fails six assertions; four unsupported-mode/que
 probes stop explicitly. Actual startup now initializes the bootstrap and requests
 XThreadingImpl, rather than failing to find the runtime DLL. Class/queue services
 remain required. No window, rendering, frame loop or interactive menu is verified.
+
+
+## Native GDK interface lifetime and thread properties
+
+RuntimeInterface supplies the manual Windows GUID/IUnknown prefix used by the
+owned XThreadingImpl object. QueryInterface supports declared IDs with null-on-
+failure outputs, AddRef/Release use fixed ULONG widths, and a runtime pin retains
+the backing object through process cleanup. Guest reference counts cap at 4096.
+This avoids relying on the native compiler's C++ virtual layout or process globals.
+
+Threading slots 27/29/30 implement mutable per-guest-thread sensitivity and its
+blocking assertion. Flags are independent between guest contexts even on the same
+host thread; native scheduling priority is not changed. Async/task-queue/private
+slots remain nonreturning diagnostic boundaries, not dummy success methods.
+Returning the known threading identity does not claim all its methods are ready.
+
+Both compilers pass 1067 checks, including interface IDs/references, guarded
+unaligned outputs, per-runtime/per-thread state, error preservation and an
+original PE query plus bool-returning vtable call. Unsupported slot/assertion/
+reference-limit probes stop explicitly. Final control fixtures use unconditional
+cleanup so an intentionally broken getter cannot mask later checks by leaving a
+thread marked sensitive. Actual startup reaches slot 12, XTaskQueueCreate.
+No queue, host worker thread, rendering or interactive menu is verified yet.

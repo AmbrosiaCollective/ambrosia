@@ -180,3 +180,13 @@ already pinned public-domain Wine stdio.h. The supported UCRT option families
 also appear in pinned Wine msvcrt.h's UCRTBASE_PRINTF_MASK. This is reference
 use only; no Wine formatter code/runtime is imported. Tests and actual option
 observations do not certify all Windows CRT formatting or rounding behavior.
+
+## Owned runtime interface prefix
+
+runtime_interface.* and gdk_threading.* adapt the manual identity/runtime-pin and
+reference-count pattern from inherited runtime/shims/xgameruntime.cpp at
+2c9152e. Project license/credits remain. Windows long is replaced by explicit
+uint32 counts and the native component owns each object per Runtime. No host C++
+virtual ABI, global singleton leak or private-slot zero-success handlers are
+copied. The public threading class identifier/slot positions follow that same
+source; unsupported slots stop before returning any invented value.

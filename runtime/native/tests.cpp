@@ -175,6 +175,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "module_path_tests.h"
 #include "dynamic_library_tests.h"
 #include "gdk_bootstrap_tests.h"
+#include "gdk_threading_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -368,6 +369,8 @@ extern "C" int ambrosia_native_tests() {
         module_path_checks();
         dynamic_library_checks();
         gdk_bootstrap_checks();
+        runtime_interface_checks();
+        gdk_threading_checks();
         native_module_checks();
         event_checks();
         registry_checks();
@@ -438,6 +441,31 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
 
 extern "C" int ambrosia_native_trace(const char *image, const char *package) {
     return trace_native_image(image, package, 0);
+}
+
+extern "C" int ambrosia_native_gdk_threading_probe(unsigned mode) {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    Scope scope(runtime);
+    ambrosia::guest::ThreadContext context;
+    auto activation = context.activate();
+    void *object = nullptr;
+    (void)runtime.gdk_threading().query(threading_class_id, &object);
+    const auto *table = *static_cast<const std::uintptr_t *const *>(object);
+    if (mode == 0) {
+        using Stop = void(AMBROSIA_GUEST_ABI *)();
+        reinterpret_cast<Stop>(table[12])();
+    } else if (mode == 1) {
+        using Set = std::int32_t(AMBROSIA_GUEST_ABI *)(void *, bool);
+        using Assert = void(AMBROSIA_GUEST_ABI *)(void *);
+        (void)reinterpret_cast<Set>(table[27])(object, true);
+        reinterpret_cast<Assert>(table[29])(object);
+    } else {
+        for (unsigned i = 0; i < 4096; ++i) {
+            (void)interface_add_reference(object);
+        }
+    }
+    return 99;
 }
 
 extern "C" int ambrosia_native_gdk_probe(unsigned mode) {

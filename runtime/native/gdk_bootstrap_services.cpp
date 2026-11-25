@@ -94,6 +94,13 @@ std::int32_t AMBROSIA_GUEST_ABI query_api(const void *class_id, const void *inte
         }
         void *empty = nullptr;
         std::memcpy(output, &empty, sizeof(empty));
+        Guid requested_class;
+        Guid requested_interface;
+        std::memcpy(&requested_class, class_id, sizeof(requested_class));
+        std::memcpy(&requested_interface, interface_id, sizeof(requested_interface));
+        if (requested_class == threading_class_id) {
+            return current_runtime()->gdk_threading().query(requested_interface, output);
+        }
         // No placeholder vtable or successful class result. Numeric request
         // metadata belongs in private startup evidence, never public game logs.
         diagnostics::write_service_trace("TRACE unsupported GDK class=" + guid_bytes(class_id) +

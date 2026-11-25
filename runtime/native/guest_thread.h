@@ -30,6 +30,16 @@ class ThreadContext {
     std::int32_t &crt_error();
     void on_exit(std::function<void()> callback);
 
+    bool time_sensitive() const {
+        require_owner();
+        return time_sensitive_;
+    }
+
+    void set_time_sensitive(bool value) {
+        require_owner();
+        time_sensitive_ = value;
+    }
+
   private:
     void require_owner() const;
 
@@ -60,6 +70,7 @@ class ThreadContext {
     static_assert(offsetof(Anchor, last_error) == 0x68);
     std::thread::id owner_;
     std::int32_t crt_error_ = 0;
+    bool time_sensitive_ = false;
     bool sealed_ = false;
     bool exiting_ = false;
     std::vector<std::function<void()>> exit_callbacks_;
