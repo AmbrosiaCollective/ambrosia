@@ -291,6 +291,22 @@ std::vector<ModuleRange> ModuleGraph::diagnostic_ranges() const {
     return ranges;
 }
 
+std::uintptr_t ModuleGraph::module_base_for_address(std::uintptr_t address) const {
+    state_->require_owner();
+    for (const auto &[name, node] : state_->modules) {
+        (void)name;
+        if (node.image) {
+            const auto base = reinterpret_cast<std::uintptr_t>(node.image->base());
+            // Subtraction avoids wraparound at the upper address limit. Image
+            // containment includes headers/gaps, not just executable sections.
+            if (address >= base && address - base < node.image->size()) {
+                return base;
+            }
+        }
+    }
+    return 0;
+}
+
 bool ModuleGraph::disable_thread_notifications(std::uintptr_t module) {
     state_->require_owner();
     for (auto &[name, node] : state_->modules) {

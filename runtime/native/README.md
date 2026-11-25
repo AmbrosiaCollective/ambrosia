@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 493 checks under a
+as errors. Each build's native shared-object entry passed 503 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `RtlPcToFileHeader`, after passing C-locale selection/queries,
-byte classification, stream-buffer access and the earlier TEB access. This occurs during module initialization; the game's
+and now stop at `_set_app_type`, after passing PC-to-image lookup, C-locale
+selection/queries, stream-buffer access and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -402,3 +402,13 @@ These properties apply only to the supported C state, not arbitrary locales.
 Non-C locales, conversions and Windows NLS are unfinished. Guest category/CRT
 property details still require the deferred pinned contract refresh; current
 evidence covers synthetic invariants and observed startup.
+
+## Address-to-image lookup
+
+RtlPcToFileHeader searches mapped image ranges in the scoped module graph and
+returns/writes the containing image base. Ranges include headers/section gaps and
+exclude their upper boundary. Unknown PCs clear the output; no supplied PC is
+dereferenced or matched against host mappings. Subtraction avoids overflow.
+The lookup enforces graph ownership, works during active sessions and preserves
+CRT/Win32 errors. Null output or missing scoped graph stops diagnostics. It does
+not implement unwind lookup or dynamic DLL loading.

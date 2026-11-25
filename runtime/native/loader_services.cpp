@@ -1,6 +1,9 @@
 #include "loader_services.h"
 #include "module_graph.h"
 #include "service_runtime.h"
+#include "startup_trace.h"
+#include <cstring>
+#include <stdexcept>
 
 namespace ambrosia::services {
 namespace {
@@ -16,9 +19,27 @@ std::int32_t AMBROSIA_GUEST_ABI disable_thread_calls(void *module) noexcept {
     set_last_error(126); // ERROR_MOD_NOT_FOUND, including DLLs with active static TLS.
     return 0;
 }
+
+void *AMBROSIA_GUEST_ABI pc_to_file_header(void *address, void *base_output) noexcept {
+    try {
+        auto *modules = current_modules();
+        if (!modules || !base_output) {
+            throw std::runtime_error("PC-to-image lookup requires a scoped graph and output pointer");
+        }
+        auto *base = reinterpret_cast<void *>(
+            modules->module_base_for_address(reinterpret_cast<std::uintptr_t>(address)));
+        std::memcpy(base_output, &base, sizeof(base));
+        return base;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
 } // namespace
 
 void register_loader_services(ImportRegistry &registry) {
+    for (const auto *module : {"ntdll.dll", "api-ms-win-core-rtlsupport-l1-1-0.dll"}) {
+        registry.add(module, "RtlPcToFileHeader", reinterpret_cast<std::uintptr_t>(&pc_to_file_header));
+    }
     for (const auto *module :
          {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-libraryloader-l1-1-0.dll",
           "api-ms-win-core-libraryloader-l1-1-1.dll", "api-ms-win-core-libraryloader-l1-2-0.dll",

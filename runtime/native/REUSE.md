@@ -90,3 +90,7 @@ behind checked size/ownership limits, and guest errno has separate storage.
 Stream-buffer field access follows the already pinned Wine file.c
 _get_stream_buffer_pointers declaration and address-return semantics. The native
 fields/identity checks are independently owned; no implementation/header port.
+
+RtlPcToFileHeader's signature/output and containing-image semantics were checked
+against the already pinned Wine ntdll loader.c. The native lookup searches only
+its owned graph ranges; no Wine implementation or host loader is imported.
