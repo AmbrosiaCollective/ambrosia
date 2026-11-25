@@ -73,7 +73,7 @@ AllocationResult MemoryServices::allocate(void *address, std::size_t bytes, std:
             rounded > found->second->memory.size() - offset) {
             return {nullptr, error_invalid_address};
         }
-        if (found->second->window) {
+        if (found->second->is_window()) {
             return {nullptr, error_not_supported};
         }
         auto &pages = found->second->protection;
@@ -110,7 +110,7 @@ FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t 
                 return {false, error_invalid_address};
             }
             reserved_ -= memory.size();
-            if (found->second->window) {
+            if (found->second->is_window()) {
                 window_reserved_ -= memory.size();
             }
             regions_.erase(found);
@@ -132,7 +132,7 @@ FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t 
         if (offset > memory.size() || rounded > memory.size() - offset) {
             return {false, error_invalid_address};
         }
-        if (found->second->window) {
+        if (found->second->is_window()) {
             return {false, error_not_supported};
         }
         memory.decommit(offset, rounded);
@@ -152,25 +152,29 @@ AllocationResult MemoryServices::reserve_window(std::size_t bytes, std::uint64_t
         return {nullptr, error_invalid_parameter};
     }
     try {
-        return reserve_region(rounded, reserve, 1, WindowInfo{nullptr, rounded, attributes, protection});
+        return reserve_region(rounded, reserve, 1, XmemRegionInfo{nullptr, rounded, attributes, protection});
     } catch (...) {
         return {nullptr, error_not_enough_memory};
     }
 }
 
 AllocationResult MemoryServices::reserve_region(std::size_t bytes, std::uint32_t flags,
-                                                std::uint32_t protection, std::optional<WindowInfo> window) {
+                                                std::uint32_t protection,
+                                                std::optional<XmemRegionInfo> xmem) {
+    const bool window = xmem && xmem->backing == XmemBacking::physical_window;
     const auto used = window ? window_reserved_ : reserved_ - window_reserved_;
     const auto limit = window ? limits_.window_bytes : limits_.private_bytes;
     if (bytes > limit - used || bytes > limits_.total_bytes - reserved_ || regions_.size() >= 1024) {
         return {nullptr, error_not_enough_memory};
     }
-    auto region = std::make_unique<Region>(bytes);
+    const auto alignment = xmem ? xmem->guest_page_bytes : 65536;
+    auto region = std::make_unique<Region>(bytes, alignment);
     auto *base = region->memory.data();
-    if (window) {
-        window->base = base;
-        region->window = window;
-    } else if (flags & commit) {
+    if (xmem) {
+        xmem->base = base;
+        region->xmem = xmem;
+    }
+    if (flags & commit) {
         region->memory.commit(0, bytes, access_for(protection));
         std::fill(region->protection.begin(), region->protection.end(), protection);
     }
@@ -182,7 +186,29 @@ AllocationResult MemoryServices::reserve_region(std::size_t bytes, std::uint32_t
     return {base, 0};
 }
 
-std::optional<WindowInfo> MemoryServices::window(const void *address) const {
+AllocationResult MemoryServices::allocate_xmem(std::size_t bytes, std::uint64_t attributes,
+                                               std::uint32_t protection,
+                                               std::size_t guest_page_bytes) noexcept {
+    if (guest_page_bytes != 65536 && guest_page_bytes != 2097152) {
+        return {nullptr, error_not_supported};
+    }
+    if ((protection & 0xff) != 4) {
+        return {nullptr, error_not_supported};
+    }
+    std::size_t rounded = 0;
+    if (!bytes || !round_up(bytes, guest_page_bytes, rounded)) {
+        return {nullptr, error_invalid_parameter};
+    }
+    try {
+        XmemRegionInfo info{nullptr,    rounded,          attributes,
+                            protection, guest_page_bytes, XmemBacking::private_pages};
+        return reserve_region(rounded, reserve | commit, 4, info);
+    } catch (...) {
+        return {nullptr, error_not_enough_memory};
+    }
+}
+
+std::optional<XmemRegionInfo> MemoryServices::xmem_region(const void *address) const {
     const auto pointer = reinterpret_cast<std::uintptr_t>(address);
     auto found = regions_.upper_bound(pointer);
     if (found == regions_.begin()) {
@@ -193,6 +219,11 @@ std::optional<WindowInfo> MemoryServices::window(const void *address) const {
     if (pointer - found->first >= region.memory.size()) {
         return std::nullopt;
     }
-    return region.window;
+    return region.xmem;
+}
+
+std::optional<XmemRegionInfo> MemoryServices::window(const void *address) const {
+    const auto region = xmem_region(address);
+    return region && region->backing == XmemBacking::physical_window ? region : std::nullopt;
 }
 } // namespace ambrosia::services

@@ -22,11 +22,15 @@ struct FreeResult {
     std::uint32_t error = 0;
 };
 
-struct WindowInfo {
+enum class XmemBacking { private_pages, physical_window };
+
+struct XmemRegionInfo {
     void *base = nullptr;
     std::size_t bytes = 0;
     std::uint64_t attributes = 0;
     std::uint32_t protection = 0;
+    std::size_t guest_page_bytes = 65536;
+    XmemBacking backing = XmemBacking::physical_window;
 };
 
 struct MemoryLimits {
@@ -51,7 +55,10 @@ class MemoryServices {
     FreeResult free(void *address, std::size_t bytes, std::uint32_t flags) noexcept;
     AllocationResult reserve_window(std::size_t bytes, std::uint64_t attributes,
                                     std::uint32_t protection) noexcept;
-    std::optional<WindowInfo> window(const void *address) const;
+    AllocationResult allocate_xmem(std::size_t bytes, std::uint64_t attributes, std::uint32_t protection,
+                                   std::size_t guest_page_bytes) noexcept;
+    std::optional<XmemRegionInfo> xmem_region(const void *address) const;
+    std::optional<XmemRegionInfo> window(const void *address) const;
 
     std::size_t reserved_bytes() const {
         return reserved_;
@@ -59,15 +66,19 @@ class MemoryServices {
 
   private:
     AllocationResult reserve_region(std::size_t bytes, std::uint32_t flags, std::uint32_t protection,
-                                    std::optional<WindowInfo> window);
+                                    std::optional<XmemRegionInfo> xmem);
 
     struct Region {
         host::Mapping memory;
         std::vector<std::uint32_t> protection;
-        std::optional<WindowInfo> window;
+        std::optional<XmemRegionInfo> xmem;
 
-        explicit Region(std::size_t size)
-            : memory(size, host::Access::none, 65536), protection(size / host::Mapping::page_size(), 0) {}
+        explicit Region(std::size_t size, std::size_t alignment)
+            : memory(size, host::Access::none, alignment), protection(size / host::Mapping::page_size(), 0) {}
+
+        bool is_window() const {
+            return xmem && xmem->backing == XmemBacking::physical_window;
+        }
     };
 
     std::map<std::uintptr_t, std::unique_ptr<Region>> regions_;

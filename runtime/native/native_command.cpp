@@ -16,26 +16,29 @@ struct Options {
     bool run = false;
     bool trace = false;
     bool sparse_windows = false;
+    bool boot_memory = false;
 };
 
 constexpr const char *usage =
     "ambrosia-host --inspect IMAGE [--package DIR] [--work DIR]\n"
     "              --run-bootstrap IMAGE [--package DIR] [--work DIR]\n"
-    "              --trace-startup IMAGE [--package DIR] [--work DIR] [--sparse-windows]\n"
+    "              --trace-startup IMAGE [--package DIR] [--work DIR] [--sparse-windows | --boot-memory]\n"
     "Inspect maps supported PE dependencies without running callbacks.\n"
     "Run-bootstrap supports synthetic PE startup only.\n"
     "Trace-startup is diagnostic: unsupported calls/faults terminate the process.\n"
-    "Sparse-windows allows 48 GiB of no-access reservations; use the approved sparse sandbox.\n";
+    "Sparse-windows allows 48 GiB of no-access reservations; use the approved sparse sandbox.\n"
+    "Boot-memory also allows 2 GiB private reservations; requires its separately approved memory sandbox.\n";
 
 Options parse_options(std::span<const std::filesystem::path> arguments) {
     Options options;
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const auto &flag = arguments[index];
-        if (flag == "--sparse-windows") {
-            if (options.sparse_windows) {
-                throw std::invalid_argument("duplicate sparse-window option");
+        if (flag == "--sparse-windows" || flag == "--boot-memory") {
+            if (options.sparse_windows || options.boot_memory) {
+                throw std::invalid_argument("duplicate sparse-window or boot-memory option");
             }
-            options.sparse_windows = true;
+            options.sparse_windows = flag == "--sparse-windows";
+            options.boot_memory = flag == "--boot-memory";
             continue;
         }
         if (flag != "--inspect" && flag != "--run-bootstrap" && flag != "--trace-startup" &&
@@ -69,7 +72,7 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
     if (options.image.empty()) {
         throw std::invalid_argument("choose an image and bootstrap mode");
     }
-    if (options.sparse_windows && !options.trace) {
+    if ((options.sparse_windows || options.boot_memory) && !options.trace) {
         throw std::invalid_argument("sparse-window option requires trace-startup mode");
     }
     return options;
@@ -100,7 +103,10 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         package_limits.total_bytes = module_limits.source_bytes - root_bytes;
         host::PackageModules package(paths.package, package_limits);
         services::MemoryLimits memory_limits;
-        if (options.sparse_windows) {
+        if (options.boot_memory) {
+            memory_limits.private_bytes = 2ull << 30;
+        }
+        if (options.sparse_windows || options.boot_memory) {
             memory_limits.window_bytes = 48ull << 30;
             memory_limits.total_bytes = memory_limits.window_bytes + memory_limits.private_bytes;
         }

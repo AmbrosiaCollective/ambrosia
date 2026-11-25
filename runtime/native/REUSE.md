@@ -151,3 +151,9 @@ Separate private/window/aggregate budgets and sparse diagnostic selection reuse
 the owned memory boundary. Pinned Linux v6.17 mmap/mprotect/mremap text at
 `e5f0a698b34ed76002dc5cff3804a61c80233a7a` informed the external sandbox's
 resource review only. No kernel source is ported into the runtime or executed.
+
+
+Committed XMem logical-page alignment and the exact known policy combinations
+follow the inherited xmem.cpp/xmem_exe_calls.md reference. CPU backing reuses
+Mapping with ordinary host pages; the owned metadata does not port Windows
+placeholder, privileged large-page, GPU-cache or physical-page implementations.

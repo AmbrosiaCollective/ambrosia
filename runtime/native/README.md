@@ -594,3 +594,27 @@ resource self-checks fail closed before native code; network, process/thread
 creation, credentials and GPU/display remain unavailable. Tiny regression checks
 continue under the original strict sandbox. No physical-page backing, GPU address
 range, device or rendering support follows from a successful sparse reservation.
+
+
+## Committed XMem CPU regions
+
+Known measured committed profiles now create private zero-filled CPU mappings
+with logical 64 KiB or 2 MiB alignment and rounding. Host pages remain ordinary
+OS pages. Metadata retains the complete attribute word, GPU/cache protection,
+logical page size and backing kind. Committed regions charge the private budget;
+physical windows charge the separate window budget. Normal decommit/recommit and
+whole-region release retain the right ownership and accounting.
+
+Only the inherited measured page/attribute/protection combinations are accepted.
+Unknown combinations, executable CPU protections, fixed-address replacement and
+physical-page mapping remain unsupported. Retaining GPU/cache policy does not
+implement GPU visibility, coherency or binding; a real backend must establish
+those properties. The Linux host adapter supports this alignment; Windows/macOS
+coverage remains unverified.
+
+Diagnostic --boot-memory selects a 2 GiB private allowance alongside 48 GiB of
+no-access windows. It grants no OS resources. Its separate proposed boot-memory
+sandbox raises the data/RSS watchdog bounds to 2 GiB and requires explicit approval
+before use; the previously approved sparse profile remains at 512 MiB. Tiny
+regression tests still use the original strict profile. Successful fixtures are
+not evidence that the actual large committed allocation or the menu works.

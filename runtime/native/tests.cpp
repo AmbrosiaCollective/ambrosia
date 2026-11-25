@@ -172,6 +172,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "graphics_memory_tests.h"
 #include "xmem_tests.h"
 #include "memory_budget_tests.h"
+#include "xmem_committed_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -345,6 +346,7 @@ extern "C" int ambrosia_native_tests() {
         graphics_memory_checks();
         xmem_checks();
         memory_budget_checks();
+        xmem_committed_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
@@ -370,7 +372,7 @@ extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
     }
 }
 
-int trace_native_image(const char *image, const char *package, bool sparse_windows) {
+int trace_native_image(const char *image, const char *package, unsigned memory_profile) {
     if (!image || !package) {
         return 2;
     }
@@ -378,8 +380,10 @@ int trace_native_image(const char *image, const char *package, bool sparse_windo
         std::vector<std::filesystem::path> arguments{
             "--trace-startup", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(image))),
             "--package", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(package)))};
-        if (sparse_windows) {
+        if (memory_profile == 1) {
             arguments.emplace_back("--sparse-windows");
+        } else if (memory_profile == 2) {
+            arguments.emplace_back("--boot-memory");
         }
         return ambrosia::run_native_command(arguments, std::cout, std::cerr);
     } catch (...) {
@@ -389,11 +393,15 @@ int trace_native_image(const char *image, const char *package, bool sparse_windo
 }
 
 extern "C" int ambrosia_native_trace(const char *image, const char *package) {
-    return trace_native_image(image, package, false);
+    return trace_native_image(image, package, 0);
 }
 
 extern "C" int ambrosia_native_trace_sparse(const char *image, const char *package) {
-    return trace_native_image(image, package, true);
+    return trace_native_image(image, package, 1);
+}
+
+extern "C" int ambrosia_native_trace_boot_memory(const char *image, const char *package) {
+    return trace_native_image(image, package, 2);
 }
 
 extern "C" int ambrosia_native_trace_fixture(unsigned scenario) {
