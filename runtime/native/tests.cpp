@@ -3,6 +3,7 @@
 #include "module_graph.h"
 #include "native_command.h"
 #include "package_modules.h"
+#include "pe_bytes.h"
 #include "pe_image.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
@@ -164,6 +165,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "crt_exit_tests.h"
 #include "context_locale_tests.h"
 #include "module_handle_tests.h"
+#include "native_module_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -331,6 +333,7 @@ extern "C" int ambrosia_native_tests() {
         crt_exit_checks();
         context_locale_checks();
         module_handle_checks();
+        native_module_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';

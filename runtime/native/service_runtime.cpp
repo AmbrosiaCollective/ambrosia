@@ -124,6 +124,7 @@ Runtime::Runtime(std::size_t memory_budget)
         registry_.add(module, "GetLastError", reinterpret_cast<std::uintptr_t>(&last_error));
         registry_.add(module, "SetLastError", reinterpret_cast<std::uintptr_t>(&store_error));
     }
+    native_modules_ = std::make_unique<NativeModules>(registry_);
 }
 
 void Runtime::lock_locales() {
@@ -135,7 +136,8 @@ void Runtime::unlock_locales() {
 }
 
 std::uintptr_t Runtime::resolve(const pe::Import &symbol) const {
-    return registry_.resolve(symbol);
+    const auto target = registry_.resolve(symbol);
+    return target ? native_modules_->entrypoint(target) : 0;
 }
 
 Runtime *current_runtime() noexcept {

@@ -127,7 +127,7 @@ struct ModuleGraph::State {
     }
 
     std::uintptr_t resolve(const std::string &module, const Import &symbol,
-                           std::set<std::pair<std::string, std::string>> &visited) {
+                           std::set<std::pair<std::string, std::string>> &visited, bool allow_load = true) {
         const auto identity =
             symbol.by_ordinal ? "ordinal:" + std::to_string(symbol.ordinal) : "name:" + symbol.name;
         if (visited.size() >= 64 || !visited.emplace(module, identity).second) {
@@ -140,7 +140,7 @@ struct ModuleGraph::State {
             if (address) {
                 return address;
             }
-            if (!provider || active) {
+            if (!provider || active || !allow_load) {
                 return 0;
             }
             auto bytes = provider(module);
@@ -148,6 +148,9 @@ struct ModuleGraph::State {
                 return 0;
             }
             register_source(module, *bytes);
+        }
+        if (!allow_load && !modules.at(module).image) {
+            return 0;
         }
         auto &image = load_module(module);
         const auto &exports = image.state_->exports;
@@ -170,8 +173,8 @@ struct ModuleGraph::State {
             return reinterpret_cast<std::uintptr_t>(image.base() + target->rva);
         }
         const auto next = forward_target(target->forwarder);
-        const auto address = resolve(next.module, next, visited);
-        if (next.module != module && modules.contains(next.module)) {
+        const auto address = resolve(next.module, next, visited, allow_load);
+        if (allow_load && next.module != module && modules.contains(next.module)) {
             modules.at(module).dependencies.insert(next.module);
         }
         return address;
@@ -299,6 +302,17 @@ std::uintptr_t ModuleGraph::loaded_module(std::optional<std::string> name) const
         return 0;
     }
     return reinterpret_cast<std::uintptr_t>(found->second.image->base());
+}
+
+std::optional<std::uintptr_t> ModuleGraph::loaded_export(std::uintptr_t module, const Import &symbol) const {
+    state_->require_owner();
+    for (const auto &[name, node] : state_->modules) {
+        if (node.image && reinterpret_cast<std::uintptr_t>(node.image->base()) == module) {
+            std::set<std::pair<std::string, std::string>> visited;
+            return state_->resolve(name, symbol, visited, false);
+        }
+    }
+    return std::nullopt;
 }
 
 std::uintptr_t ModuleGraph::module_base_for_address(std::uintptr_t address) const {

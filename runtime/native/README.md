@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 559 checks under a
+as errors. Each build's native shared-object entry passed 578 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,7 +154,7 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at a native-service module handle request. Stage traces verify module initialization
+and now stop at `CreateEventW`, after native-service handles and dynamic exports. Stage traces verify module initialization
 completes and the executable PE entry runs. WinMain/the main game loop, graphics
 and the interactive menu remain unverified. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
@@ -471,6 +471,29 @@ basename queries. ASCII case and default DLL extension rules are shared with
 module registration; UTF-16 names convert to the native UTF-8 name policy.
 Queries do not load source-only images, read new files or increment references.
 Unknown modules return null/module-not-found; successful calls preserve errors.
-Handles remain stable while graph mappings are retained. Full-path lookups and
-native service-module handles currently stop explicitly. Native ABI adapters
-need real PE export facades before their handles can be exposed safely.
+Handles remain stable while graph mappings are retained. Full-path lookups
+remain explicitly unsupported. Native service-module handles now use the owned
+PE facades described below.
+
+## Native-service PE facades and dynamic exports
+
+The registered ABI adapters now have real owned PE32+ metadata. A canonical
+ambrosia-native.dll image owns one RX tail trampoline per unique native target;
+named facades publish PE forwarders there. Static imports, GetProcAddress and
+module aliases retain the same callable pointer. Headers/export data are read-
+only; code pages are RX. No copied system DLL or untrusted setup/runtime is used.
+These are fixed mapped views with no entrypoint, imports or TLS, not disk-loadable
+replacement Windows DLLs. Public Windows ordinal compatibility is not invented.
+
+The catalog caps each image at 512 KiB/4,096 exports and the aggregate at 64
+images/16 MiB. Facades appear lazily for registered modules; arbitrary requested
+names cannot create a library. Native address-to-image queries include the
+canonical stubs. The eight package modules reported by the startup trace remain
+a separate count from these generated service views.
+
+GetProcAddress returns named implemented facade exports or real loaded PE name/
+ordinal exports. Read-only forwarder lookup reaches loaded images or registered
+services without invoking the package provider or changing dependencies. Missing
+exports return procedure-not-found, invalid handles fail separately and native
+service public ordinal requests stop explicitly. This does not supply dynamic
+DLL loading, unsupported APIs, Windows SEH or complete system-module behavior.

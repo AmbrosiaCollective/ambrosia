@@ -32,11 +32,9 @@ void *loaded_handle(std::optional<std::string> name) {
     if (name && name->find_first_of("/\\:") != std::string::npos) {
         diagnostics::stop_trace("full-path module handle queries are not implemented", 78);
     }
-    const auto base = modules->loaded_module(name);
+    auto base = modules->loaded_module(name);
     if (!base && name && runtime->has_service_module(*name)) {
-        // Native ABI adapters are not mapped PE DLLs. Do not expose an opaque
-        // token as a fake PE base or pretend that a registered service is absent.
-        diagnostics::stop_trace("native service module handles are not implemented", 78);
+        base = runtime->native_modules().handle(*name);
     }
     if (!base) {
         set_last_error(126);
@@ -72,6 +70,52 @@ void *AMBROSIA_GUEST_ABI module_handle_w(const char16_t *name) noexcept {
     }
 }
 
+void *AMBROSIA_GUEST_ABI procedure_address(void *module, const char *function) noexcept {
+    try {
+        auto *runtime = current_runtime();
+        auto *modules = current_modules();
+        if (!runtime || !modules) {
+            diagnostics::stop_trace("dynamic exports require a scoped runtime and graph", 78);
+        }
+        if (!module) {
+            set_last_error(6);
+            return nullptr;
+        }
+        const auto handle = reinterpret_cast<std::uintptr_t>(module);
+        pe::Import symbol;
+        const auto identifier = reinterpret_cast<std::uintptr_t>(function);
+        std::optional<std::uintptr_t> address;
+        if (identifier <= 65535) {
+            if (runtime->native_modules().module_base_for_address(handle) == handle) {
+                diagnostics::stop_trace("native service public ordinal compatibility is unsupported", 78);
+            }
+            symbol.by_ordinal = true;
+            symbol.ordinal = static_cast<std::uint16_t>(identifier);
+        } else {
+            symbol.name = module_name(function);
+            address = runtime->native_modules().export_address(handle, symbol.name);
+        }
+        if (!address.has_value()) {
+            // Forwarders can reach loaded images or the existing native service
+            // resolver, but this path never invokes the package/file provider.
+            address = modules->loaded_export(handle, symbol);
+        }
+        if (!address.has_value()) {
+            set_last_error(6);
+            return nullptr;
+        }
+        if (!*address) {
+            set_last_error(127);
+        }
+        return reinterpret_cast<void *>(*address);
+    } catch (const std::bad_alloc &) {
+        set_last_error(8);
+        return nullptr;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::int32_t AMBROSIA_GUEST_ABI disable_thread_calls(void *module) noexcept {
     try {
         auto *modules = current_modules();
@@ -91,8 +135,14 @@ void *AMBROSIA_GUEST_ABI pc_to_file_header(void *address, void *base_output) noe
         if (!modules || !base_output) {
             throw std::runtime_error("PC-to-image lookup requires a scoped graph and output pointer");
         }
-        auto *base = reinterpret_cast<void *>(
-            modules->module_base_for_address(reinterpret_cast<std::uintptr_t>(address)));
+        auto base_address = modules->module_base_for_address(reinterpret_cast<std::uintptr_t>(address));
+        if (!base_address) {
+            if (auto *runtime = current_runtime()) {
+                base_address = runtime->native_modules().module_base_for_address(
+                    reinterpret_cast<std::uintptr_t>(address));
+            }
+        }
+        auto *base = reinterpret_cast<void *>(base_address);
         std::memcpy(base_output, &base, sizeof(base));
         return base;
     } catch (const std::exception &error) {
@@ -114,6 +164,7 @@ void register_loader_services(ImportRegistry &registry) {
                      reinterpret_cast<std::uintptr_t>(&disable_thread_calls));
         registry.add(module, "GetModuleHandleA", reinterpret_cast<std::uintptr_t>(&module_handle_a));
         registry.add(module, "GetModuleHandleW", reinterpret_cast<std::uintptr_t>(&module_handle_w));
+        registry.add(module, "GetProcAddress", reinterpret_cast<std::uintptr_t>(&procedure_address));
     }
 }
 } // namespace ambrosia::services

@@ -10,6 +10,7 @@
 #include "fls_slots.h"
 #include "import_registry.h"
 #include "memory_services.h"
+#include "native_modules.h"
 #include "pointer_codec.h"
 
 namespace ambrosia::services {
@@ -23,7 +24,11 @@ class Runtime {
     std::uintptr_t resolve(const pe::Import &symbol) const;
 
     bool has_service_module(std::string name) const {
-        return registry_.has_module(std::move(name));
+        return native_modules_->has_module(std::move(name));
+    }
+
+    NativeModules &native_modules() const {
+        return *native_modules_;
     }
 
     MemoryServices &memory() {
@@ -87,6 +92,7 @@ class Runtime {
     CrtStartup startup_;
     ExitCallbacks exit_callbacks_;
     ImportRegistry registry_;
+    std::unique_ptr<NativeModules> native_modules_;
 };
 
 Runtime *current_runtime() noexcept;
