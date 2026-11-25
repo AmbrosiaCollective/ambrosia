@@ -810,3 +810,25 @@ termination, returned pointers, unsigned ordering, EOF/high-byte handling and
 error-state preservation. An original PE import exercises strlen through the
 Microsoft ABI. Both actual builds now pass the string stage and reach atan2f.
 No window, rendering or interactive menu is verified.
+
+## Portable numeric math
+
+The math facade now covers 35 imported standard numeric functions, using explicit
+float/double overloads of the portable C++ library. Microsoft x64 entrypoints
+preserve floating-point argument order and width, including mixed floating-point
+and pointer arguments to modf/modff. Host long and long double are not substituted
+for Windows types. CRT-specific classifiers, user math-error callbacks, lroundf
+and nexttowardf remain separate unsupported imports.
+
+Calculations retain real floating-point status, restore native errno, and map
+libm domain/range errors to guest CRT errno 33/34. Successful calls preserve guest
+CRT errno and LastError. Tangent additionally retains its documented non-finite
+input policy. Windows libm bit identity, all rounding/denormal modes and every
+exceptional-value policy are not certified; custom _matherr handling is absent.
+These adapters do not manufacture success for unsupported CRT services.
+
+Typed analytic checks exercise every registered function and alias, signed zero,
+infinite arguments, domain/range errors and guarded pointer outputs. An original
+PE fixture passes atan2f arguments in XMM0/XMM1; a swapped-argument control fails
+its numeric and PE checks. GCC and Clang each pass 915 checks. Actual startup now
+passes these calls and reaches CreateMutexA. No window or menu is verified.

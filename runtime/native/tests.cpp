@@ -363,6 +363,7 @@ extern "C" int ambrosia_native_tests() {
         exception_filter_checks();
         new_allocation_checks();
         tangent_checks();
+        math_family_checks();
         command_line_checks();
         string_service_checks();
         private_memory_option_checks();
