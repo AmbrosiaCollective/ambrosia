@@ -157,3 +157,11 @@ Committed XMem logical-page alignment and the exact known policy combinations
 follow the inherited xmem.cpp/xmem_exe_calls.md reference. CPU backing reuses
 Mapping with ordinary host pages; the owned metadata does not port Windows
 placeholder, privileged large-page, GPU-cache or physical-page implementations.
+
+
+Semaphore count/access/name contracts follow Microsoft SDK API documentation at
+`656e9656bfaef34dd29cd7ee9e1146aec17e924c`. Wine kernelbase sync.c and server
+semaphore.c at `ff2631c6ed3d1721cd050d951671c307ade32b90` were read for
+creation status, generic access mappings, validation order and release limits.
+The portable count model, owned typed directory and C++ wait adapter import no
+external implementation, header or runtime.

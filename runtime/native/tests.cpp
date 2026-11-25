@@ -173,6 +173,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "xmem_tests.h"
 #include "memory_budget_tests.h"
 #include "xmem_committed_tests.h"
+#include "semaphore_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -347,6 +348,7 @@ extern "C" int ambrosia_native_tests() {
         xmem_checks();
         memory_budget_checks();
         xmem_committed_checks();
+        semaphore_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';

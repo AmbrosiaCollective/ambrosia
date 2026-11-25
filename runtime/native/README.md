@@ -619,3 +619,27 @@ profile remains at 512 MiB. Tiny
 regression tests still use the original strict profile. Successful fixtures are
 not evidence of the menu. Actual diagnostic runs now accept the committed block
 and stop at semaphore creation; GPU initialization/rendering remain unverified.
+
+
+## Owned semaphores and handle rights
+
+CreateSemaphoreA/W and CreateSemaphoreExA/W now retain real permit counts and
+maximums. ReleaseSemaphore validates a positive increment and the maximum before
+assigning queued handoffs. Each released waiter owns its permit; later polls
+cannot steal it. The portable count model shares the existing standard C++ wait
+adapter with events. Both types share the bounded name/handle directory and
+reject cross-type name collisions without changing the original object.
+
+Each semaphore handle carries its own specific access mask. Generic read/write/
+execute/all requests map to the corresponding semaphore rights. Waiting requires
+SYNCHRONIZE; releasing requires SEMAPHORE_MODIFY_STATE. Named aliases can hold
+separate rights while sharing counts. Creation reports new/existing status,
+release writes its prior-count output only on success, and invalid/closed/type-
+confused handles fail. This private access policy does not implement Windows ACLs,
+impersonation, inheritance, Global namespaces or cross-process sharing.
+
+Counts use legal signed 32-bit ranges, with overflow-safe release checks. Existing
+limits remain 4,096 handles, 1 MiB name text and 64 queued waiters per object.
+Deterministic signal interleavings, finite single-thread timeouts and ABI tests
+provide CPU coverage; guest-thread contention and APC/alertable waits remain
+unrun or unsupported. No new host thread or semaphore service is started.
