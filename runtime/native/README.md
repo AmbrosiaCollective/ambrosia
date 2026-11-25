@@ -541,3 +541,21 @@ Limits are 4,096 configured keys including roots, 1 MiB of logical path text,
 an in-memory configuration namespace with no persistence or invented Windows
 installation metadata. Values, guest key creation/deletion, Unicode case folding,
 symbolic links, writes/security changes and 32-bit views remain unsupported.
+
+
+## Graphics memory configuration policy
+
+D3D12ConfigureVirtualMemoryX validates and retains the observed 32-byte profile:
+all bytes zero except the second DWORD, whose supported classes are 3 and 4.
+A class describes 16 or 32 GiB of range coverage under the pinned caller model.
+Unknown shapes, repeated calls and configuration after successful backend creation
+fail with HRESULTs. Caller input stays unchanged; each runtime owns its policy.
+A scoped creation gate lets a future backend inspect the plan and mark a successful
+device while serializing configuration. Failed creation leaves the gate reusable.
+
+This adapts a pinned measured profile, not a complete proprietary SDK contract.
+Policy acceptance allocates no CPU/GPU range and establishes no device capability.
+A real backend must validate its capabilities, reserve the range and connect page
+mapping before claiming support for those operations. Those paths remain unimplemented
+here. The inherited Windows shim is separate; this native boundary does not use
+its unconditional-success placeholder, Windows D3D12, Wine or Proton.

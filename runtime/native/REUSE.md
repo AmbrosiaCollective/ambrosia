@@ -129,3 +129,12 @@ API documentation at `656e9656bfaef34dd29cd7ee9e1146aec17e924c`, including
 case-insensitive lookup and the distinct legacy/extended empty-subkey rules.
 The private configured-key store, shared opaque ID allocator and Microsoft ABI
 adapters import no external source, headers or system registry implementation.
+
+
+The strict observed graphics-memory configuration validator is adapted from
+Xbox2Windows src/d3d12_xs_shim.cpp at
+`481a1c62c2c4306e5b0320ffe811ef2816f5809b` under MIT. Its source-owned range
+notes inform the derived coverage policy. See LICENSE.Xbox2Windows for the
+preserved notice. The portable owned policy and scoped creation gate replace
+Windows process-global state; no D3D12 GPU implementation or SDK header is ported.
+The 32-byte shape is a measured profile with incomplete SDK semantics.

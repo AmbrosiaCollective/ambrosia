@@ -8,6 +8,7 @@
 #include "crt_startup.h"
 #include "crt_streams.h"
 #include "fls_slots.h"
+#include "graphics_memory_policy.h"
 #include "import_registry.h"
 #include "kernel_objects.h"
 #include "memory_services.h"
@@ -39,6 +40,10 @@ class Runtime {
 
     RegistryKeys &registry_keys() {
         return registry_keys_;
+    }
+
+    GraphicsMemoryPolicy &graphics_memory() {
+        return graphics_memory_;
     }
 
     MemoryServices &memory() {
@@ -105,6 +110,7 @@ class Runtime {
     std::shared_ptr<HandleIds> handle_ids_ = std::make_shared<HandleIds>();
     KernelObjects objects_;
     RegistryKeys registry_keys_;
+    GraphicsMemoryPolicy graphics_memory_;
     std::unique_ptr<NativeModules> native_modules_;
 };
 

@@ -6,6 +6,8 @@
 
 namespace ambrosia::diagnostics {
 void write_trace(std::string_view message) noexcept;
+// Service progress is emitted only inside an explicit import-stop trace scope.
+void write_service_trace(std::string_view message) noexcept;
 [[noreturn]] void stop_trace(std::string_view message, int exit_code) noexcept;
 
 class ImportStops {

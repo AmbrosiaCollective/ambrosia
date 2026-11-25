@@ -61,6 +61,12 @@ void write_trace(std::string_view message) noexcept {
     std::_Exit(exit_code);
 }
 
+void write_service_trace(std::string_view message) noexcept {
+    if (active_stops.load(std::memory_order_relaxed)) {
+        write_trace(message);
+    }
+}
+
 ImportStops::ImportStops() : code_(stop_limit * instruction_bytes) {}
 
 std::uintptr_t ImportStops::resolve(const pe::Import &symbol) {
