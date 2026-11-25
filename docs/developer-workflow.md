@@ -1,5 +1,8 @@
 # Ambrosia developer workflow
 
+For the interactive menu and one-command native bootstrap builds, see
+[build and launch commands](build-and-launch.md). Game launch is still unavailable.
+
 Start contributing with Python 3.12 or newer and this repository. These commands
 use the standard library and tiny synthetic fixtures. They need no game files,
 GPU, dependency installation, initialized submodules or internet connection.

@@ -131,6 +131,7 @@
       "requires": [
         "ambrosia.py",
         "tools/ambrosia_dev.py",
+        "tools/ambrosia_start.py",
         "tools/ambrosia_suites.json"
       ]
     }

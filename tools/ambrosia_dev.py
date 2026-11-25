@@ -1,7 +1,7 @@
-"""Offline dependency discovery and explicitly curated game-free contributor tests.
+"""Ambrosia developer commands, native builds and launch readiness.
 
-No installation, network access, build invocation or external tool execution.
-The test command executes trusted repository tests in-process; it is not a sandbox.
+Doctor/listing do not execute external tools. Tests execute in-process; builds
+invoke CMake. These commands do not provide an operating-system sandbox.
 """
 import argparse
 import contextlib
@@ -182,6 +182,8 @@ def run_tests(name, root=ROOT, *, catalog=None):
 
 
 def main(argv=None):
+    from ambrosia_start import add_commands, dispatch
+
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
     check = commands.add_parser("doctor", help="Discover local requirements; never execute tools or install anything")
@@ -191,7 +193,10 @@ def main(argv=None):
     test.add_argument("suite", nargs="?", default="core", help="core, hashdict, paths, manifests, console or developer")
     test.add_argument("--list", action="store_true", help="List exact selections without importing or running tests")
     test.add_argument("--json", action="store_true", help="Emit counts and curated test IDs; omit tracebacks and captured output")
+    add_commands(commands)
     args = parser.parse_args(argv)
+    if args.command in ("menu", "build", "launch"):
+        return dispatch(args)
     try:
         catalog = load_catalog()
         if args.command == "doctor":
