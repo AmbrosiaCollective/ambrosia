@@ -177,6 +177,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "memory_budget_tests.h"
 #include "xmem_committed_tests.h"
 #include "semaphore_tests.h"
+#include "mutex_tests.h"
 #include "private_memory_option_tests.h"
 #include "processor_topology_tests.h"
 #include "exception_filter_tests.h"
@@ -359,6 +360,7 @@ extern "C" int ambrosia_native_tests() {
         memory_budget_checks();
         xmem_committed_checks();
         semaphore_checks();
+        mutex_checks();
         processor_topology_checks();
         exception_filter_checks();
         new_allocation_checks();

@@ -832,3 +832,29 @@ infinite arguments, domain/range errors and guarded pointer outputs. An original
 PE fixture passes atan2f arguments in XMM0/XMM1; a swapped-argument control fails
 its numeric and PE checks. GCC and Clang each pass 915 checks. Actual startup now
 passes these calls and reaches CreateMutexA. No window or menu is verified.
+
+## Owned process-local mutexes
+
+CreateMutexA/W return opaque handles in the same bounded typed directory as
+events and semaphores. Initial ownership applies only to a new object. Existing
+names return an independent handle with ERROR_ALREADY_EXISTS and retain their
+original owner. Narrow names use the runtime's existing UTF-8 policy; UTF-16
+names and Local prefixes share the same process-local identity. Security/
+inheritance attributes and cross-process Global names still stop explicitly.
+
+Single-object waits acquire ownership and count recursive acquisitions. Only
+the owning guest context can release it; each acquisition needs one release.
+Guest thread identity is independent of host thread ID. One guest exit callback
+per directory abandons all mutexes owned by that context, so the next waiter
+receives WAIT_ABANDONED and ownership exactly once. Weak cleanup records preserve
+last-close semantics and remain safe if a runtime is destroyed first. Object/
+owner records are bounded to 4096 and blocking waiters to 64 per mutex.
+
+Distinct synthetic guest contexts exercise ownership, finite timeout, recursion,
+80 simultaneous abandoned objects, repeated acquisition, name/type collisions,
+last-close and teardown. A small original PE calls CreateMutexA through the ABI.
+GCC and Clang each pass 932 checks; a collapsed-recursion control fails four
+intended checks. Host-thread wakeup/race scheduling is untested under the current
+thread-blocking profile. CreateMutexEx/OpenMutex, multiple-object waits and full
+Windows security remain unsupported. Actual startup now reaches CRT formatted
+output; no window, rendering or interactive menu is verified.

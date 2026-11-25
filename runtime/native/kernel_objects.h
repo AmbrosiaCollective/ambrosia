@@ -10,6 +10,7 @@
 
 namespace ambrosia::services {
 inline constexpr std::uint32_t wait_object_0 = 0;
+inline constexpr std::uint32_t wait_abandoned = 128;
 inline constexpr std::uint32_t wait_timeout = 258;
 inline constexpr std::uint32_t wait_failed = 0xffffffffu;
 inline constexpr std::uint32_t object_synchronize = 0x100000;
@@ -25,6 +26,8 @@ struct ObjectResult {
     std::uintptr_t handle = 0;
     std::uint32_t error = 0;
 };
+
+class MutexOwners;
 
 // Future thread/timer objects can share the same owned handle directory and
 // wait boundary. Guest handles are opaque IDs and are never host pointers/FDs.
@@ -43,6 +46,8 @@ class KernelObjects {
     ObjectResult create_semaphore(std::int32_t initial, std::int32_t maximum,
                                   const std::optional<std::u16string> &name = std::nullopt,
                                   std::uint32_t access = object_all_access);
+    ObjectResult create_mutex(bool initial_owner, const std::optional<std::u16string> &name = std::nullopt);
+    std::uint32_t release_mutex(std::uintptr_t handle);
     SemaphoreRelease release_semaphore(std::uintptr_t handle, std::int32_t amount);
     std::uint32_t set_event(std::uintptr_t handle);
     std::uint32_t reset_event(std::uintptr_t handle);
@@ -62,6 +67,7 @@ class KernelObjects {
     std::map<std::uintptr_t, Handle> handles_;
     std::map<std::u16string, std::weak_ptr<WaitableObject>> names_;
     std::shared_ptr<HandleIds> ids_;
+    std::shared_ptr<MutexOwners> mutex_owners_;
     std::size_t limit_;
     std::size_t name_bytes_ = 0;
 };

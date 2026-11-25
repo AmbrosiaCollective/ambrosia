@@ -77,6 +77,49 @@ void *AMBROSIA_GUEST_ABI create_event_a(void *attributes, std::int32_t manual, s
     }
 }
 
+void *create_mutex(void *attributes, std::int32_t initial_owner, std::optional<std::u16string> name) {
+    if (attributes) {
+        diagnostics::stop_trace("mutex security/inheritance attributes are not implemented", 78);
+    }
+    if (const auto error = normalize_object_name(name)) {
+        set_last_error(error);
+        return nullptr;
+    }
+    const auto result = objects().create_mutex(initial_owner != 0, name);
+    set_last_error(result.error);
+    return reinterpret_cast<void *>(result.handle);
+}
+
+void *AMBROSIA_GUEST_ABI create_mutex_w(void *attributes, std::int32_t initial_owner,
+                                        const char16_t *name) noexcept {
+    try {
+        return create_mutex(attributes, initial_owner,
+                            name ? std::optional(guest::read_string(name)) : std::nullopt);
+    } catch (const std::bad_alloc &) {
+        set_last_error(8);
+        return nullptr;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
+void *AMBROSIA_GUEST_ABI create_mutex_a(void *attributes, std::int32_t initial_owner,
+                                        const char *name) noexcept {
+    try {
+        auto wide =
+            name ? std::optional(std::filesystem::path(guest::read_string(name)).u16string()) : std::nullopt;
+        return create_mutex(attributes, initial_owner, std::move(wide));
+    } catch (const std::bad_alloc &) {
+        set_last_error(8);
+        return nullptr;
+    } catch (const std::filesystem::filesystem_error &) {
+        set_last_error(1113);
+        return nullptr;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::uint32_t semaphore_access(std::uint32_t desired) {
     auto access = desired & ~0xf0000000u;
     if (desired & 0x80000000u) {
@@ -222,6 +265,10 @@ void register_kernel_services(ImportRegistry &registry) {
                                "api-ms-win-core-synch-l1-2-0.dll", "api-ms-win-core-synch-l1-2-1.dll"}) {
         registry.add(module, "CreateEventW", reinterpret_cast<std::uintptr_t>(&create_event_w));
         registry.add(module, "CreateEventA", reinterpret_cast<std::uintptr_t>(&create_event_a));
+        registry.add(module, "CreateMutexA", reinterpret_cast<std::uintptr_t>(&create_mutex_a));
+        registry.add(module, "CreateMutexW", reinterpret_cast<std::uintptr_t>(&create_mutex_w));
+        registry.add(module, "ReleaseMutex",
+                     reinterpret_cast<std::uintptr_t>(&object_operation<&KernelObjects::release_mutex>));
         registry.add(module, "SetEvent",
                      reinterpret_cast<std::uintptr_t>(&object_operation<&KernelObjects::set_event>));
         registry.add(module, "ResetEvent",
