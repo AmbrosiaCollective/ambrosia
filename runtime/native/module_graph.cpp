@@ -384,6 +384,15 @@ std::uint64_t ModuleGraph::Execution::run_bootstrap() {
     return sessions_.back()->run_bootstrap();
 }
 
+void ModuleGraph::Execution::with_guest_context(const std::function<void()> &callback) {
+    state_->require_owner();
+    if (closed_ || !callback) {
+        throw std::runtime_error("guest callback requires an open module execution and a callback");
+    }
+    auto activation = thread_->activate();
+    callback();
+}
+
 void ModuleGraph::Execution::close() {
     if (closed_) {
         return;

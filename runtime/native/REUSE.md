@@ -99,3 +99,8 @@ CRT startup types/enums/field behavior follow the already pinned Wine
 public-domain corecrt_startup.h and data.c references. The constant-success Wine
 argv placeholder is not ported: native configuration changes owned argv/argc
 state using the actual dynamic image path. No source/header/runtime port.
+
+CRT process cleanup registration/order was checked against the already pinned
+Wine exit.c and public callback declarations. The native list uses correctly
+typed void Microsoft ABI callbacks and retains its own bounded batches. No Wine
+implementation, header or runtime is imported by this component.

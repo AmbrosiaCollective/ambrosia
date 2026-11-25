@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 521 checks under a
+as errors. Each build's native shared-object entry passed 535 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `_crt_atexit`, after passing owned CRT startup state,
-PC-to-image lookup, C-locale queries and the earlier TEB access. This occurs during module initialization; the game's
+and now stop at `_configthreadlocale`, after passing owned CRT exit registration,
+startup state, PC-to-image lookup and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -429,3 +429,19 @@ Initial/current guest environments use independent stable empty arrays and never
 inherit host environment values. Wide startup, environment mutation and full CRT
 entry/termination semantics are unfinished. This is real startup data, not a
 complete game entry contract.
+
+## CRT cleanup registration
+
+_crt_atexit/atexit retain correctly typed void callbacks in a runtime-owned list.
+Registration does not run guest code. Cleanup clears a batch before invoking it
+in reverse order; callback-time registrations form a later explicit batch. Limits
+are 4,096 pending/executing callbacks and 32 nested cleanup calls. Callbacks run
+outside the registry mutex. No arbitrary host libc atexit registration is used.
+
+After a bootstrap returns, the CLI reactivates its retained guest context for CRT
+cleanup before module process detach, while TLS and image mappings are alive.
+The execution scope enforces its owner/lifetime and restores native GS. A tiny
+original PE fixture verifies attach, entry, cleanup-with-TLS and detach ordering.
+Runtime destruction does not run guest callbacks after mappings disappear. Fatal
+diagnostic stops terminate immediately. exit/quick_exit/_cexit, stdio flushing
+and full process termination remain unresolved; registration does not claim them.

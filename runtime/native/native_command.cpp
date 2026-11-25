@@ -122,11 +122,13 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
                        << std::flush;
                 auto execution = graph.start();
                 const auto returned = execution.run_bootstrap();
+                execution.with_guest_context([&] { service_runtime.exit_callbacks().execute(); });
                 output << "{\"diagnostic_startup\":true,\"trace_returned\":" << returned << "}\n";
                 return 3;
             }
             auto execution = graph.start();
             result = execution.run_bootstrap();
+            execution.with_guest_context([&] { service_runtime.exit_callbacks().execute(); });
         }
         output << "{\"modules\":" << statistics.modules << ",\"mapped_bytes\":" << statistics.mapped_bytes
                << ",\"imports\":" << statistics.imports << ",\"files_read\":" << package.files_read() + 1

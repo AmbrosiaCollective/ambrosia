@@ -58,6 +58,7 @@ class ModuleGraph::Execution {
     Execution(Execution &&) = delete;
     Execution &operator=(Execution &&) = delete;
     std::uint64_t run_bootstrap();
+    void with_guest_context(const std::function<void()> &callback);
     void close();
 
   private:

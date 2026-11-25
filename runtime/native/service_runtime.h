@@ -1,5 +1,6 @@
 #pragma once
 #include "critical_sections.h"
+#include "crt_exit.h"
 #include "crt_heap.h"
 #include "crt_lifecycle.h"
 #include "crt_locale.h"
@@ -55,6 +56,10 @@ class Runtime {
         return startup_;
     }
 
+    ExitCallbacks &exit_callbacks() {
+        return exit_callbacks_;
+    }
+
     const PointerCodec &pointers() const {
         return pointers_;
     }
@@ -71,6 +76,7 @@ class Runtime {
     PointerCodec pointers_;
     CrtLocale locale_;
     CrtStartup startup_;
+    ExitCallbacks exit_callbacks_;
     ImportRegistry registry_;
 };
 
