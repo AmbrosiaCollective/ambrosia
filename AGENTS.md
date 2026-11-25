@@ -185,3 +185,14 @@ Shard runs write `index.part*.json`; merge them into `index.json` with `--merge`
   points without claiming those backends are tested. Resolve paths dynamically
   with `std::filesystem`/`pathlib` or `os.path`, never developer drive/home paths.
 - In the pull request, say what you tested, the exact revision, platform and any GPU/driver used. Omit optional personal and authorship labels; do not make false authorship claims.
+
+
+Task085's separately reviewed native-thread profile is validated: outer-workspace
+scripts/run_thread_isolated.py and isolation_thread_bootstrap.py retain Task066
+controls and limits. Only exact glibc pthread clone flags 0x3d0f00 are admitted;
+clone3 returns ENOSYS for fallback. Anonymous MAP_STACK is permitted. A hard
+RLIMIT_NPROC of 32 bounds namespace tasks; capabilities remain dropped and all
+other clone/process/exec/network/shared-memory/WX/GPU operations remain denied.
+All 35 fail-closed checks precede entry, including worker creation to the kernel
+limit and joining them back to one thread. No hard RSS cap is claimed. Preserve
+older profiles; ordinary threadless tests still use the original strict helper.

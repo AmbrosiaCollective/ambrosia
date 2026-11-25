@@ -1,6 +1,7 @@
 #include "gdk_threading.h"
 #include "guest_thread.h"
 #include "startup_trace.h"
+#include "task_queues.h"
 #include <array>
 #include <string>
 
@@ -35,6 +36,19 @@ bool AMBROSIA_GUEST_ABI is_sensitive(void *) noexcept {
     return thread().time_sensitive();
 }
 
+std::int32_t AMBROSIA_GUEST_ABI create_queue(void *, std::uint32_t work, std::uint32_t completion,
+                                             void *output) noexcept {
+    return task_queue_create(work, completion, output);
+}
+
+std::int32_t AMBROSIA_GUEST_ABI duplicate_queue(void *, std::uintptr_t handle, void *output) noexcept {
+    return task_queue_duplicate(handle, output);
+}
+
+void AMBROSIA_GUEST_ABI close_queue(void *, std::uintptr_t handle) noexcept {
+    task_queue_close(handle);
+}
+
 const std::array<std::uintptr_t, 31> threading_vtable{
     reinterpret_cast<std::uintptr_t>(&interface_query),
     reinterpret_cast<std::uintptr_t>(&interface_add_reference),
@@ -48,12 +62,12 @@ const std::array<std::uintptr_t, 31> threading_vtable{
     reinterpret_cast<std::uintptr_t>(&unsupported<9>),
     reinterpret_cast<std::uintptr_t>(&unsupported<10>),
     reinterpret_cast<std::uintptr_t>(&unsupported<11>),
-    reinterpret_cast<std::uintptr_t>(&unsupported<12>),
+    reinterpret_cast<std::uintptr_t>(&create_queue),
     reinterpret_cast<std::uintptr_t>(&unsupported<13>),
     reinterpret_cast<std::uintptr_t>(&unsupported<14>),
-    reinterpret_cast<std::uintptr_t>(&unsupported<15>),
+    reinterpret_cast<std::uintptr_t>(&duplicate_queue),
     reinterpret_cast<std::uintptr_t>(&unsupported<16>),
-    reinterpret_cast<std::uintptr_t>(&unsupported<17>),
+    reinterpret_cast<std::uintptr_t>(&close_queue),
     reinterpret_cast<std::uintptr_t>(&unsupported<18>),
     reinterpret_cast<std::uintptr_t>(&unsupported<19>),
     reinterpret_cast<std::uintptr_t>(&unsupported<20>),

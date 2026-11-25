@@ -31,6 +31,12 @@ bool set_guest_segment(std::uintptr_t value) noexcept {
 }
 } // namespace
 
+void reset_worker_guest_segment() {
+    if (!set_guest_segment(0)) {
+        throw std::runtime_error("cannot clear inherited worker guest GS base");
+    }
+}
+
 GuestSegmentScope::GuestSegmentScope(void *base) : saved_(guest_segment_base()) {
     if (!base || !set_guest_segment(reinterpret_cast<std::uintptr_t>(base))) {
         throw std::runtime_error("cannot install guest GS base");

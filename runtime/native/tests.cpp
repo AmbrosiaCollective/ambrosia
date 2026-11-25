@@ -17,11 +17,14 @@
 #include <bit>
 #include <cerrno>
 #include <cfenv>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -176,6 +179,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "dynamic_library_tests.h"
 #include "gdk_bootstrap_tests.h"
 #include "gdk_threading_tests.h"
+#include "task_queue_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -324,6 +328,29 @@ void host_checks() {
 }
 } // namespace
 
+extern "C" int ambrosia_native_queue_tests() {
+    checks = failures = 0;
+    try {
+        task_queue_manual_checks();
+        worker_pool_checks();
+        task_queue_thread_checks();
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL queue exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << checks << " queue checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_queue_denied_probe() {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    Scope scope(runtime);
+    std::uintptr_t handle = 9;
+    const auto result = task_queue_create(1, 1, &handle);
+    return result == gdk_out_of_memory && !handle && !runtime.task_queues().workers() ? 0 : 1;
+}
+
 extern "C" int ambrosia_native_tests() {
     checks = failures = 0;
     try {
@@ -371,6 +398,7 @@ extern "C" int ambrosia_native_tests() {
         gdk_bootstrap_checks();
         runtime_interface_checks();
         gdk_threading_checks();
+        task_queue_manual_checks();
         native_module_checks();
         event_checks();
         registry_checks();

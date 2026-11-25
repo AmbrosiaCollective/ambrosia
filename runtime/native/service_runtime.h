@@ -22,6 +22,7 @@
 #include "processor_information.h"
 #include "registry_keys.h"
 #include "slim_locks.h"
+#include "task_queues.h"
 #include <mutex>
 #include <optional>
 
@@ -60,6 +61,10 @@ class Runtime {
 
     GraphicsMemoryPolicy &graphics_memory() {
         return graphics_memory_;
+    }
+
+    TaskQueues &task_queues() {
+        return task_queues_;
     }
 
     GdkThreading &gdk_threading() {
@@ -153,6 +158,7 @@ class Runtime {
     ExceptionFilter exception_filter_;
     GdkBootstrap gdk_bootstrap_;
     GdkThreading gdk_threading_;
+    TaskQueues task_queues_;
     std::mutex processor_mutex_;
     std::optional<ProcessorInformation> processor_information_;
     std::unique_ptr<NativeModules> native_modules_;

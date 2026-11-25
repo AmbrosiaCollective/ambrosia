@@ -1094,3 +1094,29 @@ reference-limit probes stop explicitly. Final control fixtures use unconditional
 cleanup so an intentionally broken getter cannot mask later checks by leaving a
 thread marked sensitive. Actual startup reaches slot 12, XTaskQueueCreate.
 No queue, host worker thread, rendering or interactive menu is verified yet.
+
+
+## Native task queue creation and scheduler
+
+Task queues own opaque, nonreused handles and separate work/completion dispatch
+modes. Creation, duplication and close are available through flat exports and
+XThreadingImpl slots 12/15/17. Duplicates retain the same queue after the original
+handle closes. Each runtime allows 128 open queue handles. Manual/immediate-only
+queues do not create workers; thread-pool modes lazily start two shared native
+workers. Failed worker startup publishes no handle. Native adapters can schedule
+at most 1,024 pending jobs; shutdown drains accepted work and joins both workers.
+The owner must shut down off-worker and outlive all jobs.
+
+This is a creation/lifetime foundation. Guest submission, dispatch, delayed work,
+termination, process-queue selection and composite ports remain unsupported and
+stop explicitly. The native scheduler only accepts host adapters. Before enabling
+guest callbacks, establish per-worker guest TLS, module notifications, fault
+handling and shutdown before module unmapping. Workers never borrow the caller's
+guest context; Linux worker entry explicitly clears inherited GS. Serialized dispatch behavior is not claimed from creation alone.
+
+The ordinary suite tests threadless queue state under the original strict
+sandbox. A separate ambrosia_native_queue_tests entry exercises real workers,
+concurrency, pending-job bounds, drain/join and all mode pairs under the reviewed
+32-task thread profile. ambrosia_native_queue_denied_probe verifies transactional
+failure under the original thread-denying sandbox. No interactive menu claim is
+made from queue creation or synthetic scheduling checks.

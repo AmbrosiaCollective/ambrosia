@@ -29,6 +29,8 @@ StackBounds current_stack_bounds();
 // A thread-local guest segment scope. Linux uses GS and leaves native FS TLS
 // untouched. Unsupported hosts fail before changing their thread environment.
 std::uintptr_t guest_segment_base();
+// New host workers must discard Linux clone inheritance of the caller's GS.
+void reset_worker_guest_segment();
 
 class GuestSegmentScope {
   public:

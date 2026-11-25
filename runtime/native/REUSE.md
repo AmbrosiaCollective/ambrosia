@@ -190,3 +190,16 @@ uint32 counts and the native component owns each object per Runtime. No host C++
 virtual ABI, global singleton leak or private-slot zero-success handlers are
 copied. The public threading class identifier/slot positions follow that same
 source; unsupported slots stop before returning any invented value.
+
+
+## Native task queue contract reference
+
+The existing MIT-licensed third_party/xtaskqueue snapshot of Microsoft
+libHttpClient at c5007fd9cbdc785518ea6dccc5751b125d451cc1 supplies the public
+mode values, callback/queue API declarations and creation/duplication/close
+lifetime contracts. runtime/shims/xtaskqueue/pch.h maps invalid handles to E_HANDLE
+and enables unique duplicate handles. Its Windows thread-pool/timer implementation
+and Windows callbacks are not compiled or copied into the native runtime.
+worker_pool.* and task_queues.* are portable C++ implementations of the bounded
+scheduler and owned-handle subset. No claim is made to port the entire Microsoft
+queue or XAsync implementation. Guest callback dispatch remains unsupported.
