@@ -138,3 +138,10 @@ notes inform the derived coverage policy. See LICENSE.Xbox2Windows for the
 preserved notice. The portable owned policy and scoped creation gate replace
 Windows process-global state; no D3D12 GPU implementation or SDK header is ported.
 The 32-byte shape is a measured profile with incomplete SDK semantics.
+
+
+The native XMem reservation boundary follows the inherited xmem.cpp and
+xmem_exe_calls.md five-argument ABI, reserve-only page mode and raw policy words.
+It reuses the existing owned Mapping/MemoryServices implementation. No Windows
+placeholder API or physical-page implementation is ported. Attribute meaning
+and GPU/cache mapping remain incomplete; raw values are retained, not guessed.

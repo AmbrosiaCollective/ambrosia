@@ -9,6 +9,7 @@
 #include "locale_services.h"
 #include "registry_services.h"
 #include "slist_services.h"
+#include "xmem_services.h"
 #include <array>
 #include <stdexcept>
 
@@ -112,6 +113,7 @@ Runtime::Runtime(std::size_t memory_budget)
     register_kernel_services(registry_);
     register_registry_services(registry_);
     register_graphics_services(registry_);
+    register_xmem_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",

@@ -2,6 +2,7 @@
 #include "host.h"
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace ambrosia::services {
@@ -21,6 +22,13 @@ struct FreeResult {
     std::uint32_t error = 0;
 };
 
+struct WindowInfo {
+    void *base = nullptr;
+    std::size_t bytes = 0;
+    std::uint64_t attributes = 0;
+    std::uint32_t protection = 0;
+};
+
 class MemoryServices {
   public:
     explicit MemoryServices(std::size_t budget = 64 * 1024 * 1024) : budget_(budget) {}
@@ -33,6 +41,9 @@ class MemoryServices {
     AllocationResult allocate(void *address, std::size_t bytes, std::uint32_t flags,
                               std::uint32_t protection) noexcept;
     FreeResult free(void *address, std::size_t bytes, std::uint32_t flags) noexcept;
+    AllocationResult reserve_window(std::size_t bytes, std::uint64_t attributes,
+                                    std::uint32_t protection) noexcept;
+    std::optional<WindowInfo> window(const void *address) const;
 
     std::size_t reserved_bytes() const {
         return reserved_;
@@ -42,6 +53,7 @@ class MemoryServices {
     struct Region {
         host::Mapping memory;
         std::vector<std::uint32_t> protection;
+        std::optional<WindowInfo> window;
 
         explicit Region(std::size_t size)
             : memory(size, host::Access::none, 65536), protection(size / host::Mapping::page_size(), 0) {}

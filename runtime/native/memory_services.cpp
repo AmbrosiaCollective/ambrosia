@@ -84,6 +84,9 @@ AllocationResult MemoryServices::allocate(void *address, std::size_t bytes, std:
             rounded > found->second->memory.size() - offset) {
             return {nullptr, error_invalid_address};
         }
+        if (found->second->window) {
+            return {nullptr, error_not_supported};
+        }
         auto &pages = found->second->protection;
         const auto first = pages.begin() + offset / page;
         const auto last = first + rounded / page;
@@ -137,6 +140,9 @@ FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t 
         if (offset > memory.size() || rounded > memory.size() - offset) {
             return {false, error_invalid_address};
         }
+        if (found->second->window) {
+            return {false, error_not_supported};
+        }
         memory.decommit(offset, rounded);
         auto &pages = found->second->protection;
         std::fill(pages.begin() + offset / page, pages.begin() + (offset + rounded) / page, 0);
@@ -144,5 +150,34 @@ FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t 
     } catch (...) {
         return {false, error_not_enough_memory};
     }
+}
+
+AllocationResult MemoryServices::reserve_window(std::size_t bytes, std::uint64_t attributes,
+                                                std::uint32_t protection) noexcept {
+    constexpr std::size_t guest_page = 65536;
+    std::size_t rounded = 0;
+    if (!bytes || !round_up(bytes, guest_page, rounded)) {
+        return {nullptr, error_invalid_parameter};
+    }
+    const auto result = allocate(nullptr, rounded, reserve, 1);
+    if (result.address) {
+        auto &region = *regions_.at(reinterpret_cast<std::uintptr_t>(result.address));
+        region.window = WindowInfo{result.address, rounded, attributes, protection};
+    }
+    return result;
+}
+
+std::optional<WindowInfo> MemoryServices::window(const void *address) const {
+    const auto pointer = reinterpret_cast<std::uintptr_t>(address);
+    auto found = regions_.upper_bound(pointer);
+    if (found == regions_.begin()) {
+        return std::nullopt;
+    }
+    --found;
+    const auto &region = *found->second;
+    if (pointer - found->first >= region.memory.size()) {
+        return std::nullopt;
+    }
+    return region.window;
 }
 } // namespace ambrosia::services

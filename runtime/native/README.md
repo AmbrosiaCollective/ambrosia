@@ -559,3 +559,20 @@ A real backend must validate its capabilities, reserve the range and connect pag
 mapping before claiming support for those operations. Those paths remain unimplemented
 here. The inherited Windows shim is separate; this native boundary does not use
 its unconditional-success placeholder, Windows D3D12, Wine or Proton.
+
+
+## XMem reserve-only windows
+
+The measured five-argument XMemVirtualAlloc ABI can reserve real 64 KiB-aligned,
+no-access windows through the shared memory owner. This initial profile accepts
+only reserve-only 64 KiB mode and the known raw attribute/protection words.
+Raw CPU/GPU/cache policy remains attached to the window for future physical-page
+mapping. No physical pages or GPU range are fabricated. Unknown profiles fail.
+
+Window sizes round to guest pages and count against the existing 64 MiB runtime
+reservation cap. Whole-region VirtualFree releases both mapping and metadata.
+Ordinary VirtualAlloc commit and VirtualFree decommit cannot replace a physical
+window's backing semantics. Physical-page allocation/mapping, placeholder splits,
+committed/large-page XMem modes and GPU bindings remain unsupported. Actual large
+requests must fail within the current CPU-only sandbox until a reviewed resource
+profile is explicitly approved; tiny tests do not validate those reservations.
