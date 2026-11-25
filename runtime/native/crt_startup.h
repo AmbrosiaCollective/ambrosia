@@ -1,10 +1,42 @@
 #pragma once
 #include "import_registry.h"
 #include <array>
+#include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <string>
 
 namespace ambrosia::services {
+// Fixed Windows x64 launch-record ABI. Explicit alignment fields keep every
+// byte initialized when copied to guest memory; no native desktop/FDs leak in.
+struct StartupInfo64 {
+    std::uint32_t size = 104;
+    std::uint32_t alignment0 = 0;
+    std::uint64_t reserved = 0;
+    std::uint64_t desktop = 0;
+    std::uint64_t title = 0;
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::uint32_t columns = 0;
+    std::uint32_t rows = 0;
+    std::uint32_t fill_attribute = 0;
+    std::uint32_t flags = 0;
+    std::uint16_t show_window = 0;
+    std::uint16_t reserved_size = 0;
+    std::uint32_t alignment1 = 0;
+    std::uint64_t reserved_data = 0;
+    std::uint64_t standard_input = 0;
+    std::uint64_t standard_output = 0;
+    std::uint64_t standard_error = 0;
+};
+
+static_assert(sizeof(StartupInfo64) == 104);
+static_assert(offsetof(StartupInfo64, flags) == 60);
+static_assert(offsetof(StartupInfo64, show_window) == 64);
+static_assert(offsetof(StartupInfo64, standard_input) == 80);
+
 class CrtStartup {
   public:
     CrtStartup() = default;
@@ -12,6 +44,15 @@ class CrtStartup {
     CrtStartup &operator=(const CrtStartup &) = delete;
     void bind_image(const std::filesystem::path &image);
     bool set_app_type(std::int32_t type) noexcept;
+    bool set_show_window(std::optional<std::uint16_t> mode) noexcept;
+
+    const StartupInfo64 &launch_info() const noexcept {
+        return launch_info_;
+    }
+
+    std::int32_t show_window_mode() const noexcept {
+        return launch_info_.flags & 1 ? launch_info_.show_window : 10; // SW_SHOWDEFAULT.
+    }
 
     std::int32_t app_type() const noexcept {
         return app_type_;
@@ -63,6 +104,7 @@ class CrtStartup {
     }
 
   private:
+    StartupInfo64 launch_info_;
     std::string image_;
     std::string command_line_a_;
     std::u16string command_line_w_;

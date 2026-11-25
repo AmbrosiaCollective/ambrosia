@@ -355,6 +355,7 @@ extern "C" int ambrosia_native_tests() {
         c_locale_checks();
         module_address_checks();
         crt_startup_checks();
+        startup_info_checks();
         crt_exit_checks();
         executable_tls_exit_checks();
         context_locale_checks();

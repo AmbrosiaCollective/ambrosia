@@ -85,6 +85,14 @@ char16_t *AMBROSIA_GUEST_ABI command_line_w() noexcept {
     return line;
 }
 
+void AMBROSIA_GUEST_ABI startup_info_w(void *output) noexcept {
+    if (!output) {
+        diagnostics::stop_trace("GetStartupInfoW requires an output buffer", 78);
+    }
+    const auto &info = startup().launch_info();
+    std::memcpy(output, &info, sizeof(info));
+}
+
 std::int32_t AMBROSIA_GUEST_ABI initialize_environment() noexcept {
     return startup().initialize_environment();
 }
@@ -99,6 +107,10 @@ char **AMBROSIA_GUEST_ABI initial_environment() noexcept {
 } // namespace
 
 void register_crt_startup(ImportRegistry &registry) {
+    for (const auto *module :
+         {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-processthreads-l1-1-0.dll"}) {
+        registry.add(module, "GetStartupInfoW", reinterpret_cast<std::uintptr_t>(&startup_info_w));
+    }
     for (const auto *module :
          {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-processenvironment-l1-1-0.dll"}) {
         registry.add(module, "GetCommandLineA", reinterpret_cast<std::uintptr_t>(&command_line_a));

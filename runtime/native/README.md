@@ -960,3 +960,21 @@ full CLI attach/entry/TLS/ordinary/detach order have CPU coverage, including GS
 restoration. Both compilers pass 979 checks; wrong-reason control fails two checks.
 Worker-thread detach/creation and full Windows CRT exit parity remain unverified.
 Actual startup now reaches GetStartupInfoW. No window/menu is verified.
+
+## Owned startup-info record
+
+GetStartupInfoW copies a fully initialized 104-byte Windows x64 launch record.
+The native launcher currently supplies no desktop/title, inherited standard
+handles or STARTF flags. Its default show policy is therefore SW_SHOWDEFAULT.
+A configured show mode sets STARTF_USESHOWWINDOW before executable binding;
+binding freezes the launch settings. This reports launch metadata and does not
+claim to create or display a window. Other native host launch details are not
+inherited or exposed.
+
+Explicit alignment fields prevent reserved/padding bytes from carrying native
+memory into the guest. Tests cover nondefault settings, validation/freeze,
+independent runtimes, guest output edits, exact layout/guarded copy, preserved
+errors and an original PE query. Both compilers pass 988 checks; a zero-show
+control fails four intended assertions. Layout references are pinned FFI and
+primary launch-ownership documentation; Windows SDK conformance is unverified.
+Actual startup now reaches AcquireSRWLockExclusive. No window/menu is verified.

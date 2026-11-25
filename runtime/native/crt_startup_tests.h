@@ -87,3 +87,83 @@ void crt_startup_checks() {
     check(*argc() == 1 && std::string_view((*argv())[0]) == expected,
           "nested runtime restores the original argument bindings");
 }
+
+void startup_info_checks() {
+    using namespace ambrosia;
+    using namespace services;
+    CrtStartup launch;
+    check(launch.launch_info().size == 104 && !launch.launch_info().flags &&
+              launch.show_window_mode() == 10 && !launch.launch_info().desktop &&
+              !launch.launch_info().title && !launch.launch_info().standard_input &&
+              !launch.launch_info().standard_output && !launch.launch_info().standard_error,
+          "default owned launch metadata requests default show behavior without native desktop strings or "
+          "inherited handles");
+    check(launch.set_show_window(0) && launch.launch_info().flags == 1 && launch.show_window_mode() == 0 &&
+              launch.set_show_window(11) && launch.show_window_mode() == 11 && !launch.set_show_window(12) &&
+              launch.show_window_mode() == 11 && launch.set_show_window(std::nullopt) &&
+              launch.show_window_mode() == 10,
+          "explicit launch show modes set the flag, reject unsupported values transactionally and may be "
+          "cleared");
+    launch.set_show_window(3);
+    launch.bind_image("app.exe");
+    check(!launch.set_show_window(1) && launch.show_window_mode() == 3,
+          "binding the executable freezes its original launch settings");
+    Runtime runtime;
+    Runtime independent;
+    runtime.startup().set_show_window(3);
+    using GetInfo = void(AMBROSIA_GUEST_ABI *)(void *);
+    const auto address = runtime.resolve(service_symbol("GetStartupInfoW", "kernel32.dll"));
+    const auto get = reinterpret_cast<GetInfo>(address);
+    check(address && address == runtime.resolve(service_symbol("GetStartupInfoW", "kernelbase.dll")) &&
+              address == runtime.resolve(
+                             service_symbol("GetStartupInfoW", "api-ms-win-core-processthreads-l1-1-0.dll")),
+          "startup metadata aliases share the explicit Windows ABI facade");
+    Scope scope(runtime);
+    const auto saved_error = errno;
+    errno = E2BIG;
+    crt_error() = 19;
+    set_last_error(87);
+    std::array<std::byte, 108> output;
+    output.fill(std::byte{0xcc});
+    get(output.data() + 2);
+    const auto read32 = [&](std::size_t offset) {
+        std::uint32_t value;
+        std::memcpy(&value, output.data() + 2 + offset, sizeof(value));
+        return value;
+    };
+    check(read32(0) == 104 && read32(60) == 1 && read32(64) == 3 &&
+              runtime.startup().show_window_mode() == 3 && output[0] == std::byte{0xcc} &&
+              output[1] == std::byte{0xcc} && output[106] == std::byte{0xcc} &&
+              output[107] == std::byte{0xcc},
+          "startup info writes exactly 104 bytes at the Windows x64 flag/show offsets without alignment "
+          "assumptions");
+    bool initialized = true;
+    for (std::size_t i = 0; i < 104; ++i) {
+        if (i != 0 && i != 60 && i != 64) {
+            initialized &= output[i + 2] == std::byte{};
+        }
+    }
+    check(initialized,
+          "all reserved, pointer, handle and alignment bytes in the launch record are initialized");
+    output[62] = std::byte{};
+    get(output.data() + 2);
+    check(read32(60) == 1 && independent.startup().show_window_mode() == 10,
+          "guest output edits do not mutate owned launch settings or another runtime");
+    check(errno == E2BIG && crt_error() == 19 && get_last_error() == 87,
+          "startup metadata queries preserve native errno and guest error state");
+    auto caller = fixture();
+    text(caller, 0x440, "kernel32.dll");
+    text(caller, 0x4a2, "GetStartupInfoW");
+    constexpr unsigned char code[] = {0x48, 0x83, 0xec, 0x28, 0x48, 0x8d, 0x0d, 0,    0,    0,
+                                      0,    0xff, 0x15, 0,    0,    0,    0,    0x8b, 0x05, 0,
+                                      0,    0,    0,    0x48, 0x83, 0xc4, 0x28, 0xc3};
+    std::memcpy(caller.data() + 0x200, code, sizeof(code));
+    put<std::uint32_t>(caller, 0x207, 0x2110 - (0x1000 + 11));
+    put<std::uint32_t>(caller, 0x20d, 0x2080 - (0x1000 + 17));
+    put<std::uint32_t>(caller, 0x213, 0x2150 - (0x1000 + 23));
+    auto image = pe::Image::load(caller, [&](const auto &symbol) { return runtime.resolve(symbol); });
+    check(
+        image.run_bootstrap() == 3,
+        "an original PE reads configured show-window metadata from its actual Windows-layout startup buffer");
+    errno = saved_error;
+}

@@ -33,6 +33,15 @@ void CrtStartup::bind_image(const std::filesystem::path &image) {
     bound_ = true;
 }
 
+bool CrtStartup::set_show_window(std::optional<std::uint16_t> mode) noexcept {
+    if (bound_ || (mode && *mode > 11)) {
+        return false;
+    }
+    launch_info_.flags = mode ? 1 : 0; // STARTF_USESHOWWINDOW only when explicitly configured.
+    launch_info_.show_window = mode.value_or(0);
+    return true;
+}
+
 bool CrtStartup::set_app_type(std::int32_t type) noexcept {
     if (type < 0 || type > 2) {
         return false;
