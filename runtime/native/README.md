@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 472 checks under a
+as errors. Each build's native shared-object entry passed 480 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `_get_stream_buffer_pointers`, after passing reversible pointer
-encoding, CRT locale locking, bounded allocation and the earlier TEB access. This occurs during module initialization; the game's
+and now stop at `setlocale`, after passing owned stream-buffer field access,
+pointer encoding, CRT locale locking, allocation and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -379,3 +379,10 @@ positive reported entropy plus a nonzero result. Unavailability fails runtime
 construction, with no fixed/address-derived fallback. Secrets never enter reports.
 Only Linux was run; other hosts may fail explicitly depending on their standard
 library. System-wide/cross-process pointer encoding is not provided.
+
+`_get_stream_buffer_pointers` returns stable addresses of the owned stream's
+base/cursor/count fields, with each output optional. Writes through those addresses
+update the actual stream state. Each stream has independent initially empty
+fields; public FILE identity remains opaque and pointer-sized. Foreign/null
+streams fail EINVAL before output changes. This does not yet supply buffering
+I/O, flushing or ownership of buffers installed by callers.

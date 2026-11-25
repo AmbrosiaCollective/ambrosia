@@ -4,6 +4,12 @@
 #include <optional>
 
 namespace ambrosia::services {
+struct StreamBuffer {
+    char *base = nullptr;
+    char *cursor = nullptr;
+    std::int32_t remaining = 0;
+};
+
 // UCRT exposes an opaque, pointer-sized FILE. Host libc FILE is a different ABI.
 // These stable identities are recognized by this runtime only; future stream
 // operations must resolve them here rather than reinterpret them as host FILEs.
@@ -26,6 +32,11 @@ class StandardStreams {
         return std::nullopt;
     }
 
+    StreamBuffer *buffer(const void *file) {
+        const auto owned = index(file);
+        return owned ? &buffers_[*owned] : nullptr;
+    }
+
   private:
     struct GuestFile {
         std::uintptr_t placeholder = 0;
@@ -33,6 +44,7 @@ class StandardStreams {
 
     static_assert(sizeof(GuestFile) == 8 && alignof(GuestFile) == 8);
     std::array<GuestFile, 3> files_{};
+    std::array<StreamBuffer, 3> buffers_{};
 };
 
 void register_crt_streams(ImportRegistry &registry);

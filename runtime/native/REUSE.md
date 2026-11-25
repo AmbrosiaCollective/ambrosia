@@ -86,3 +86,7 @@ CRT allocation and errno behavior were checked against Wine heap.c/errno.c at
 `ff2631c6ed3d1721cd050d951671c307ade32b90`. They are behavior references only;
 no implementation or header is ported. Owned allocation tracking uses host libc
 behind checked size/ownership limits, and guest errno has separate storage.
+
+Stream-buffer field access follows the already pinned Wine file.c
+_get_stream_buffer_pointers declaration and address-return semantics. The native
+fields/identity checks are independently owned; no implementation/header port.
