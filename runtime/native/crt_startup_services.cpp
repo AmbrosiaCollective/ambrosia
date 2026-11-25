@@ -69,6 +69,22 @@ char *AMBROSIA_GUEST_ABI winmain_arguments() noexcept {
     return startup().winmain_arguments();
 }
 
+char *AMBROSIA_GUEST_ABI command_line_a() noexcept {
+    auto *line = startup().command_line_a();
+    if (!line) {
+        diagnostics::stop_trace("guest command line requires a bound executable", 78);
+    }
+    return line;
+}
+
+char16_t *AMBROSIA_GUEST_ABI command_line_w() noexcept {
+    auto *line = startup().command_line_w();
+    if (!line) {
+        diagnostics::stop_trace("guest command line requires a bound executable", 78);
+    }
+    return line;
+}
+
 std::int32_t AMBROSIA_GUEST_ABI initialize_environment() noexcept {
     return startup().initialize_environment();
 }
@@ -83,6 +99,11 @@ char **AMBROSIA_GUEST_ABI initial_environment() noexcept {
 } // namespace
 
 void register_crt_startup(ImportRegistry &registry) {
+    for (const auto *module :
+         {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-processenvironment-l1-1-0.dll"}) {
+        registry.add(module, "GetCommandLineA", reinterpret_cast<std::uintptr_t>(&command_line_a));
+        registry.add(module, "GetCommandLineW", reinterpret_cast<std::uintptr_t>(&command_line_w));
+    }
     for (const auto *module : {"ucrtbase.dll", "msvcrt.dll", "api-ms-win-crt-runtime-l1-1-0.dll"}) {
         registry.add(module, "_set_app_type", reinterpret_cast<std::uintptr_t>(&set_app_type));
         registry.add(module, "__set_app_type", reinterpret_cast<std::uintptr_t>(&set_app_type));

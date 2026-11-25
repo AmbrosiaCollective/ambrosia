@@ -2,6 +2,7 @@
 #include "import_registry.h"
 #include <array>
 #include <filesystem>
+#include <string>
 
 namespace ambrosia::services {
 class CrtStartup {
@@ -53,8 +54,18 @@ class CrtStartup {
         return empty_arguments_.data();
     }
 
+    char *command_line_a() noexcept {
+        return bound_ ? command_line_a_.data() : nullptr;
+    }
+
+    char16_t *command_line_w() noexcept {
+        return bound_ ? command_line_w_.data() : nullptr;
+    }
+
   private:
     std::string image_;
+    std::string command_line_a_;
+    std::u16string command_line_w_;
     bool bound_ = false;
     std::int32_t app_type_ = 0;
     std::int32_t file_mode_ = 0x4000; // Guest _O_TEXT, not a host fcntl value.
