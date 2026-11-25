@@ -117,6 +117,7 @@ Runtime::Runtime(MemoryLimits memory_limits)
     register_registry_services(registry_);
     register_graphics_services(registry_);
     register_xmem_services(registry_);
+    register_sysinfo_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",
@@ -137,6 +138,19 @@ Runtime::Runtime(MemoryLimits memory_limits)
         registry_.add(module, "SetLastError", reinterpret_cast<std::uintptr_t>(&store_error));
     }
     native_modules_ = std::make_unique<NativeModules>(registry_);
+}
+
+Runtime::Runtime(MemoryLimits memory_limits, const host::ProcessorTopology &topology)
+    : Runtime(memory_limits) {
+    processor_information_.emplace(topology);
+}
+
+const ProcessorInformation &Runtime::processor_information() {
+    std::lock_guard lock(processor_mutex_);
+    if (!processor_information_) {
+        processor_information_.emplace(host::processor_topology());
+    }
+    return *processor_information_;
 }
 
 void Runtime::lock_locales() {

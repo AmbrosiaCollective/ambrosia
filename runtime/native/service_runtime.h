@@ -14,7 +14,10 @@
 #include "memory_services.h"
 #include "native_modules.h"
 #include "pointer_codec.h"
+#include "processor_information.h"
 #include "registry_keys.h"
+#include <mutex>
+#include <optional>
 
 namespace ambrosia::services {
 std::uint32_t get_last_error() noexcept;
@@ -25,7 +28,9 @@ class Runtime {
   public:
     explicit Runtime(std::size_t memory_budget = 64 * 1024 * 1024);
     explicit Runtime(MemoryLimits memory_limits);
+    Runtime(MemoryLimits memory_limits, const host::ProcessorTopology &topology);
     std::uintptr_t resolve(const pe::Import &symbol) const;
+    const ProcessorInformation &processor_information();
 
     bool has_service_module(std::string name) const {
         return native_modules_->has_module(std::move(name));
@@ -112,6 +117,8 @@ class Runtime {
     KernelObjects objects_;
     RegistryKeys registry_keys_;
     GraphicsMemoryPolicy graphics_memory_;
+    std::mutex processor_mutex_;
+    std::optional<ProcessorInformation> processor_information_;
     std::unique_ptr<NativeModules> native_modules_;
 };
 

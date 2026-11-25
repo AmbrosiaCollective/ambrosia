@@ -175,6 +175,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "xmem_committed_tests.h"
 #include "semaphore_tests.h"
 #include "private_memory_option_tests.h"
+#include "processor_topology_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -350,6 +351,7 @@ extern "C" int ambrosia_native_tests() {
         memory_budget_checks();
         xmem_committed_checks();
         semaphore_checks();
+        processor_topology_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {
         ++failures;

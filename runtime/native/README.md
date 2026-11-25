@@ -665,7 +665,38 @@ including refusal of above-limit writable mappings and protection upgrades. It
 retains 64 GiB address space, read-only inputs and the earlier filesystem,
 credential, network, exec, process/thread, GPU/display and mapping restrictions.
 Its sampled RSS watchdog is not a hard RSS cap. Earlier profiles are unchanged.
-Actual GCC and Clang diagnostic runs now pass the measured memory requests and
-stop at the unsupported GetLogicalProcessorInformation import. No window, menu
-or rendering has been verified. No GPU/thread or higher-memory integration
-follows from this option or its approved profile.
+Actual diagnostic runs pass the measured memory requests. The next topology
+requirement is described below. No window, menu or rendering has been verified.
+No GPU/thread or higher-memory integration follows from this option or its
+approved profile.
+
+## Logical-processor topology
+
+GetLogicalProcessorInformation now has an owned topology snapshot and an explicit
+32-byte Windows x64 record writer. A separate Linux adapter reads online CPUs,
+current affinity, physical core/package relationships, NUMA node membership and
+available shared-cache geometry. Guest processor bits are dense indices into the
+retained host CPU-ID list. This mapping must also govern future affinity/thread
+services; those services are not implemented by this change.
+
+Size probes and short buffers report the required byte count without partial
+output. Successful calls preserve LastError; invalid lengths fail. Core SMT
+flags, cache types and fully-associative cache markers use the guest ABI, with
+zeroed padding/reserved fields. Kernel32, KernelBase and the sysinfo API-set
+aliases share one callable facade. CRT errno is independent.
+
+The Linux reader bounds metadata text, IDs, selected processors and cache entries.
+It refuses incomplete/conflicting relationships, offline selections, changing
+online/affinity snapshots and cache fields that cannot fit the guest ABI. More
+than 64 selected processors require a future group model and currently fail
+explicitly. Unreported caches are permitted by the API contract; missing core,
+package or NUMA metadata is not replaced with invented values. Windows/macOS
+discovery remains unsupported. The retained snapshot does not track hotplug or
+later external affinity changes.
+
+Original sysfs fixtures and direct Microsoft-ABI calls cover these contracts in
+the strict CPU-only sandbox. The existing boot profile intentionally hides sysfs:
+an actual startup trace now resolves this import and stops at unavailable topology
+metadata. A separate profile with a bounded read-only copy of CPU/NUMA text is
+prepared for review, but is not approved or executed. It does not expose live
+sysfs controls, unique hardware IDs or GPU devices. No menu is verified.
