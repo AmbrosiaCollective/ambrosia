@@ -188,6 +188,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "command_line_tests.h"
 #include "string_tests.h"
 #include "format_tests.h"
+#include "random_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -373,6 +374,7 @@ extern "C" int ambrosia_native_tests() {
         command_line_checks();
         string_service_checks();
         format_checks();
+        secure_random_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {
         ++failures;
@@ -425,6 +427,17 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
 
 extern "C" int ambrosia_native_trace(const char *image, const char *package) {
     return trace_native_image(image, package, 0);
+}
+
+extern "C" int ambrosia_native_random_probe(unsigned mode) {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    Scope scope(runtime);
+    using Random = std::int32_t(AMBROSIA_GUEST_ABI *)(void *);
+    const auto random = reinterpret_cast<Random>(runtime.resolve(service_symbol("rand_s", "ucrtbase.dll")));
+    std::uint32_t value = 0;
+    (void)random(mode ? &value : nullptr);
+    return 99;
 }
 
 extern "C" int ambrosia_native_invalid_format(unsigned mode) {

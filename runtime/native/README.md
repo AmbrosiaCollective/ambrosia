@@ -910,3 +910,21 @@ optional null output, real-clock bounds, difference ordering and a PE import.
 Other imported calendar, local-time and strftime services remain unsupported.
 Both compilers pass 956 checks. Actual startup now reaches rand_s; no window or
 menu is verified. This is UTC startup support, not complete Windows time parity.
+
+## OS-backed CRT random values
+
+rand_s requests a complete unsigned 32-bit value from a dedicated host entropy
+boundary and copies exactly four bytes into the guest output. Linux uses
+getentropy; other host implementations currently fail explicitly. It never
+substitutes CRT PRNG state, pointer secrets, fixed seeds or constants. A successful
+call returns zero and preserves native errno, guest errno and LastError. Null
+output and OS-source failure stop explicitly until full invalid-parameter and
+CRT error policy are modeled; failure cannot return success or an uninitialized
+sample. Existing strict isolation permits this OS entropy call without new host
+access or dependencies.
+
+Guarded output, aliases, error preservation and a small original PE have CPU
+coverage. Random outputs are allowed to be zero or repeated; these checks do
+not claim a statistical entropy audit. An injected source failure and null probe
+stop, while the same valid normal-source probe returns. Both compilers pass
+961 checks. Actual startup now reaches GetTickCount64. No window/menu is verified.

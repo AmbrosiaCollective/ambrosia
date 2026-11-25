@@ -8,6 +8,8 @@ namespace ambrosia::host {
 // A nonzero runtime secret from the host's nondeterministic entropy source.
 // Fail closed if the installed implementation cannot provide entropy.
 std::uintptr_t random_pointer_secret();
+// Cryptographic OS entropy; unsupported hosts or source failure throw.
+std::uint32_t secure_random_u32();
 std::uint64_t filetime_from_unix_ticks(std::int64_t ticks_100ns);
 std::uint64_t utc_filetime();
 std::int64_t performance_counter() noexcept;

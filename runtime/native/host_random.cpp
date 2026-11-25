@@ -1,8 +1,25 @@
 #include "host.h"
 #include <random>
 #include <stdexcept>
+#ifdef __linux__
+#include <sys/random.h>
+#endif
 
 namespace ambrosia::host {
+std::uint32_t secure_random_u32() {
+#ifdef __linux__
+    std::uint32_t value;
+    // getentropy fills the entire small buffer or fails, including retries for
+    // interrupted kernel reads. Never substitute a PRNG or pointer secret.
+    if (getentropy(&value, sizeof(value))) {
+        throw std::runtime_error("OS cryptographic entropy is unavailable");
+    }
+    return value;
+#else
+    throw std::runtime_error("cryptographic entropy adapter is unsupported on this host");
+#endif
+}
+
 std::uintptr_t random_pointer_secret() {
     std::random_device source;
     if (source.entropy() <= 0) {

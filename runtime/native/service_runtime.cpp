@@ -9,6 +9,7 @@
 #include "loader_services.h"
 #include "locale_services.h"
 #include "math_services.h"
+#include "random_services.h"
 #include "registry_services.h"
 #include "slist_services.h"
 #include "string_services.h"
@@ -124,6 +125,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     register_exception_services(registry_);
     register_math_services(registry_);
     register_format_services(registry_);
+    register_random_services(registry_);
     register_string_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
