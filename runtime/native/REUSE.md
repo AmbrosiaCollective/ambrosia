@@ -81,3 +81,8 @@ UCRT's opaque pointer-sized FILE and standard-stream indices follow Wine's
 public-domain corecrt_wstdio.h/stdio.h declarations at the existing pinned Wine
 revision. Its file.c was read for accessor behavior. No header, implementation
 or host FILE layout is imported by the owned stream identities.
+
+CRT allocation and errno behavior were checked against Wine heap.c/errno.c at
+`ff2631c6ed3d1721cd050d951671c307ade32b90`. They are behavior references only;
+no implementation or header is ported. Owned allocation tracking uses host libc
+behind checked size/ownership limits, and guest errno has separate storage.

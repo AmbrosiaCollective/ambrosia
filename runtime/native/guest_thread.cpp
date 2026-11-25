@@ -85,6 +85,11 @@ std::uint32_t &ThreadContext::last_error() {
     return anchor_.last_error;
 }
 
+std::int32_t &ThreadContext::crt_error() {
+    require_owner();
+    return crt_error_;
+}
+
 ThreadContext::Activation::Activation(ThreadContext &context)
     : segment_(&context.anchor_), saved_(active_context) {
     active_context = &context;

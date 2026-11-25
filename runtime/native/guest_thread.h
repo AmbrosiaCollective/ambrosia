@@ -27,6 +27,7 @@ class ThreadContext {
     std::span<std::byte> block(std::size_t slot);
     static ThreadContext *current() noexcept;
     std::uint32_t &last_error();
+    std::int32_t &crt_error();
     void on_exit(std::function<void()> callback);
 
   private:
@@ -58,6 +59,7 @@ class ThreadContext {
     static_assert(offsetof(Anchor, self) == 0x30);
     static_assert(offsetof(Anchor, last_error) == 0x68);
     std::thread::id owner_;
+    std::int32_t crt_error_ = 0;
     bool sealed_ = false;
     bool exiting_ = false;
     std::vector<std::function<void()>> exit_callbacks_;

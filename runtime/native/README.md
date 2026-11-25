@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 435 checks under a
+as errors. Each build's native shared-object entry passed 458 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `malloc`, after passing the CRT standard-stream accessor,
-DLL notification policy, sequenced-list initialization and the earlier TEB access. This occurs during module initialization; the game's
+and now stop at `_lock_locales`, after passing bounded CRT allocation,
+standard-stream access, DLL notification policy and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -336,3 +336,21 @@ rejects foreign or other-runtime identities without dereferencing them. The
 accessor preserves last error and follows the scoped runtime across nested calls.
 Unsupported indices or access without a scoped runtime stop diagnostics. Other
 stream operations remain unresolved; this is not yet a complete stdio adapter.
+
+## Bounded CRT heap and errno
+
+The scoped runtime owns malloc/calloc/realloc/free allocations and base aliases.
+The current local budget is 64 MiB and 65,536 allocations, independent of the
+virtual-memory service budget. Zero-size allocation reserves one freeable byte;
+calloc checks multiplication overflow and clears storage. Realloc preserves the
+old allocation on failure and its byte prefix on successful resize. Null realloc
+allocates; resizing a live allocation to zero releases it. Exact ownership checks
+reject foreign/double-free pointers before host libc sees them. Runtime teardown
+releases outstanding allocations after guest/context cleanup. Concurrent guest
+workers and new-handler behavior are not implemented or tested.
+
+Allocation exhaustion reports guest ENOMEM through per-context 32-bit CRT errno;
+it does not expose host libc errno or modify Win32 last error. _errno/_get_errno/
+_set_errno retain Microsoft ABI and nested-context isolation. Calls outside an
+active guest context use a separate native-thread fallback. Aligned allocation,
+heap size queries and the Windows process heap remain separate missing services.

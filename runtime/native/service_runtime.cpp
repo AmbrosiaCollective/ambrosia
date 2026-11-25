@@ -13,6 +13,7 @@ struct NativeState {
     Runtime *runtime = nullptr;
     pe::ModuleGraph *modules = nullptr;
     std::uint32_t fallback_error = 0;
+    std::int32_t fallback_crt_error = 0;
 };
 
 // Keep the native TLS resolver in a System V call on Linux. GCC can lose live
@@ -79,6 +80,11 @@ void set_last_error(std::uint32_t error) noexcept {
     }
 }
 
+std::int32_t &crt_error() noexcept {
+    auto *thread = guest::ThreadContext::current();
+    return thread ? thread->crt_error() : native_state().fallback_crt_error;
+}
+
 Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
     register_clock_services(registry_);
     register_critical_services(registry_);
@@ -87,6 +93,7 @@ Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
     register_slist_services(registry_);
     register_loader_services(registry_);
     register_crt_streams(registry_);
+    register_crt_heap(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",

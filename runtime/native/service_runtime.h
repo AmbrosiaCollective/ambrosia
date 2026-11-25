@@ -1,5 +1,6 @@
 #pragma once
 #include "critical_sections.h"
+#include "crt_heap.h"
 #include "crt_lifecycle.h"
 #include "crt_streams.h"
 #include "fls_slots.h"
@@ -9,6 +10,7 @@
 namespace ambrosia::services {
 std::uint32_t get_last_error() noexcept;
 void set_last_error(std::uint32_t error) noexcept;
+std::int32_t &crt_error() noexcept;
 
 class Runtime {
   public:
@@ -35,12 +37,17 @@ class Runtime {
         return streams_;
     }
 
+    CrtHeap &heap() {
+        return heap_;
+    }
+
   private:
     MemoryServices memory_;
     CriticalSections critical_sections_;
     FlsSlots fls_;
     OnExitTables on_exit_;
     StandardStreams streams_;
+    CrtHeap heap_;
     ImportRegistry registry_;
 };
 
