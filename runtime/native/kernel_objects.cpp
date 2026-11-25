@@ -2,7 +2,6 @@
 #include "event_signal.h"
 #include <chrono>
 #include <condition_variable>
-#include <limits>
 #include <stdexcept>
 
 namespace ambrosia::services {
@@ -60,8 +59,9 @@ class EventObject final : public WaitableObject {
 };
 } // namespace
 
-KernelObjects::KernelObjects(std::size_t limit) : limit_(limit) {
-    if (limit > 4096) {
+KernelObjects::KernelObjects(std::size_t limit, std::shared_ptr<HandleIds> ids)
+    : ids_(std::move(ids)), limit_(limit) {
+    if (limit > 4096 || !ids_) {
         throw std::invalid_argument("kernel handle limit exceeds the runtime budget");
     }
 }
@@ -72,7 +72,7 @@ ObjectResult KernelObjects::create_event(bool manual_reset, bool initial_state,
         return {0, 123};
     }
     const std::lock_guard guard(mutex_);
-    if (handles_.size() >= limit_ || next_handle_ > std::numeric_limits<std::uintptr_t>::max() - 4) {
+    if (handles_.size() >= limit_) {
         return {0, 8};
     }
     std::shared_ptr<WaitableObject> object;
@@ -99,7 +99,10 @@ ObjectResult KernelObjects::create_event(bool manual_reset, bool initial_state,
         }
         object = std::make_shared<EventObject>(manual_reset, initial_state);
     }
-    const auto handle = next_handle_;
+    const auto handle = ids_->allocate();
+    if (!handle) {
+        return {0, 8};
+    }
     handles_.emplace(handle, object);
     try {
         if (name) {
@@ -112,7 +115,6 @@ ObjectResult KernelObjects::create_event(bool manual_reset, bool initial_state,
         handles_.erase(handle);
         throw;
     }
-    next_handle_ += 4;
     return {handle, error};
 }
 

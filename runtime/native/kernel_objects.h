@@ -1,4 +1,5 @@
 #pragma once
+#include "handle_ids.h"
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -31,7 +32,8 @@ class WaitableObject {
 
 class KernelObjects {
   public:
-    explicit KernelObjects(std::size_t limit = 4096);
+    explicit KernelObjects(std::size_t limit = 4096,
+                           std::shared_ptr<HandleIds> ids = std::make_shared<HandleIds>());
     ObjectResult create_event(bool manual_reset, bool initial_state,
                               const std::optional<std::u16string> &name = std::nullopt);
     std::uint32_t set_event(std::uintptr_t handle);
@@ -44,7 +46,7 @@ class KernelObjects {
     mutable std::mutex mutex_;
     std::map<std::uintptr_t, std::shared_ptr<WaitableObject>> handles_;
     std::map<std::u16string, std::weak_ptr<WaitableObject>> names_;
-    std::uintptr_t next_handle_ = 4;
+    std::shared_ptr<HandleIds> ids_;
     std::size_t limit_;
     std::size_t name_bytes_ = 0;
 };
