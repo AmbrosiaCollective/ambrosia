@@ -613,8 +613,9 @@ those properties. The Linux host adapter supports this alignment; Windows/macOS
 coverage remains unverified.
 
 Diagnostic --boot-memory selects a 2 GiB private allowance alongside 48 GiB of
-no-access windows. It grants no OS resources. Its separate proposed boot-memory
-sandbox raises the data/RSS watchdog bounds to 2 GiB and requires explicit approval
-before use; the previously approved sparse profile remains at 512 MiB. Tiny
+no-access windows. It grants no OS resources. Its separate approved boot-memory
+sandbox raises the data/RSS watchdog bounds to 2 GiB; the earlier approved sparse
+profile remains at 512 MiB. Tiny
 regression tests still use the original strict profile. Successful fixtures are
-not evidence that the actual large committed allocation or the menu works.
+not evidence of the menu. Actual diagnostic runs now accept the committed block
+and stop at semaphore creation; GPU initialization/rendering remain unverified.

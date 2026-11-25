@@ -71,6 +71,12 @@ branch settings; these repository files alone do not enforce permissions.
   Fail-closed memory/mapping checks precede code. Ordinary tiny tests still use
   the original strict profile. No GPU/display/thread or larger writable-memory
   allowance is implied; never escalate test execution.
+- Task062's boot-memory profile is also explicitly approved: outer-workspace
+  run_boot_memory_isolated.py and isolation_boot_memory_bootstrap.py retain all
+  sparse profile restrictions with 64 GiB virtual and 2 GiB data/sampled-RSS
+  limits, not a hard RSS cap. It is for the measured committed XMem boot path;
+  fail-closed checks precede code. No GPU/display/process/thread or higher-memory
+  permission is implied. Tiny regression checks retain the original strict profile.
 
 ## Before you guess, look
 
