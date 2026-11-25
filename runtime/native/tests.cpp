@@ -340,6 +340,7 @@ extern "C" int ambrosia_native_tests() {
         trace_configuration_checks();
         clock_service_checks();
         crt_time_checks();
+        uptime_checks();
         critical_section_checks();
         fls_checks();
         tib_checks();

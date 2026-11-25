@@ -1,5 +1,6 @@
 #include "clock_services.h"
 #include "service_runtime.h"
+#include "startup_trace.h"
 #include <cerrno>
 #include <cstring>
 
@@ -17,6 +18,22 @@ void AMBROSIA_GUEST_ABI system_filetime(void *output) noexcept {
     } catch (...) {
         set_last_error(error_invalid_function);
     }
+}
+
+std::uint64_t AMBROSIA_GUEST_ABI tick_count64() noexcept {
+    const auto saved_error = errno;
+    try {
+        const auto value = host::uptime_milliseconds();
+        errno = saved_error;
+        return value;
+    } catch (...) {
+        errno = saved_error;
+        diagnostics::stop_trace("system uptime is unavailable", 78);
+    }
+}
+
+std::uint32_t AMBROSIA_GUEST_ABI tick_count32() noexcept {
+    return static_cast<std::uint32_t>(tick_count64());
 }
 
 std::int32_t AMBROSIA_GUEST_ABI query_counter(void *output) noexcept {
@@ -100,6 +117,8 @@ void register_clock_services(ImportRegistry &registry) {
     }
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-sysinfo-l1-1-0.dll"}) {
         registry.add(module, "GetSystemTimeAsFileTime", reinterpret_cast<std::uintptr_t>(&system_filetime));
+        registry.add(module, "GetTickCount64", reinterpret_cast<std::uintptr_t>(&tick_count64));
+        registry.add(module, "GetTickCount", reinterpret_cast<std::uintptr_t>(&tick_count32));
     }
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-profile-l1-1-0.dll"}) {
         registry.add(module, "QueryPerformanceCounter", reinterpret_cast<std::uintptr_t>(&query_counter));

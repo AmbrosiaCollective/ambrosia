@@ -1,5 +1,6 @@
 #include "host.h"
 #include <chrono>
+#include <limits>
 #include <stdexcept>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -7,6 +8,7 @@
 #include <windows.h>
 #elif defined(__linux__)
 #include <sys/syscall.h>
+#include <time.h>
 #include <unistd.h>
 #else
 #include <unistd.h>
@@ -29,6 +31,34 @@ std::uint64_t utc_filetime() {
     using FileTicks = std::chrono::duration<std::int64_t, std::ratio<1, 10000000>>;
     const auto elapsed = std::chrono::system_clock::now().time_since_epoch();
     return filetime_from_unix_ticks(std::chrono::duration_cast<FileTicks>(elapsed).count());
+}
+
+std::uint64_t uptime_from_parts(std::int64_t seconds, std::int64_t nanoseconds) {
+    if (seconds < 0 || nanoseconds < 0 || nanoseconds >= 1000000000) {
+        throw std::range_error("invalid system uptime clock value");
+    }
+    const auto fraction = static_cast<std::uint64_t>(nanoseconds) / 1000000;
+    const auto whole = static_cast<std::uint64_t>(seconds);
+    if (whole > (std::numeric_limits<std::uint64_t>::max() - fraction) / 1000) {
+        throw std::range_error("system uptime exceeds millisecond representation");
+    }
+    return whole * 1000 + fraction;
+}
+
+std::uint64_t uptime_milliseconds() {
+#ifdef _WIN32
+    return GetTickCount64();
+#elif defined(__linux__)
+    timespec value{};
+    // Unlike steady_clock/CLOCK_MONOTONIC, BOOTTIME includes suspend. Guest
+    // uptime is system-relative, never an offset from runtime construction.
+    if (clock_gettime(CLOCK_BOOTTIME, &value)) {
+        throw std::runtime_error("native boot-time clock is unavailable");
+    }
+    return uptime_from_parts(value.tv_sec, value.tv_nsec);
+#else
+    throw std::runtime_error("native system-uptime adapter is unsupported on this host");
+#endif
 }
 
 std::int64_t performance_counter() noexcept {

@@ -928,3 +928,18 @@ coverage. Random outputs are allowed to be zero or repeated; these checks do
 not claim a statistical entropy audit. An injected source failure and null probe
 stop, while the same valid normal-source probe returns. Both compilers pass
 961 checks. Actual startup now reaches GetTickCount64. No window/menu is verified.
+
+## System uptime
+
+GetTickCount64 and GetTickCount read a dedicated native boot-time clock, not a
+wall clock or runtime/process-relative timer. Linux uses CLOCK_BOOTTIME so system
+suspend contributes to elapsed uptime; the Windows host boundary delegates its
+native API. Millisecond conversion validates seconds/nanoseconds and rejects
+overflow. The 32-bit facade truncates modularly; both calls preserve host errno
+and guest error state. Host clock failure/unsupported hosts stop explicitly.
+
+Synthetic tests cover unit boundaries, malformed/overflow values, uptime beyond
+32 bits, monotonic native-clock bounds, aliases/errors and an original PE import.
+Both compilers pass 969 checks. Suspend/resume and a live 32-bit wrap were not
+forced; Windows compilation remains unverified. Actual startup now reaches
+executable TLS cleanup registration. No window or interactive menu is verified.

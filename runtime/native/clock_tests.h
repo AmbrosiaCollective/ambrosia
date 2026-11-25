@@ -143,3 +143,62 @@ void crt_time_checks() {
           "an original PE _time64 import returns full UTC epoch seconds in RAX");
     errno = saved_error;
 }
+
+void uptime_checks() {
+    using namespace ambrosia;
+    using namespace services;
+    check(host::uptime_from_parts(0, 0) == 0 && host::uptime_from_parts(1, 999999) == 1000 &&
+              host::uptime_from_parts(1, 1000000) == 1001 && host::uptime_from_parts(1, 999999999) == 1999,
+          "uptime conversion counts full milliseconds and truncates submillisecond fractions");
+    check(runtime_rejected([] { (void)host::uptime_from_parts(-1, 0); }) &&
+              runtime_rejected([] { (void)host::uptime_from_parts(0, -1); }) &&
+              runtime_rejected([] { (void)host::uptime_from_parts(0, 1000000000); }) &&
+              runtime_rejected([] { (void)host::uptime_from_parts(INT64_MAX, 0); }),
+          "negative, malformed and overflowing uptime clock values fail instead of wrapping");
+    check(host::uptime_from_parts(4294967, 295000000) == UINT32_MAX &&
+              host::uptime_from_parts(4294967, 296000000) == std::uint64_t(UINT32_MAX) + 1,
+          "host uptime retains milliseconds beyond the 32-bit forty-nine-day boundary");
+    Runtime runtime;
+    Scope scope(runtime);
+    using Tick64 = std::uint64_t(AMBROSIA_GUEST_ABI *)();
+    using Tick32 = std::uint32_t(AMBROSIA_GUEST_ABI *)();
+    const auto address =
+        runtime.resolve(service_symbol("GetTickCount64", "api-ms-win-core-sysinfo-l1-1-0.dll"));
+    const auto tick64 = reinterpret_cast<Tick64>(address);
+    const auto tick32 =
+        reinterpret_cast<Tick32>(runtime.resolve(service_symbol("GetTickCount", "kernel32.dll")));
+    check(address && address == runtime.resolve(service_symbol("GetTickCount64", "kernel32.dll")) &&
+              address == runtime.resolve(service_symbol("GetTickCount64", "kernelbase.dll")) &&
+              reinterpret_cast<std::uintptr_t>(tick32) ==
+                  runtime.resolve(service_symbol("GetTickCount", "api-ms-win-core-sysinfo-l1-1-0.dll")),
+          "uptime APIs expose distinct Windows-width facades through kernel and sysinfo aliases");
+    const auto saved_error = errno;
+    errno = E2BIG;
+    crt_error() = 17;
+    set_last_error(83);
+    const auto before = host::uptime_milliseconds();
+    const auto first = tick64();
+    const auto narrow = tick32();
+    const auto second = tick64();
+    const auto after = host::uptime_milliseconds();
+    check(first >= before && second >= first && after >= second,
+          "guest uptime follows the native boot-time clock monotonically rather than starting at process "
+          "launch");
+    check(static_cast<std::uint32_t>(std::uint64_t(narrow) - static_cast<std::uint32_t>(first)) <=
+              after - before,
+          "32-bit uptime follows the same millisecond clock with modular-width arithmetic");
+    check(errno == E2BIG && crt_error() == 17 && get_last_error() == 83,
+          "both uptime calls preserve native errno and guest error state");
+    auto caller = fixture();
+    text(caller, 0x440, "kernel32.dll");
+    text(caller, 0x4a2, "GetTickCount64");
+    constexpr unsigned char code[] = {0x48, 0x83, 0xec, 0x28, 0xff, 0x15, 0,   0,
+                                      0,    0,    0x48, 0x83, 0xc4, 0x28, 0xc3};
+    std::memcpy(caller.data() + 0x200, code, sizeof(code));
+    put<std::uint32_t>(caller, 0x206, 0x2080 - (0x1000 + 10));
+    auto image = pe::Image::load(caller, [&](const auto &symbol) { return runtime.resolve(symbol); });
+    const auto imported = image.run_bootstrap();
+    check(imported >= first && imported <= host::uptime_milliseconds(),
+          "an original PE GetTickCount64 import returns system uptime in full-width RAX");
+    errno = saved_error;
+}
