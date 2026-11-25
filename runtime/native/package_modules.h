@@ -22,6 +22,8 @@ class PackageModules {
   public:
     explicit PackageModules(const std::filesystem::path &root, PackageLimits limits = {});
     std::optional<std::vector<std::byte>> read(const std::string &module);
+    // Indexed source metadata only; this never opens or reads module contents.
+    std::optional<std::filesystem::path> source_path(const std::string &module) const;
 
     std::size_t files_read() const {
         return files_read_;

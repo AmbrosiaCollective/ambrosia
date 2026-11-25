@@ -57,6 +57,7 @@ struct ModuleGraph::State {
     struct Node {
         std::vector<std::byte> source;
         std::optional<Image> image;
+        std::optional<std::filesystem::path> path;
         std::set<std::string> dependencies;
         bool loading = false;
     };
@@ -67,6 +68,7 @@ struct ModuleGraph::State {
     Resolver external;
     Resolver diagnostic_stop;
     ModuleProvider provider;
+    ModulePathProvider source_paths;
     ModuleLimits limits;
     std::thread::id owner = std::this_thread::get_id();
     std::size_t source_bytes = 0;
@@ -75,12 +77,21 @@ struct ModuleGraph::State {
     bool active = false;
     bool failed = false;
 
-    void register_source(std::string name, std::span<const std::byte> source) {
+    void register_source(std::string name, std::span<const std::byte> source,
+                         std::optional<std::filesystem::path> path = std::nullopt) {
+        if (path) {
+            const auto text = path->u16string();
+            if (!path->is_absolute() || text.empty() || text.size() > 32767 ||
+                text.find(char16_t{}) != std::u16string::npos) {
+                throw std::runtime_error("module source path must be an absolute bounded path");
+            }
+        }
         if (modules.size() >= 64 || source.size() > limits.source_bytes - source_bytes ||
             modules.contains(name)) {
             throw std::runtime_error("module registration is ambiguous or exceeds bootstrap budget");
         }
         Node node;
+        node.path = std::move(path);
         node.source.assign(source.begin(), source.end());
         modules.emplace(std::move(name), std::move(node));
         source_bytes += source.size();
@@ -147,7 +158,7 @@ struct ModuleGraph::State {
             if (!bytes) {
                 return 0;
             }
-            register_source(module, *bytes);
+            register_source(module, *bytes, source_paths ? source_paths(module) : std::nullopt);
         }
         if (!allow_load && !modules.at(module).image) {
             return 0;
@@ -202,7 +213,7 @@ struct ModuleGraph::State {
 };
 
 ModuleGraph::ModuleGraph(Resolver external, ModuleProvider provider, ModuleLimits limits,
-                         Resolver diagnostic_stop)
+                         Resolver diagnostic_stop, ModulePathProvider source_paths)
     : state_(std::make_shared<State>()) {
     if (!limits.source_bytes || !limits.mapped_bytes || !limits.image.file_bytes ||
         !limits.image.mapped_bytes) {
@@ -215,14 +226,16 @@ ModuleGraph::ModuleGraph(Resolver external, ModuleProvider provider, ModuleLimit
     state_->diagnostic_stop = std::move(diagnostic_stop);
     state_->external = std::move(external);
     state_->provider = std::move(provider);
+    state_->source_paths = std::move(source_paths);
 }
 
-void ModuleGraph::add(std::string name, std::span<const std::byte> source) {
+void ModuleGraph::add(std::string name, std::span<const std::byte> source,
+                      std::optional<std::filesystem::path> path) {
     state_->require_owner();
     if (!state_->root.empty()) {
         throw std::runtime_error("module registration is sealed");
     }
-    state_->register_source(module_key(std::move(name)), source);
+    state_->register_source(module_key(std::move(name)), source, std::move(path));
 }
 
 void ModuleGraph::load(std::string root) {
@@ -302,6 +315,23 @@ std::uintptr_t ModuleGraph::loaded_module(std::optional<std::string> name) const
         return 0;
     }
     return reinterpret_cast<std::uintptr_t>(found->second.image->base());
+}
+
+std::optional<std::filesystem::path> ModuleGraph::loaded_module_path(std::uintptr_t module) const {
+    state_->require_owner();
+    if (!module) {
+        module = loaded_module();
+    }
+    for (const auto &[name, node] : state_->modules) {
+        (void)name;
+        if (node.image && reinterpret_cast<std::uintptr_t>(node.image->base()) == module) {
+            if (!node.path) {
+                throw std::runtime_error("mapped module has no registered source origin");
+            }
+            return node.path;
+        }
+    }
+    return std::nullopt;
 }
 
 std::optional<std::uintptr_t> ModuleGraph::loaded_export(std::uintptr_t module, const Import &symbol) const {

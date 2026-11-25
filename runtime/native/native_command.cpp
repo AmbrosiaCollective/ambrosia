@@ -158,10 +158,10 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         }
         pe::ModuleGraph graph([&](const auto &symbol) { return service_runtime.resolve(symbol); },
                               [&](const auto &name) { return package.read(name); }, module_limits,
-                              diagnostic_stop);
+                              diagnostic_stop, [&](const auto &name) { return package.source_path(name); });
         const auto filename = paths.image.filename().u8string();
         const std::string root(reinterpret_cast<const char *>(filename.data()), filename.size());
-        graph.add(root, bytes);
+        graph.add(root, bytes, paths.image);
         // Registration owns a copy. Drop the file buffer before mapping large images.
         std::vector<std::byte>().swap(bytes);
         graph.load(root);

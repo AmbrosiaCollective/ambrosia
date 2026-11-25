@@ -28,6 +28,10 @@ void package_checks() {
     PackageModules files(package);
     check(files.files_read() == 0 && files.bytes_read() == 0, "package enumeration reads no file content");
     check(!files.read("missing.dll"), "missing package module is explicit");
+    check(files.source_path("PROVIDER.dll") == std::filesystem::canonical(package / "PrOvIdEr.DLL") &&
+              !files.source_path("missing.dll") && files.files_read() == 0 &&
+              runtime_rejected([&] { (void)files.source_path("../provider.dll"); }),
+          "package source paths retain case without reading content and reject traversal");
     auto loaded = files.read("PROVIDER.dll");
     check(loaded && *loaded == provider_bytes, "package lookup uses actual path with case-folded basename");
     check(files.files_read() == 1 && files.bytes_read() == provider_bytes.size(),
@@ -70,11 +74,17 @@ void package_checks() {
     text(caller, 0x440, "provider.dll");
     text(caller, 0x4a2, "named_value");
     PackageModules lazy(package);
-    ambrosia::pe::ModuleGraph graph({}, [&](const auto &name) { return lazy.read(name); });
+    ambrosia::pe::ModuleGraph graph(
+        {}, [&](const auto &name) { return lazy.read(name); }, {}, {},
+        [&](const auto &name) { return lazy.source_path(name); });
     graph.add("app.exe", caller);
     graph.load("app.exe");
     check(graph.initialization_order() == std::vector<std::string>{"provider.dll", "app.exe"},
           "lazy provider dependency enters initialization order");
+    check(graph.loaded_module_path(graph.loaded_module("provider.dll")) ==
+                  std::filesystem::canonical(package / "PrOvIdEr.DLL") &&
+              lazy.files_read() == 1,
+          "lazy module loading records its indexed origin without an additional content read");
     const auto statistics = graph.statistics();
     check(statistics.modules == 2 && statistics.imports == 1 && lazy.files_read() == 1,
           "lazy graph reads one dependency and ignores invalid unused DLL");

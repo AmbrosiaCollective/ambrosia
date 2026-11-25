@@ -1,9 +1,12 @@
 #pragma once
 #include "pe_image.h"
+#include <filesystem>
 #include <optional>
 
 namespace ambrosia::pe {
 using ModuleProvider = std::function<std::optional<std::vector<std::byte>>(const std::string &)>;
+
+using ModulePathProvider = std::function<std::optional<std::filesystem::path>(const std::string &)>;
 
 struct ModuleStatistics {
     std::size_t modules = 0;
@@ -34,8 +37,9 @@ class ModuleGraph {
   public:
     class Execution;
     explicit ModuleGraph(Resolver external = {}, ModuleProvider provider = {}, ModuleLimits limits = {},
-                         Resolver diagnostic_stop = {});
-    void add(std::string name, std::span<const std::byte> source);
+                         Resolver diagnostic_stop = {}, ModulePathProvider source_paths = {});
+    void add(std::string name, std::span<const std::byte> source,
+             std::optional<std::filesystem::path> path = std::nullopt);
     void load(std::string root);
     std::uintptr_t export_address(std::string module, const Import &symbol);
     std::vector<std::string> initialization_order() const;
@@ -43,6 +47,7 @@ class ModuleGraph {
     std::vector<ModuleRange> diagnostic_ranges() const;
     std::uintptr_t module_base_for_address(std::uintptr_t address) const;
     std::uintptr_t loaded_module(std::optional<std::string> name = std::nullopt) const;
+    std::optional<std::filesystem::path> loaded_module_path(std::uintptr_t module = 0) const;
     std::optional<std::uintptr_t> loaded_export(std::uintptr_t module, const Import &symbol) const;
     bool disable_thread_notifications(std::uintptr_t module);
     std::optional<bool> thread_notifications_enabled(std::uintptr_t module) const;

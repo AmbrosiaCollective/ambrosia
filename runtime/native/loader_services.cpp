@@ -3,6 +3,8 @@
 #include "module_graph.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
+#include <algorithm>
+#include <cerrno>
 #include <cstring>
 #include <stdexcept>
 
@@ -57,6 +59,80 @@ void *AMBROSIA_GUEST_ABI module_handle_w(const char16_t *name) noexcept {
         set_last_error(123);
         return nullptr;
     }
+}
+
+template <class Character>
+std::uint32_t module_filename(void *module, Character *output, std::uint32_t size) noexcept {
+    const auto saved_error = errno;
+
+    // Every returning path restores native errno, including conversion/allocation
+    // failures. Guest Win32 errors remain independent of CRT/native errno.
+    struct Restore {
+        int value;
+
+        ~Restore() {
+            errno = value;
+        }
+    } restore{saved_error};
+
+    try {
+        auto *modules = current_modules();
+        auto *runtime = current_runtime();
+        if (!modules || !runtime) {
+            diagnostics::stop_trace("module filename queries require a scoped runtime and graph", 78);
+        }
+        if (!size) {
+            set_last_error(122);
+            return 0;
+        }
+        if (!output) {
+            diagnostics::stop_trace("module filename query requires a destination buffer", 78);
+        }
+        const auto handle = reinterpret_cast<std::uintptr_t>(module);
+        const auto path = modules->loaded_module_path(handle);
+        if (!path) {
+            if (handle && runtime->native_modules().module_base_for_address(handle) == handle) {
+                diagnostics::stop_trace("native service facades have no file-backed source path", 78);
+            }
+            set_last_error(126);
+            return 0;
+        }
+        const auto name = [&] {
+            if constexpr (sizeof(Character) == 2) {
+                return path->u16string();
+            } else {
+                const auto utf8 = path->u8string();
+                return std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size());
+            }
+        }();
+        const auto copied = std::min(name.size(), static_cast<std::size_t>(size - 1));
+        std::memcpy(output, name.data(), copied * sizeof(Character));
+        const Character terminator = 0;
+        std::memcpy(reinterpret_cast<std::byte *>(output) + copied * sizeof(Character), &terminator,
+                    sizeof(terminator));
+        if (name.size() >= size) {
+            set_last_error(122); // Modern Windows truncates, terminates and returns capacity.
+            return size;
+        }
+        return static_cast<std::uint32_t>(name.size());
+    } catch (const std::bad_alloc &) {
+        set_last_error(8);
+        return 0;
+    } catch (const std::filesystem::filesystem_error &) {
+        set_last_error(1113);
+        return 0;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
+std::uint32_t AMBROSIA_GUEST_ABI module_filename_w(void *module, char16_t *output,
+                                                   std::uint32_t size) noexcept {
+    return module_filename(module, output, size);
+}
+
+std::uint32_t AMBROSIA_GUEST_ABI module_filename_a(void *module, char *output, std::uint32_t size) noexcept {
+    return module_filename(module, output, size);
 }
 
 void *AMBROSIA_GUEST_ABI procedure_address(void *module, const char *function) noexcept {
@@ -153,6 +229,8 @@ void register_loader_services(ImportRegistry &registry) {
                      reinterpret_cast<std::uintptr_t>(&disable_thread_calls));
         registry.add(module, "GetModuleHandleA", reinterpret_cast<std::uintptr_t>(&module_handle_a));
         registry.add(module, "GetModuleHandleW", reinterpret_cast<std::uintptr_t>(&module_handle_w));
+        registry.add(module, "GetModuleFileNameW", reinterpret_cast<std::uintptr_t>(&module_filename_w));
+        registry.add(module, "GetModuleFileNameA", reinterpret_cast<std::uintptr_t>(&module_filename_a));
         registry.add(module, "GetProcAddress", reinterpret_cast<std::uintptr_t>(&procedure_address));
     }
 }

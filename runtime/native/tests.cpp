@@ -172,6 +172,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "crt_exit_tests.h"
 #include "context_locale_tests.h"
 #include "module_handle_tests.h"
+#include "module_path_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -362,6 +363,7 @@ extern "C" int ambrosia_native_tests() {
         executable_tls_exit_checks();
         context_locale_checks();
         module_handle_checks();
+        module_path_checks();
         native_module_checks();
         event_checks();
         registry_checks();

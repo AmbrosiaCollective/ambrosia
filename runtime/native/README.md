@@ -1002,3 +1002,26 @@ contention. Constant-success control fails three intended assertions. Offline
 CMake links both targets. Host-thread wakeup/contention and queued-writer scheduling
 remain untested under the thread-blocking profile. Actual startup now reaches
 GetModuleFileNameW; no window or interactive menu is verified.
+
+## Recorded module source origins
+
+Mapped modules may carry an explicit absolute source path. The native CLI records
+the selected executable's canonical path; lazy package loads retain their indexed
+source filename case through an optional metadata provider. Origin queries neither
+load source-only images nor reread DLL contents. Pure in-memory graphs remain
+supported but cannot invent a file-backed origin. Source metadata is independent
+of guest-writable argv/program-name/command-line buffers.
+
+GetModuleFileNameA/W resolve the root or exact loaded module bases and copy that
+origin. Capacities/counts use UTF-8 bytes or Windows UTF-16 units under the existing
+bootstrap policy. Truncation terminates, returns capacity and sets error 122;
+unknown/interior handles report 126 without writing a filename. Zero capacity
+returns zero/error 122. Successful calls preserve native/CRT errno and existing
+LastError. Native service facades have no file-backed source and stop explicitly.
+
+The path spelling remains the dynamically selected native source path. A Windows
+virtual drive namespace, legacy ANSI pages and guest filesystem operations are
+separate compatibility work. Synthetic checks cover Unicode/non-BMP counts,
+source case, loaded-only lookup, no-extra-read behavior, buffers/guards and a PE
+query. Both compilers pass 1022 checks. Actual startup now reaches LoadLibraryExW;
+no window or interactive menu is verified.

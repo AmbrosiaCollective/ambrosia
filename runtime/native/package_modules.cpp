@@ -88,6 +88,14 @@ PackageModules::PackageModules(const std::filesystem::path &root, PackageLimits 
     }
 }
 
+std::optional<std::filesystem::path> PackageModules::source_path(const std::string &module) const {
+    if (!valid_basename(module)) {
+        throw std::runtime_error("package module path request must be a basename");
+    }
+    const auto found = paths_.find(ascii_key(module));
+    return found == paths_.end() ? std::nullopt : std::optional(found->second);
+}
+
 std::optional<std::vector<std::byte>> PackageModules::read(const std::string &module) {
     if (!valid_basename(module)) {
         throw std::runtime_error("package module request must be a basename");
