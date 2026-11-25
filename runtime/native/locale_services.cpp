@@ -29,20 +29,43 @@ void AMBROSIA_GUEST_ABI unlock_locales() noexcept {
     }
 }
 
+CrtLocale &required_locale() noexcept {
+    try {
+        return required_runtime().locale();
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
+std::int32_t AMBROSIA_GUEST_ABI configure_thread_locale(std::int32_t mode) noexcept {
+    try {
+        const auto previous = required_runtime().configure_thread_locale(mode);
+        if (previous == -1) {
+            crt_error() = 22;
+        }
+        return previous;
+    } catch (const std::bad_alloc &) {
+        crt_error() = 12;
+        return -1;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::uint32_t AMBROSIA_GUEST_ABI locale_codepage() noexcept {
-    return required_runtime().locale().codepage();
+    return required_locale().codepage();
 }
 
 std::int32_t AMBROSIA_GUEST_ABI multibyte_length() noexcept {
-    return required_runtime().locale().max_multibyte_length();
+    return required_locale().max_multibyte_length();
 }
 
 char16_t **AMBROSIA_GUEST_ABI locale_names() noexcept {
-    return required_runtime().locale().locale_names();
+    return required_locale().locale_names();
 }
 
 const std::uint16_t *AMBROSIA_GUEST_ABI classification() noexcept {
-    return required_runtime().locale().classification();
+    return required_locale().classification();
 }
 
 char *AMBROSIA_GUEST_ABI select_locale(std::int32_t category, const char *requested) noexcept {
@@ -73,6 +96,8 @@ void register_locale_services(ImportRegistry &registry) {
         registry.add(module, "___mb_cur_max_func", reinterpret_cast<std::uintptr_t>(&multibyte_length));
         registry.add(module, "___lc_locale_name_func", reinterpret_cast<std::uintptr_t>(&locale_names));
         registry.add(module, "__pctype_func", reinterpret_cast<std::uintptr_t>(&classification));
+        registry.add(module, "_configthreadlocale",
+                     reinterpret_cast<std::uintptr_t>(&configure_thread_locale));
     }
 }
 } // namespace ambrosia::services

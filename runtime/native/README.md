@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 535 checks under a
+as errors. Each build's native shared-object entry passed 549 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,9 +154,9 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `_configthreadlocale`, after passing owned CRT exit registration,
-startup state, PC-to-image lookup and the earlier TEB access. This occurs during module initialization; the game's
-main bootstrap entry and menu have not been reached. The read-only package and
+and now stop at `GetModuleHandleW`. Stage traces verify module initialization
+completes and the executable PE entry runs. WinMain/the main game loop, graphics
+and the interactive menu remain unverified. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
 
@@ -445,3 +445,21 @@ original PE fixture verifies attach, entry, cleanup-with-TLS and detach ordering
 Runtime destruction does not run guest callbacks after mappings disappear. Fatal
 diagnostic stops terminate immediately. exit/quick_exit/_cexit, stdio flushing
 and full process termination remain unresolved; registration does not claim them.
+
+## Context-local CRT locale mode
+
+_configthreadlocale supports query0, enable1 and disable2 with previous-mode
+returns. New guest contexts default to shared locale mode. Enabled contexts own
+independent C locale/classification snapshots; disabling selects the shared state.
+Invalid flags preserve the mode and fail EINVAL. Configuration requires an active
+guest context. Process-global default flags and non-C locale state remain
+unsupported; the mode contract still needs the deferred pinned CRT refresh.
+
+A private instance of the existing FLS owner handles storage and context-exit
+cleanup without consuming guest FLS indices. Its retained state safely outlives
+an earlier facade destruction. No host libc locale changes or worker-thread
+launches are involved; independent contexts were tested sequentially.
+
+Diagnostic traces mark module initialization, executable entry and returned-entry
+cleanup separately. An original PE fixture checks these stages against real TLS/
+entry/cleanup/detach order. A stage marker is not interactive-menu evidence.

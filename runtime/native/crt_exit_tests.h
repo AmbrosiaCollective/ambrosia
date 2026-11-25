@@ -113,6 +113,20 @@ void crt_exit_checks() {
     check(ambrosia::host::guest_segment_base() == original_gs,
           "CLI cleanup restores native GS after guest callbacks and detach");
 
+    const std::array<std::filesystem::path, 2> trace_arguments{"--trace-startup", path};
+    std::ostringstream trace_output, trace_errors;
+    exit_order.clear();
+    exit_context_valid = true;
+    const auto trace_code = ambrosia::run_native_command(trace_arguments, trace_output, trace_errors);
+    const auto messages = trace_errors.str();
+    const auto module_stage = messages.find("TRACE stage=module-initialization");
+    const auto entry_stage = messages.find("TRACE stage=executable-entry");
+    const auto cleanup_stage = messages.find("TRACE stage=returned-entry-cleanup");
+    check(trace_code == 3 && module_stage != std::string::npos && entry_stage != std::string::npos &&
+              cleanup_stage != std::string::npos && module_stage < entry_stage &&
+              entry_stage < cleanup_stage && exit_order == "AECD" && exit_context_valid,
+          "diagnostic stage evidence matches actual PE entry and guest cleanup lifecycle order");
+
     ambrosia::pe::ModuleGraph graph(resolve);
     graph.add("app.exe", fixture());
     graph.load("app.exe");

@@ -4,6 +4,7 @@
 #include "crt_heap.h"
 #include "crt_lifecycle.h"
 #include "crt_locale.h"
+#include "crt_locales.h"
 #include "crt_startup.h"
 #include "crt_streams.h"
 #include "fls_slots.h"
@@ -49,7 +50,11 @@ class Runtime {
     void unlock_locales();
 
     CrtLocale &locale() {
-        return locale_;
+        return locales_.current();
+    }
+
+    std::int32_t configure_thread_locale(std::int32_t mode) {
+        return locales_.configure(mode);
     }
 
     CrtStartup &startup() {
@@ -74,7 +79,7 @@ class Runtime {
     CriticalSections locale_sections_;
     alignas(8) std::array<std::byte, 40> locale_lock_{};
     PointerCodec pointers_;
-    CrtLocale locale_;
+    CrtLocales locales_;
     CrtStartup startup_;
     ExitCallbacks exit_callbacks_;
     ImportRegistry registry_;
