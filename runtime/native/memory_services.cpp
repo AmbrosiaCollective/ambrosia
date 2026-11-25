@@ -57,18 +57,7 @@ AllocationResult MemoryServices::allocate(void *address, std::size_t bytes, std:
             if (!round_up(bytes, page, rounded)) {
                 return {nullptr, error_invalid_parameter};
             }
-            if (rounded > budget_ - reserved_ || regions_.size() >= 1024) {
-                return {nullptr, error_not_enough_memory};
-            }
-            auto region = std::make_unique<Region>(rounded);
-            auto *base = region->memory.data();
-            if (flags & commit) {
-                region->memory.commit(0, rounded, access_for(protection));
-                std::fill(region->protection.begin(), region->protection.end(), protection);
-            }
-            regions_.emplace(reinterpret_cast<std::uintptr_t>(base), std::move(region));
-            reserved_ += rounded;
-            return {base, 0};
+            return reserve_region(rounded, flags, protection, std::nullopt);
         }
         const auto pointer = reinterpret_cast<std::uintptr_t>(address);
         auto found = regions_.upper_bound(pointer);
@@ -121,6 +110,9 @@ FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t 
                 return {false, error_invalid_address};
             }
             reserved_ -= memory.size();
+            if (found->second->window) {
+                window_reserved_ -= memory.size();
+            }
             regions_.erase(found);
             return {true, 0};
         }
@@ -159,12 +151,35 @@ AllocationResult MemoryServices::reserve_window(std::size_t bytes, std::uint64_t
     if (!bytes || !round_up(bytes, guest_page, rounded)) {
         return {nullptr, error_invalid_parameter};
     }
-    const auto result = allocate(nullptr, rounded, reserve, 1);
-    if (result.address) {
-        auto &region = *regions_.at(reinterpret_cast<std::uintptr_t>(result.address));
-        region.window = WindowInfo{result.address, rounded, attributes, protection};
+    try {
+        return reserve_region(rounded, reserve, 1, WindowInfo{nullptr, rounded, attributes, protection});
+    } catch (...) {
+        return {nullptr, error_not_enough_memory};
     }
-    return result;
+}
+
+AllocationResult MemoryServices::reserve_region(std::size_t bytes, std::uint32_t flags,
+                                                std::uint32_t protection, std::optional<WindowInfo> window) {
+    const auto used = window ? window_reserved_ : reserved_ - window_reserved_;
+    const auto limit = window ? limits_.window_bytes : limits_.private_bytes;
+    if (bytes > limit - used || bytes > limits_.total_bytes - reserved_ || regions_.size() >= 1024) {
+        return {nullptr, error_not_enough_memory};
+    }
+    auto region = std::make_unique<Region>(bytes);
+    auto *base = region->memory.data();
+    if (window) {
+        window->base = base;
+        region->window = window;
+    } else if (flags & commit) {
+        region->memory.commit(0, bytes, access_for(protection));
+        std::fill(region->protection.begin(), region->protection.end(), protection);
+    }
+    regions_.emplace(reinterpret_cast<std::uintptr_t>(base), std::move(region));
+    reserved_ += bytes;
+    if (window) {
+        window_reserved_ += bytes;
+    }
+    return {base, 0};
 }
 
 std::optional<WindowInfo> MemoryServices::window(const void *address) const {

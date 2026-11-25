@@ -92,7 +92,10 @@ std::int32_t &crt_error() noexcept {
 }
 
 Runtime::Runtime(std::size_t memory_budget)
-    : memory_(memory_budget), pointers_(host::random_pointer_secret()), objects_(4096, handle_ids_),
+    : Runtime(MemoryLimits{memory_budget, memory_budget, memory_budget}) {}
+
+Runtime::Runtime(MemoryLimits memory_limits)
+    : memory_(memory_limits), pointers_(host::random_pointer_secret()), objects_(4096, handle_ids_),
       registry_keys_(handle_ids_) {
     const auto locale_error = locale_sections_.initialize(locale_lock_.data(), 0, 0);
     if (locale_error) {

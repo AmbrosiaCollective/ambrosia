@@ -24,6 +24,7 @@ std::int32_t &crt_error() noexcept;
 class Runtime {
   public:
     explicit Runtime(std::size_t memory_budget = 64 * 1024 * 1024);
+    explicit Runtime(MemoryLimits memory_limits);
     std::uintptr_t resolve(const pe::Import &symbol) const;
 
     bool has_service_module(std::string name) const {

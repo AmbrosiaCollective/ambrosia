@@ -171,6 +171,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "registry_tests.h"
 #include "graphics_memory_tests.h"
 #include "xmem_tests.h"
+#include "memory_budget_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -343,6 +344,7 @@ extern "C" int ambrosia_native_tests() {
         registry_checks();
         graphics_memory_checks();
         xmem_checks();
+        memory_budget_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
@@ -368,14 +370,30 @@ extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
     }
 }
 
-extern "C" int ambrosia_native_trace(const char *image, const char *package) {
+int trace_native_image(const char *image, const char *package, bool sparse_windows) {
     if (!image || !package) {
         return 2;
     }
-    const std::vector<std::filesystem::path> arguments{
-        "--trace-startup", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(image))),
-        "--package", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(package)))};
-    return ambrosia::run_native_command(arguments, std::cout, std::cerr);
+    try {
+        std::vector<std::filesystem::path> arguments{
+            "--trace-startup", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(image))),
+            "--package", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(package)))};
+        if (sparse_windows) {
+            arguments.emplace_back("--sparse-windows");
+        }
+        return ambrosia::run_native_command(arguments, std::cout, std::cerr);
+    } catch (...) {
+        std::cerr << "startup probe argument construction failed\n";
+        return 2;
+    }
+}
+
+extern "C" int ambrosia_native_trace(const char *image, const char *package) {
+    return trace_native_image(image, package, false);
+}
+
+extern "C" int ambrosia_native_trace_sparse(const char *image, const char *package) {
+    return trace_native_image(image, package, true);
 }
 
 extern "C" int ambrosia_native_trace_fixture(unsigned scenario) {

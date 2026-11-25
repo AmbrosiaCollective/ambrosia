@@ -29,9 +29,17 @@ struct WindowInfo {
     std::uint32_t protection = 0;
 };
 
+struct MemoryLimits {
+    std::size_t private_bytes = 64 * 1024 * 1024;
+    std::size_t window_bytes = 64 * 1024 * 1024;
+    std::size_t total_bytes = 64 * 1024 * 1024;
+};
+
 class MemoryServices {
   public:
-    explicit MemoryServices(std::size_t budget = 64 * 1024 * 1024) : budget_(budget) {}
+    explicit MemoryServices(std::size_t budget = 64 * 1024 * 1024) : limits_{budget, budget, budget} {}
+
+    explicit MemoryServices(MemoryLimits limits) : limits_(limits) {}
 
     MemoryServices(const MemoryServices &) = delete;
     MemoryServices &operator=(const MemoryServices &) = delete;
@@ -50,6 +58,9 @@ class MemoryServices {
     }
 
   private:
+    AllocationResult reserve_region(std::size_t bytes, std::uint32_t flags, std::uint32_t protection,
+                                    std::optional<WindowInfo> window);
+
     struct Region {
         host::Mapping memory;
         std::vector<std::uint32_t> protection;
@@ -60,7 +71,8 @@ class MemoryServices {
     };
 
     std::map<std::uintptr_t, std::unique_ptr<Region>> regions_;
-    std::size_t budget_;
+    MemoryLimits limits_;
     std::size_t reserved_ = 0;
+    std::size_t window_reserved_ = 0;
 };
 } // namespace ambrosia::services
