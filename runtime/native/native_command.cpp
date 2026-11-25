@@ -15,20 +15,29 @@ struct Options {
     std::filesystem::path work;
     bool run = false;
     bool trace = false;
+    bool sparse_windows = false;
 };
 
 constexpr const char *usage =
     "ambrosia-host --inspect IMAGE [--package DIR] [--work DIR]\n"
     "              --run-bootstrap IMAGE [--package DIR] [--work DIR]\n"
-    "              --trace-startup IMAGE [--package DIR] [--work DIR]\n"
+    "              --trace-startup IMAGE [--package DIR] [--work DIR] [--sparse-windows]\n"
     "Inspect maps supported PE dependencies without running callbacks.\n"
     "Run-bootstrap supports synthetic PE startup only.\n"
-    "Trace-startup is diagnostic: unsupported calls/faults terminate the process.\n";
+    "Trace-startup is diagnostic: unsupported calls/faults terminate the process.\n"
+    "Sparse-windows allows 48 GiB of no-access reservations; use the approved sparse sandbox.\n";
 
 Options parse_options(std::span<const std::filesystem::path> arguments) {
     Options options;
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const auto &flag = arguments[index];
+        if (flag == "--sparse-windows") {
+            if (options.sparse_windows) {
+                throw std::invalid_argument("duplicate sparse-window option");
+            }
+            options.sparse_windows = true;
+            continue;
+        }
         if (flag != "--inspect" && flag != "--run-bootstrap" && flag != "--trace-startup" &&
             flag != "--package" && flag != "--work") {
             throw std::invalid_argument("unknown bootstrap option");
@@ -60,6 +69,9 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
     if (options.image.empty()) {
         throw std::invalid_argument("choose an image and bootstrap mode");
     }
+    if (options.sparse_windows && !options.trace) {
+        throw std::invalid_argument("sparse-window option requires trace-startup mode");
+    }
     return options;
 }
 } // namespace
@@ -87,7 +99,12 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         host::PackageLimits package_limits;
         package_limits.total_bytes = module_limits.source_bytes - root_bytes;
         host::PackageModules package(paths.package, package_limits);
-        services::Runtime service_runtime;
+        services::MemoryLimits memory_limits;
+        if (options.sparse_windows) {
+            memory_limits.window_bytes = 48ull << 30;
+            memory_limits.total_bytes = memory_limits.window_bytes + memory_limits.private_bytes;
+        }
+        services::Runtime service_runtime(memory_limits);
         service_runtime.startup().bind_image(paths.image);
         std::unique_ptr<diagnostics::ImportStops> stops;
         pe::Resolver diagnostic_stop;

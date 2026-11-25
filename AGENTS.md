@@ -63,6 +63,14 @@ branch settings; these repository files alone do not enforce permissions.
   private diagnostics outside Git. Game execution is authorized; unsupported
   startup requirements must still fail explicitly. GPU access and any weaker
   execution profile require their concrete isolation review before use.
+- Task061's sparse-address profile is explicitly approved for CPU-only native
+  boot: scripts/run_sparse_isolated.py and isolation_sparse_bootstrap.py in the
+  outer workspace retain RO inputs and all home/credential/GPU/network/exec/
+  process/thread restrictions. Limits are 64 GiB virtual space, 512 MiB data, 8 MiB
+  stack, zero locked memory and a sampled 512 MiB RSS watchdog, not a hard RSS cap.
+  Fail-closed memory/mapping checks precede code. Ordinary tiny tests still use
+  the original strict profile. No GPU/display/thread or larger writable-memory
+  allowance is implied; never escalate test execution.
 
 ## Before you guess, look
 

@@ -145,3 +145,9 @@ xmem_exe_calls.md five-argument ABI, reserve-only page mode and raw policy words
 It reuses the existing owned Mapping/MemoryServices implementation. No Windows
 placeholder API or physical-page implementation is ported. Attribute meaning
 and GPU/cache mapping remain incomplete; raw values are retained, not guessed.
+
+
+Separate private/window/aggregate budgets and sparse diagnostic selection reuse
+the owned memory boundary. Pinned Linux v6.17 mmap/mprotect/mremap text at
+`e5f0a698b34ed76002dc5cff3804a61c80233a7a` informed the external sandbox's
+resource review only. No kernel source is ported into the runtime or executed.

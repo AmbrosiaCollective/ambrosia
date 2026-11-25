@@ -576,3 +576,21 @@ window's backing semantics. Physical-page allocation/mapping, placeholder splits
 committed/large-page XMem modes and GPU bindings remain unsupported. Actual large
 requests must fail within the current CPU-only sandbox until a reviewed resource
 profile is explicitly approved; tiny tests do not validate those reservations.
+
+
+## Explicit sparse-window budgets
+
+Default memory construction keeps the shared 64 MiB cap. Explicit MemoryLimits
+separate ordinary/private reservations, physical-page windows and their combined
+total. Free releases the correct category; available window capacity never raises
+the private cap. Only diagnostic --trace-startup accepts --sparse-windows, which
+allows 48 GiB of no-access window reservations while ordinary allocations retain
+64 MiB. The flag grants no OS privilege and does not change execution isolation.
+
+Sparse actual runs require the explicitly approved outer-workspace sparse sandbox:
+64 GiB address space, 512 MiB data, 8 MiB stack, no locked memory, and a sampled
+512 MiB RSS watchdog. The watchdog is not a hard resident-memory cap. Mapping and
+resource self-checks fail closed before native code; network, process/thread
+creation, credentials and GPU/display remain unavailable. Tiny regression checks
+continue under the original strict sandbox. No physical-page backing, GPU address
+range, device or rendering support follows from a successful sparse reservation.
