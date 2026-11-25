@@ -88,6 +88,7 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         package_limits.total_bytes = module_limits.source_bytes - root_bytes;
         host::PackageModules package(paths.package, package_limits);
         services::Runtime service_runtime;
+        service_runtime.startup().bind_image(paths.image);
         std::unique_ptr<diagnostics::ImportStops> stops;
         pe::Resolver diagnostic_stop;
         if (options.trace) {

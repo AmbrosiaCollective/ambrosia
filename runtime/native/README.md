@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 503 checks under a
+as errors. Each build's native shared-object entry passed 521 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `_set_app_type`, after passing PC-to-image lookup, C-locale
-selection/queries, stream-buffer access and the earlier TEB access. This occurs during module initialization; the game's
+and now stop at `_crt_atexit`, after passing owned CRT startup state,
+PC-to-image lookup, C-locale queries and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -412,3 +412,20 @@ dereferenced or matched against host mappings. Subtraction avoids overflow.
 The lookup enforces graph ownership, works during active sessions and preserves
 CRT/Win32 errors. Null output or missing scoped graph stops diagnostics. It does
 not implement unwind lookup or dynamic DLL loading.
+
+## Owned CRT startup state
+
+The command engine binds the resolved executable path once before initialization.
+Narrow CRT argv uses owned UTF-8 path storage, not host command-line arguments;
+borrowed pointers survive through teardown. Application type, text/binary mode
+and commit-mode storage belong to the runtime. Invalid type/mode values fail
+without replacing valid state. Unicode file modes and actual I/O remain separate.
+
+The CLI forwards no game arguments: argv modes 1/2 publish the path as argv[0]
+plus a null terminator; mode0 publishes zero argc/null argv. There is no argument
+wildcard to expand because argv[0] is excluded. Supporting forwarded arguments
+requires actual parsing/expansion. WinMain's argument tail is owned and empty.
+Initial/current guest environments use independent stable empty arrays and never
+inherit host environment values. Wide startup, environment mutation and full CRT
+entry/termination semantics are unfinished. This is real startup data, not a
+complete game entry contract.

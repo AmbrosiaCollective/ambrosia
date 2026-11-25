@@ -94,3 +94,8 @@ fields/identity checks are independently owned; no implementation/header port.
 RtlPcToFileHeader's signature/output and containing-image semantics were checked
 against the already pinned Wine ntdll loader.c. The native lookup searches only
 its owned graph ranges; no Wine implementation or host loader is imported.
+
+CRT startup types/enums/field behavior follow the already pinned Wine
+public-domain corecrt_startup.h and data.c references. The constant-success Wine
+argv placeholder is not ported: native configuration changes owned argv/argc
+state using the actual dynamic image path. No source/header/runtime port.
