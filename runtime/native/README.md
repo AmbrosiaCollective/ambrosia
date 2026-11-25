@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 458 checks under a
+as errors. Each build's native shared-object entry passed 463 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `_lock_locales`, after passing bounded CRT allocation,
-standard-stream access, DLL notification policy and the earlier TEB access. This occurs during module initialization; the game's
+and now stop at `EncodePointer`, after passing runtime-owned CRT locale locks,
+bounded allocation, standard-stream access and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -354,3 +354,14 @@ it does not expose host libc errno or modify Win32 last error. _errno/_get_errno
 _set_errno retain Microsoft ABI and nested-context isolation. Calls outside an
 active guest context use a separate native-thread fallback. Aligned allocation,
 heap size queries and the Windows process heap remain separate missing services.
+
+## Internal CRT locale lock
+
+The observed _lock_locales/_unlock_locales boundary uses a private runtime-owned
+recursive critical section. It enforces real ownership and balanced release,
+without consuming guest critical-section registrations or changing host libc
+locale. Process/context error values survive lock operations. Missing service
+scope, unmatched unlock and invalid runtime teardown fail explicitly. No worker
+contention or locale conversion/configuration support is claimed. The internal
+zero-argument void ABI is provisional and validated only against current startup;
+a pinned contract refresh is still required.

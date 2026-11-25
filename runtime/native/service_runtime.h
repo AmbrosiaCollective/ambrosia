@@ -41,6 +41,9 @@ class Runtime {
         return heap_;
     }
 
+    void lock_locales();
+    void unlock_locales();
+
   private:
     MemoryServices memory_;
     CriticalSections critical_sections_;
@@ -48,6 +51,8 @@ class Runtime {
     OnExitTables on_exit_;
     StandardStreams streams_;
     CrtHeap heap_;
+    CriticalSections locale_sections_;
+    alignas(8) std::array<std::byte, 40> locale_lock_{};
     ImportRegistry registry_;
 };
 

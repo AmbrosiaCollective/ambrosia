@@ -4,8 +4,10 @@
 #include "fls_services.h"
 #include "guest_thread.h"
 #include "loader_services.h"
+#include "locale_services.h"
 #include "slist_services.h"
 #include <array>
+#include <stdexcept>
 
 namespace ambrosia::services {
 namespace {
@@ -86,6 +88,10 @@ std::int32_t &crt_error() noexcept {
 }
 
 Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
+    const auto locale_error = locale_sections_.initialize(locale_lock_.data(), 0, 0);
+    if (locale_error) {
+        throw std::runtime_error("CRT locale lock initialization failed");
+    }
     register_clock_services(registry_);
     register_critical_services(registry_);
     register_fls_services(registry_);
@@ -94,6 +100,7 @@ Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
     register_loader_services(registry_);
     register_crt_streams(registry_);
     register_crt_heap(registry_);
+    register_locale_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",
@@ -113,6 +120,14 @@ Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
         registry_.add(module, "GetLastError", reinterpret_cast<std::uintptr_t>(&last_error));
         registry_.add(module, "SetLastError", reinterpret_cast<std::uintptr_t>(&store_error));
     }
+}
+
+void Runtime::lock_locales() {
+    (void)locale_sections_.enter(locale_lock_.data());
+}
+
+void Runtime::unlock_locales() {
+    locale_sections_.leave(locale_lock_.data());
 }
 
 std::uintptr_t Runtime::resolve(const pe::Import &symbol) const {
