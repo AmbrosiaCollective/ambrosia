@@ -30,13 +30,17 @@ void ImportRegistry::add(std::string module, std::string name, std::uintptr_t fu
     }
 }
 
-bool ImportRegistry::has_module(std::string name) const {
+std::string ImportRegistry::module_name(std::string name) {
     if (!name.empty() && name.back() == '.') {
         name.pop_back();
     } else if (name.find('.') == std::string::npos) {
         name += ".dll";
     }
-    const auto key = module_key(std::move(name));
+    return module_key(std::move(name));
+}
+
+bool ImportRegistry::has_module(std::string name) const {
+    const auto key = module_name(std::move(name));
     const auto found = functions_.lower_bound({key, ""});
     return found != functions_.end() && found->first.first == key;
 }

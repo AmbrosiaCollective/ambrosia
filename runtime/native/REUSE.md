@@ -108,3 +108,10 @@ implementation, header or runtime is imported by this component.
 Loaded module handle signatures/null-root/unchanged-reference semantics were
 checked against the already pinned Wine kernelbase loader.c. Native lookup uses
 only its own graph and registry; no implementation/header/runtime is imported.
+
+Native-service PE facades use the existing checked export parser and Mapping
+boundary. PE32+/export field layouts were checked against the already pinned
+Wine winnt.h, and module/export query contracts against kernelbase loader.c.
+The emitted images, canonical tail trampolines, catalog and budgets are original
+runtime structures; no system DLL bytes, Wine implementation/header or external
+runtime is imported. Facades are fixed in-memory views, not disk-loadable SDK DLLs.
