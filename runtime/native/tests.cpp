@@ -155,6 +155,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "trace_tests.h"
 #include "clock_tests.h"
 #include "critical_tests.h"
+#include "slim_lock_tests.h"
 #include "fls_tests.h"
 #include "tib_tests.h"
 #include "crt_tests.h"
@@ -342,6 +343,7 @@ extern "C" int ambrosia_native_tests() {
         crt_time_checks();
         uptime_checks();
         critical_section_checks();
+        slim_lock_checks();
         fls_checks();
         tib_checks();
         crt_lifecycle_checks();

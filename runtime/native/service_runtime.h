@@ -18,6 +18,7 @@
 #include "pointer_codec.h"
 #include "processor_information.h"
 #include "registry_keys.h"
+#include "slim_locks.h"
 #include <mutex>
 #include <optional>
 
@@ -66,6 +67,10 @@ class Runtime {
         return critical_sections_;
     }
 
+    SlimLocks &slim_locks() {
+        return slim_locks_;
+    }
+
     FlsSlots &fls() {
         return fls_;
     }
@@ -112,6 +117,7 @@ class Runtime {
   private:
     MemoryServices memory_;
     CriticalSections critical_sections_;
+    SlimLocks slim_locks_;
     FlsSlots fls_;
     OnExitTables on_exit_;
     StandardStreams streams_;

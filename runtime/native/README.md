@@ -978,3 +978,27 @@ errors and an original PE query. Both compilers pass 988 checks; a zero-show
 control fails four intended assertions. Layout references are pinned FFI and
 primary launch-ownership documentation; Windows SDK conformance is unverified.
 Actual startup now reaches AcquireSRWLockExclusive. No window/menu is verified.
+
+## Slim reader/writer locks
+
+The seven Win32 SRW initialize/acquire/try/release APIs use owned portable mutex
+and condition-variable state. Static zero initialization registers lazily; the
+opaque eight-byte guest cell never contains a native pointer. Shared acquisitions
+coexist and require balanced releases; exclusive acquisitions exclude readers
+and writers. Try calls return the Windows BOOLEAN result for actual contention.
+Blocking predicates prefer waiting writers to new readers without promising FIFO.
+SRW counters do not confer mutex-style recursive ownership or abandonment.
+
+Address records/readers are bounded to 4096 and blocking waiters to 64 per lock.
+Malformed/unowned nonzero state, wrong-mode release and reinitialization while
+held fail explicitly. Exclusive recursion/upgrading retains the API's deadlock
+boundary rather than fabricated success. Same-thread shared recursion can deadlock
+behind a queued writer and must not be relied on. Directory locks do not span
+blocking waits; guest state and native side tables remain separate per runtime.
+
+Both compilers pass 1005 checks, covering exclusion/coexistence, count/record
+limits, static/explicit init, error/alias behavior and a PE BOOLEAN call with real
+contention. Constant-success control fails three intended assertions. Offline
+CMake links both targets. Host-thread wakeup/contention and queued-writer scheduling
+remain untested under the thread-blocking profile. Actual startup now reaches
+GetModuleFileNameW; no window or interactive menu is verified.

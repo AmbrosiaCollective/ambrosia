@@ -107,6 +107,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     }
     register_clock_services(registry_);
     register_critical_services(registry_);
+    register_slim_lock_services(registry_);
     register_fls_services(registry_);
     register_crt_lifecycle(registry_);
     register_slist_services(registry_);
