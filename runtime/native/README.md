@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 480 checks under a
+as errors. Each build's native shared-object entry passed 493 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `setlocale`, after passing owned stream-buffer field access,
-pointer encoding, CRT locale locking, allocation and the earlier TEB access. This occurs during module initialization; the game's
+and now stop at `RtlPcToFileHeader`, after passing C-locale selection/queries,
+byte classification, stream-buffer access and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -386,3 +386,19 @@ update the actual stream state. Each stream has independent initially empty
 fields; public FILE identity remains opaque and pointer-sized. Foreign/null
 streams fail EINVAL before output changes. This does not yet supply buffering
 I/O, flushing or ownership of buffers installed by callers.
+
+## Guest C locale
+
+The guest owns a C locale independent of host LANG/environment. setlocale queries
+with null or selects C/default for guest categories 0..5 using stable owned
+strings. Other locale names and invalid categories fail EINVAL without changing
+the previous locale. The existing recursive locale gate protects selection.
+
+The supported C state supplies codepage-zero, single-byte-length and six empty
+NLS-name queries, plus __pctype_func's stable EOF/256-byte classification table.
+ASCII upper/lower/digit/space/punctuation/control/blank/hex/alpha masks are owned;
+high bytes remain unclassified. No host libc locale or ctype table is exposed.
+These properties apply only to the supported C state, not arbitrary locales.
+Non-C locales, conversions and Windows NLS are unfinished. Guest category/CRT
+property details still require the deferred pinned contract refresh; current
+evidence covers synthetic invariants and observed startup.

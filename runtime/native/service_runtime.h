@@ -2,6 +2,7 @@
 #include "critical_sections.h"
 #include "crt_heap.h"
 #include "crt_lifecycle.h"
+#include "crt_locale.h"
 #include "crt_streams.h"
 #include "fls_slots.h"
 #include "import_registry.h"
@@ -45,6 +46,10 @@ class Runtime {
     void lock_locales();
     void unlock_locales();
 
+    CrtLocale &locale() {
+        return locale_;
+    }
+
     const PointerCodec &pointers() const {
         return pointers_;
     }
@@ -59,6 +64,7 @@ class Runtime {
     CriticalSections locale_sections_;
     alignas(8) std::array<std::byte, 40> locale_lock_{};
     PointerCodec pointers_;
+    CrtLocale locale_;
     ImportRegistry registry_;
 };
 
