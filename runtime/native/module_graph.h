@@ -51,6 +51,7 @@ class ModuleGraph {
     std::optional<std::uintptr_t> loaded_export(std::uintptr_t module, const Import &symbol) const;
     bool disable_thread_notifications(std::uintptr_t module);
     std::optional<bool> thread_notifications_enabled(std::uintptr_t module) const;
+    bool has_available_source(std::string name) const;
     Execution start() const;
 
   private:

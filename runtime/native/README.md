@@ -1025,3 +1025,27 @@ separate compatibility work. Synthetic checks cover Unicode/non-BMP counts,
 source case, loaded-only lookup, no-extra-read behavior, buffers/guards and a PE
 query. Both compilers pass 1022 checks. Actual startup now reaches LoadLibraryExW;
 no window or interactive menu is verified.
+
+## Counted dynamic library references
+
+LoadLibraryA/W and Ex variants can retain process-pinned native service facades
+or already initialized package modules. FreeLibrary balances only these extra
+references; non-owning handle queries do not grant a release. Static-import graph
+modules and the native catalog remain pinned through process cleanup, with real
+PE handles/exports rather than host DLLs or arbitrary pseudo-handles. Extra
+reference totals cap at 4096 across at most 128 handles and recover after release.
+
+The subset supports basename/default-extension/case/trailing-space lookup and
+flags 0, system-only 0x800 or default-directory 0x1000. Missing modules return
+126, null names/reserved file arguments return 87, unowned releases return 6.
+New package-image activation, full paths, extension-suppressed names, resource
+mappings and other flags stop explicitly. Native Windows system directories are
+never searched. Full Windows search/unload semantics are not implemented.
+
+Both compilers pass 1035 checks, including balanced repeated loads, bounded state,
+real catalog exports, initialized package reuse and an original PE Ex call.
+Coalesced-reference control fails two assertions. Private nonreturning observers
+identify a required xgameruntime.dll bootstrap call; those observers are not
+production GDK implementations. Actual production startup currently reports that
+missing DLL and exits 133. Native GDK services remain required; no window, menu or
+rendering is verified. Do not replace this failure with a fabricated success.

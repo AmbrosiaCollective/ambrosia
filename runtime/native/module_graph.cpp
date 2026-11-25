@@ -317,6 +317,12 @@ std::uintptr_t ModuleGraph::loaded_module(std::optional<std::string> name) const
     return reinterpret_cast<std::uintptr_t>(found->second.image->base());
 }
 
+bool ModuleGraph::has_available_source(std::string name) const {
+    state_->require_owner();
+    const auto key = module_key(std::move(name));
+    return state_->modules.contains(key) || (state_->source_paths && state_->source_paths(key).has_value());
+}
+
 std::optional<std::filesystem::path> ModuleGraph::loaded_module_path(std::uintptr_t module) const {
     state_->require_owner();
     if (!module) {

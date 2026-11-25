@@ -12,6 +12,7 @@
 #include "graphics_memory_policy.h"
 #include "import_registry.h"
 #include "kernel_objects.h"
+#include "library_references.h"
 #include "memory_services.h"
 #include "native_modules.h"
 #include "new_allocations.h"
@@ -45,6 +46,10 @@ class Runtime {
 
     KernelObjects &objects() {
         return objects_;
+    }
+
+    LibraryReferences &library_references() {
+        return library_references_;
     }
 
     RegistryKeys &registry_keys() {
@@ -132,6 +137,7 @@ class Runtime {
     ImportRegistry registry_;
     std::shared_ptr<HandleIds> handle_ids_ = std::make_shared<HandleIds>();
     KernelObjects objects_;
+    LibraryReferences library_references_;
     RegistryKeys registry_keys_;
     GraphicsMemoryPolicy graphics_memory_;
     ExceptionFilter exception_filter_;

@@ -33,6 +33,116 @@ void *loaded_handle(std::optional<std::string> name) {
     return reinterpret_cast<void *>(base);
 }
 
+void *load_library(std::string name, void *file, std::uint32_t flags) {
+    auto *runtime = current_runtime();
+    auto *modules = current_modules();
+    if (!runtime || !modules) {
+        diagnostics::stop_trace("dynamic libraries require a scoped runtime and graph", 78);
+    }
+    if (file) {
+        set_last_error(87);
+        return nullptr;
+    }
+    if (flags != 0 && flags != 0x800 && flags != 0x1000) {
+        diagnostics::stop_trace("unsupported native library loading flags", 78);
+    }
+    while (!name.empty() && name.back() == ' ') {
+        name.pop_back();
+    }
+    if (name.empty()) {
+        set_last_error(126);
+        return nullptr;
+    }
+    if (name.find_first_of("/\\:") != std::string::npos) {
+        diagnostics::stop_trace("full-path dynamic module loading is unsupported", 78);
+    }
+    if (name.back() == '.') {
+        diagnostics::stop_trace("extension-suppressed native library names are unsupported", 78);
+    }
+    const auto key = ImportRegistry::module_name(std::move(name));
+    auto handle = modules->loaded_module(key);
+    if (!handle && runtime->has_service_module(key)) {
+        handle = runtime->native_modules().handle(key);
+    }
+    if (!handle) {
+        if (flags != 0x800 && modules->has_available_source(key)) {
+            diagnostics::stop_trace("new package module initialization during execution is unsupported", 78);
+        }
+        diagnostics::write_service_trace("TRACE native library unavailable: " + key + "\n");
+        set_last_error(126);
+        return nullptr;
+    }
+    if (!runtime->library_references().retain(handle)) {
+        set_last_error(8);
+        return nullptr;
+    }
+    return reinterpret_cast<void *>(handle);
+}
+
+void *AMBROSIA_GUEST_ABI load_library_ex_w(const char16_t *name, void *file, std::uint32_t flags) noexcept {
+    const auto saved_error = errno;
+    void *result = nullptr;
+    try {
+        if (!name) {
+            set_last_error(87);
+        } else {
+            const auto text = std::filesystem::path(guest::read_string(name)).u8string();
+            result = load_library(std::string(reinterpret_cast<const char *>(text.data()), text.size()), file,
+                                  flags);
+        }
+    } catch (const std::bad_alloc &) {
+        set_last_error(8);
+    } catch (const std::exception &) {
+        set_last_error(123);
+    }
+    errno = saved_error;
+    return result;
+}
+
+void *AMBROSIA_GUEST_ABI load_library_ex_a(const char *name, void *file, std::uint32_t flags) noexcept {
+    const auto saved_error = errno;
+    void *result = nullptr;
+    try {
+        if (!name) {
+            set_last_error(87);
+        } else {
+            result = load_library(guest::read_string(name), file, flags);
+        }
+    } catch (const std::bad_alloc &) {
+        set_last_error(8);
+    } catch (const std::exception &) {
+        set_last_error(123);
+    }
+    errno = saved_error;
+    return result;
+}
+
+void *AMBROSIA_GUEST_ABI load_library_w(const char16_t *name) noexcept {
+    return load_library_ex_w(name, nullptr, 0);
+}
+
+void *AMBROSIA_GUEST_ABI load_library_a(const char *name) noexcept {
+    return load_library_ex_a(name, nullptr, 0);
+}
+
+std::int32_t AMBROSIA_GUEST_ABI free_library(void *module) noexcept {
+    try {
+        auto *runtime = current_runtime();
+        if (!runtime) {
+            diagnostics::stop_trace("library reference release requires a scoped runtime", 78);
+        }
+        if (!runtime->library_references().release(reinterpret_cast<std::uintptr_t>(module))) {
+            set_last_error(6);
+            return 0;
+        }
+        // Static graph imports and the native catalog pin their images through
+        // process cleanup; balancing an extra reference cannot detach them.
+        return 1;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 void *AMBROSIA_GUEST_ABI module_handle_a(const char *name) noexcept {
     try {
         return loaded_handle(name ? std::optional(guest::read_string(name)) : std::nullopt);
@@ -231,6 +341,11 @@ void register_loader_services(ImportRegistry &registry) {
         registry.add(module, "GetModuleHandleW", reinterpret_cast<std::uintptr_t>(&module_handle_w));
         registry.add(module, "GetModuleFileNameW", reinterpret_cast<std::uintptr_t>(&module_filename_w));
         registry.add(module, "GetModuleFileNameA", reinterpret_cast<std::uintptr_t>(&module_filename_a));
+        registry.add(module, "LoadLibraryExW", reinterpret_cast<std::uintptr_t>(&load_library_ex_w));
+        registry.add(module, "LoadLibraryExA", reinterpret_cast<std::uintptr_t>(&load_library_ex_a));
+        registry.add(module, "LoadLibraryW", reinterpret_cast<std::uintptr_t>(&load_library_w));
+        registry.add(module, "LoadLibraryA", reinterpret_cast<std::uintptr_t>(&load_library_a));
+        registry.add(module, "FreeLibrary", reinterpret_cast<std::uintptr_t>(&free_library));
         registry.add(module, "GetProcAddress", reinterpret_cast<std::uintptr_t>(&procedure_address));
     }
 }
