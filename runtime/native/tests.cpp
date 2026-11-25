@@ -13,6 +13,9 @@
 #include "unwind_table.h"
 #include <algorithm>
 #include <array>
+#include <cerrno>
+#include <cfenv>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -178,6 +181,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "processor_topology_tests.h"
 #include "exception_filter_tests.h"
 #include "new_allocation_tests.h"
+#include "math_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -356,6 +360,7 @@ extern "C" int ambrosia_native_tests() {
         processor_topology_checks();
         exception_filter_checks();
         new_allocation_checks();
+        tangent_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {
         ++failures;

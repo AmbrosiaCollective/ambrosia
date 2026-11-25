@@ -747,5 +747,22 @@ zeroing and realloc prefix preservation. No host/guest concurrency coverage is
 claimed. Invalid-mode parameter dispatch and guest C++ exception propagation
 remain unsupported and stop explicitly rather than returning fabricated results.
 
-Actual startup now accepts allocation-mode initialization and reaches the CRT
-math import tanf. No window, rendering or interactive menu is verified.
+Actual startup accepted allocation-mode initialization and proceeded into CRT
+math. No window, rendering or interactive menu is verified.
+
+## Float tangent through the guest ABI
+
+tanf uses the portable standard C++ float overload of tan through a Microsoft
+x64 facade. It retains signed zero and calculated results, restores native errno,
+and applies default guest CRT domain/range error codes. Non-finite inputs follow
+the documented default domain policy; quiet NaNs are not converted into invented
+floating-point traps. Host floating-point status reflects the actual calculation.
+Successful calls preserve guest CRT errno and Win32 LastError. The API-set,
+UCRTBase and MSVCRT module aliases share one entrypoint.
+
+An original PE fixture passes pi/4 in XMM0 and receives the calculated float in
+XMM0. Analytic values, signed zero, NaN/infinity, masked invalid status and error
+isolation have CPU coverage. This does not certify bit-identical Windows libm
+argument reduction, custom _matherr callbacks, unmasked guest SEH or all rounding/
+denormal modes. Those remain separate compatibility work. Actual GCC and Clang startup now
+passes the tangent call and reaches GetCommandLineA; no menu is verified.
