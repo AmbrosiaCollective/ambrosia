@@ -893,3 +893,20 @@ package is downloaded. GCC/Clang actual startup now reaches _time64. No window,
 rendering, frame loop or menu is verified. The compiler-only profile has a
 separately reviewed 120-second wall budget for larger translation units; tests
 retain the strict execution profile and no compiler output is run by that helper.
+
+## CRT epoch time
+
+_time64 uses the existing portable host UTC clock and checked integer conversion
+from FILETIME ticks to nonnegative Unix seconds. Epoch validation precedes
+subsecond truncation, and the full tick range fits the signed 64-bit result.
+Calendar/timezone conversion limits are kept separate. An optional output receives
+exactly eight bytes; native time_t layout and host timezone are never exposed.
+Host clock failure returns -1 and sets guest errno to EINVAL. _difftime64 converts
+operands before subtraction, avoiding signed integer overflow. Successful calls
+preserve native errno, guest CRT errno and LastError.
+
+Synthetic checks cover epochs/subseconds, full-range conversion, guarded output,
+optional null output, real-clock bounds, difference ordering and a PE import.
+Other imported calendar, local-time and strftime services remain unsupported.
+Both compilers pass 956 checks. Actual startup now reaches rand_s; no window or
+menu is verified. This is UTC startup support, not complete Windows time parity.

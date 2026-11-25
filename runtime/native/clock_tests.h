@@ -72,3 +72,74 @@ void clock_service_checks() {
     check(guest_value >= before && guest_value - before < 10000000,
           "synthetic PE calls the real FILETIME adapter through Microsoft ABI and guest output memory");
 }
+
+void crt_time_checks() {
+    using namespace ambrosia;
+    using namespace services;
+    constexpr std::uint64_t epoch = 116444736000000000;
+    constexpr std::uint64_t maximum = 0x793406fff;
+    check(crt_seconds_from_filetime(epoch - 1) == -1 && crt_seconds_from_filetime(epoch) == 0 &&
+              crt_seconds_from_filetime(epoch + 9999999) == 0 &&
+              crt_seconds_from_filetime(epoch + 10000000) == 1,
+          "CRT UTC conversion checks the Unix epoch before truncating FILETIME subsecond ticks");
+    check(
+        crt_seconds_from_filetime(epoch + maximum * 10000000) == static_cast<std::int64_t>(maximum) &&
+            crt_seconds_from_filetime(epoch + (maximum + 1) * 10000000 - 1) ==
+                static_cast<std::int64_t>(maximum) &&
+            crt_seconds_from_filetime(epoch + (maximum + 1) * 10000000) ==
+                static_cast<std::int64_t>(maximum + 1) &&
+            crt_seconds_from_filetime(UINT64_MAX) ==
+                static_cast<std::int64_t>((UINT64_MAX - epoch) / 10000000),
+        "CRT UTC conversion has no local-calendar cutoff and avoids overflow across the full FILETIME range");
+    Runtime runtime;
+    Scope scope(runtime);
+    using Time = std::int64_t(AMBROSIA_GUEST_ABI *)(void *);
+    using Difference = double(AMBROSIA_GUEST_ABI *)(std::int64_t, std::int64_t);
+    const auto address = runtime.resolve(service_symbol("_time64", "api-ms-win-crt-time-l1-1-0.dll"));
+    const auto time = reinterpret_cast<Time>(address);
+    const auto difference =
+        reinterpret_cast<Difference>(runtime.resolve(service_symbol("_difftime64", "ucrtbase.dll")));
+    check(address && address == runtime.resolve(service_symbol("_time64", "ucrtbase.dll")) &&
+              address == runtime.resolve(service_symbol("_time64", "msvcrt.dll")) &&
+              reinterpret_cast<std::uintptr_t>(difference) ==
+                  runtime.resolve(service_symbol("_difftime64", "api-ms-win-crt-time-l1-1-0.dll")),
+          "CRT UTC and difference aliases preserve explicit Windows int64 and double signatures");
+    const auto saved_error = errno;
+    errno = E2BIG;
+    crt_error() = 17;
+    set_last_error(83);
+    std::array<std::byte, 12> output;
+    output.fill(std::byte{0xcc});
+    const auto before = crt_seconds_from_filetime(host::utc_filetime());
+    const auto now = time(output.data() + 2);
+    const auto after = crt_seconds_from_filetime(host::utc_filetime());
+    std::int64_t stored = -1;
+    std::memcpy(&stored, output.data() + 2, sizeof(stored));
+    check(now >= std::min(before, after) && now <= std::max(before, after) && stored == now &&
+              output[0] == std::byte{0xcc} && output[1] == std::byte{0xcc} && output[10] == std::byte{0xcc} &&
+              output[11] == std::byte{0xcc},
+          "CRT time returns real UTC seconds and writes exactly eight output bytes without borrowing native "
+          "time_t");
+    const auto optional = time(nullptr);
+    check(optional >= std::min(before, after) && optional <= crt_seconds_from_filetime(host::utc_filetime()),
+          "a null CRT time output is a supported query rather than an invalid parameter");
+    check(difference(100, 97) == 3 && difference(97, 100) == -3 && difference(0, 0) == 0 &&
+              difference(maximum, maximum - 1) == 1 &&
+              difference(0, maximum) == -static_cast<double>(maximum),
+          "CRT time differences retain argument order and one-second precision across the supported range");
+    check(errno == E2BIG && crt_error() == 17 && get_last_error() == 83,
+          "successful UTC time and difference calls preserve native errno and both guest error domains");
+    auto caller = fixture();
+    text(caller, 0x440, "ucrtbase.dll");
+    text(caller, 0x4a2, "_time64");
+    constexpr unsigned char code[] = {0x48, 0x83, 0xec, 0x28, 0x31, 0xc9, 0xff, 0x15, 0,
+                                      0,    0,    0,    0x48, 0x83, 0xc4, 0x28, 0xc3};
+    std::memcpy(caller.data() + 0x200, code, sizeof(code));
+    put<std::uint32_t>(caller, 0x208, 0x2080 - (0x1000 + 12));
+    auto image = pe::Image::load(caller, [&](const auto &symbol) { return runtime.resolve(symbol); });
+    const auto imported = image.run_bootstrap();
+    check(imported >= static_cast<std::uint64_t>(std::min(before, after)) &&
+              imported <= static_cast<std::uint64_t>(crt_seconds_from_filetime(host::utc_filetime())),
+          "an original PE _time64 import returns full UTC epoch seconds in RAX");
+    errno = saved_error;
+}

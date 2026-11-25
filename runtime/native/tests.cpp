@@ -1,4 +1,5 @@
 // Original tiny PE byte fixtures only. No SDK, game, driver or network needed.
+#include "clock_services.h"
 #include "event_signal.h"
 #include "guest_thread.h"
 #include "module_graph.h"
@@ -337,6 +338,7 @@ extern "C" int ambrosia_native_tests() {
         unwind_walk_checks();
         trace_configuration_checks();
         clock_service_checks();
+        crt_time_checks();
         critical_section_checks();
         fls_checks();
         tib_checks();
