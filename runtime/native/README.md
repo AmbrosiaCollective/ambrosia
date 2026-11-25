@@ -700,6 +700,26 @@ an actual control trace resolves this import and stops at unavailable topology
 metadata. The separate profile with a bounded read-only copy of CPU/NUMA text is
 now explicitly approved and passes all isolation checks. It does not expose live
 sysfs controls, unique hardware IDs or GPU devices. Both GCC and Clang actual
-runs accept topology, proceed through subsequent allocation/semaphore steps and
-stop at unsupported SetUnhandledExceptionFilter. No window, rendering or menu
+runs accepted topology and proceeded through subsequent allocation/semaphore steps
+to exception-filter registration. Later startup work is described below. No window, rendering or menu
 is verified. The earlier profiles remain unchanged.
+
+## Top-level exception-filter registration
+
+SetUnhandledExceptionFilter atomically replaces a process-owned callback value
+and returns its previous value. Null selects default handling. All guest contexts
+using one Runtime share this state; separate Runtime instances remain independent.
+Repeated registration preserves the prior pointer, and registration neither
+dereferences nor invokes it. Successful calls preserve LastError and CRT errno.
+Kernel32, KernelBase and the errorhandling API-set aliases share one native facade.
+
+The original PE import fixture checks the full-width previous pointer and opaque
+argument through the Microsoft x64 ABI. Separate guest contexts verify that the
+state belongs to the process rather than one thread context. No guest-thread
+concurrency run is claimed. Native signal dispositions remain unchanged.
+
+This implements registration, not exception dispatch. UnhandledExceptionFilter,
+RaiseException and Linux-to-Windows exception/continuation translation remain
+unsupported. Diagnostic faults still terminate without invoking guest callbacks
+or pretending execution can resume. Actual startup now passes registration and
+reaches the CRT's unsupported _set_new_mode import. No window or menu is verified.

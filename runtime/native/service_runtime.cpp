@@ -118,6 +118,7 @@ Runtime::Runtime(MemoryLimits memory_limits)
     register_graphics_services(registry_);
     register_xmem_services(registry_);
     register_sysinfo_services(registry_);
+    register_exception_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",

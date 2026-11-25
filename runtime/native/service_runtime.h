@@ -7,6 +7,7 @@
 #include "crt_locales.h"
 #include "crt_startup.h"
 #include "crt_streams.h"
+#include "exception_filter.h"
 #include "fls_slots.h"
 #include "graphics_memory_policy.h"
 #include "import_registry.h"
@@ -50,6 +51,10 @@ class Runtime {
 
     GraphicsMemoryPolicy &graphics_memory() {
         return graphics_memory_;
+    }
+
+    ExceptionFilter &exception_filter() {
+        return exception_filter_;
     }
 
     MemoryServices &memory() {
@@ -117,6 +122,7 @@ class Runtime {
     KernelObjects objects_;
     RegistryKeys registry_keys_;
     GraphicsMemoryPolicy graphics_memory_;
+    ExceptionFilter exception_filter_;
     std::mutex processor_mutex_;
     std::optional<ProcessorInformation> processor_information_;
     std::unique_ptr<NativeModules> native_modules_;
