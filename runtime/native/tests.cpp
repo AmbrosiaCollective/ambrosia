@@ -1,4 +1,5 @@
 // Original tiny PE byte fixtures only. No SDK, game, driver or network needed.
+#include "event_signal.h"
 #include "guest_thread.h"
 #include "module_graph.h"
 #include "native_command.h"
@@ -166,6 +167,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "context_locale_tests.h"
 #include "module_handle_tests.h"
 #include "native_module_tests.h"
+#include "event_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -334,6 +336,7 @@ extern "C" int ambrosia_native_tests() {
         context_locale_checks();
         module_handle_checks();
         native_module_checks();
+        event_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';

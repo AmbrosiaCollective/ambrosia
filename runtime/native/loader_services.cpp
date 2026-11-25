@@ -1,4 +1,5 @@
 #include "loader_services.h"
+#include "guest_strings.h"
 #include "module_graph.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
@@ -7,18 +8,6 @@
 
 namespace ambrosia::services {
 namespace {
-template <class Character> std::basic_string<Character> module_name(const Character *source) {
-    std::basic_string<Character> name;
-    for (std::size_t index = 0; index < 32768; ++index) {
-        const auto character = source[index];
-        if (!character) {
-            return name;
-        }
-        name.push_back(character);
-    }
-    throw std::runtime_error("module name exceeds the runtime string budget");
-}
-
 void *loaded_handle(std::optional<std::string> name) {
     auto *modules = current_modules();
     auto *runtime = current_runtime();
@@ -44,7 +33,7 @@ void *loaded_handle(std::optional<std::string> name) {
 
 void *AMBROSIA_GUEST_ABI module_handle_a(const char *name) noexcept {
     try {
-        return loaded_handle(name ? std::optional(module_name(name)) : std::nullopt);
+        return loaded_handle(name ? std::optional(guest::read_string(name)) : std::nullopt);
     } catch (const std::bad_alloc &) {
         set_last_error(8);
         return nullptr;
@@ -59,7 +48,7 @@ void *AMBROSIA_GUEST_ABI module_handle_w(const char16_t *name) noexcept {
         if (!name) {
             return loaded_handle(std::nullopt);
         }
-        const auto utf8 = std::filesystem::path(module_name(name)).u8string();
+        const auto utf8 = std::filesystem::path(guest::read_string(name)).u8string();
         return loaded_handle(std::string(reinterpret_cast<const char *>(utf8.data()), utf8.size()));
     } catch (const std::bad_alloc &) {
         set_last_error(8);
@@ -92,7 +81,7 @@ void *AMBROSIA_GUEST_ABI procedure_address(void *module, const char *function) n
             symbol.by_ordinal = true;
             symbol.ordinal = static_cast<std::uint16_t>(identifier);
         } else {
-            symbol.name = module_name(function);
+            symbol.name = guest::read_string(function);
             address = runtime->native_modules().export_address(handle, symbol.name);
         }
         if (!address.has_value()) {

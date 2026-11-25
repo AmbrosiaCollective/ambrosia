@@ -115,3 +115,10 @@ Wine winnt.h, and module/export query contracts against kernelbase loader.c.
 The emitted images, canonical tail trampolines, catalog and budgets are original
 runtime structures; no system DLL bytes, Wine implementation/header or external
 runtime is imported. Facades are fixed in-memory views, not disk-loadable SDK DLLs.
+
+Event creation, signaling, reset, wait and close contracts were checked against
+Microsoft SDK API documentation at
+`656e9656bfaef34dd29cd7ee9e1146aec17e924c`. Wine kernelbase sync.c at
+`ff2631c6ed3d1721cd050d951671c307ade32b90` was read to check signatures and
+creation last-error behavior. The owned signal model, handle directory and
+standard C++ waiting adapter import no external implementation, header or runtime.

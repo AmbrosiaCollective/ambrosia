@@ -9,6 +9,7 @@
 #include "crt_streams.h"
 #include "fls_slots.h"
 #include "import_registry.h"
+#include "kernel_objects.h"
 #include "memory_services.h"
 #include "native_modules.h"
 #include "pointer_codec.h"
@@ -29,6 +30,10 @@ class Runtime {
 
     NativeModules &native_modules() const {
         return *native_modules_;
+    }
+
+    KernelObjects &objects() {
+        return objects_;
     }
 
     MemoryServices &memory() {
@@ -92,6 +97,7 @@ class Runtime {
     CrtStartup startup_;
     ExitCallbacks exit_callbacks_;
     ImportRegistry registry_;
+    KernelObjects objects_;
     std::unique_ptr<NativeModules> native_modules_;
 };
 

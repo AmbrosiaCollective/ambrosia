@@ -3,6 +3,7 @@
 #include "critical_services.h"
 #include "fls_services.h"
 #include "guest_thread.h"
+#include "kernel_services.h"
 #include "loader_services.h"
 #include "locale_services.h"
 #include "slist_services.h"
@@ -105,6 +106,7 @@ Runtime::Runtime(std::size_t memory_budget)
     register_pointer_services(registry_);
     register_crt_startup(registry_);
     register_crt_exit(registry_);
+    register_kernel_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",

@@ -497,3 +497,25 @@ services without invoking the package provider or changing dependencies. Missing
 exports return procedure-not-found, invalid handles fail separately and native
 service public ordinal requests stop explicitly. This does not supply dynamic
 DLL loading, unsupported APIs, Windows SEH or complete system-module behavior.
+
+## Owned events and waits
+
+CreateEventA/W, SetEvent, ResetEvent, WaitForSingleObject, non-alertable
+WaitForSingleObjectEx and CloseHandle now operate on runtime-owned event objects.
+Manual-reset events release the registered waiter set and remain signaled until
+reset. Auto-reset events hand a signal to one waiter or retain one available
+signal. A later reset or poll cannot revoke an assigned handoff. The portable
+state model is separate from the standard C++ mutex/condition-variable adapter.
+
+Opaque handles never expose host pointers or file descriptors. Named aliases
+share state, retain the original mode and survive until the last owned reference
+is released. Names are case-sensitive UTF-16; narrow names use the runtime's
+UTF-8 policy. Local-prefixed names share the private runtime namespace. Limits
+are 4,096 handles, 1 MiB of name text, 64 queued waiters per event and the API's
+MAX_PATH name bound. Invalid handles, exhaustion and timeouts report failures.
+
+The 600 CPU checks include deterministic handoff/reset/cancel interleavings,
+finite single-thread timeouts, named lifetime and Microsoft ABI error behavior.
+They do not establish concurrent guest-thread correctness. Cross-process/global
+namespaces, security/inheritance attributes, alertable waits/APCs and other
+waitable object types remain unsupported. No worker thread or GPU is started.
