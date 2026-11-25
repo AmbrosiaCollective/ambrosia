@@ -54,15 +54,27 @@ branch settings; these repository files alone do not enforce permissions.
 - Reviewed local integration is authorized. Keep remote-tracking/publication
   branches and historical source snapshots intact; use a separate local baseline.
 - Use synthetic inputs without game files where possible. Inspect executable
-  paths before running them; preserve isolation and do not install dependencies
-  or weaken controls without approval.
+  paths before running them and preserve reviewed, bounded isolation. The current
+  standing goal authorization below supersedes older repeated-approval rules.
 - Standing permission for local native boot work includes reading and executing
   the supplied game files inside reviewed isolation with read-only inputs. This
   supersedes historical repository-only/no-game-file restrictions. Keep original
   bytes, disassembly, generated assets and
   private diagnostics outside Git. Game execution is authorized; unsupported
-  startup requirements must still fail explicitly. GPU access and any weaker
-  execution profile require their concrete isolation review before use.
+  startup requirements must still fail explicitly. Review concrete isolation
+  changes before use; retain credentials/private-data hiding and read-only inputs.
+- The user authorizes necessary local work to reach an interactive native Linux
+  menu without further size/resource/dependency/profile permission prompts or
+  task-boundary publication questions. Historical 512 KiB/file and 5 MiB/task
+  thresholds no longer apply. Necessary bounded CPU threads, mappings, memory
+  and native graphics/display integration may use separately reviewed profiles.
+  Prefer installed dependencies; pin additional required sources/dependencies,
+  record hashes/download totals and keep licenses. Validate fail-closed controls
+  before execution and preserve existing profiles as evidence. Do not escalate
+  guest/test execution, expose credentials/unrelated private data, enable online
+  game services, download game packages or publish to GitHub. These remain outside
+  this authorization. Continue in manageable reviewed local commits until the
+  menu is actually verified; synthetic checks alone do not satisfy the goal.
 - Task061's sparse-address profile is explicitly approved for CPU-only native
   boot: scripts/run_sparse_isolated.py and isolation_sparse_bootstrap.py in the
   outer workspace retain RO inputs and all home/credential/GPU/network/exec/
