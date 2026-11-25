@@ -168,6 +168,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "module_handle_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
+#include "registry_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -337,6 +338,7 @@ extern "C" int ambrosia_native_tests() {
         module_handle_checks();
         native_module_checks();
         event_checks();
+        registry_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';

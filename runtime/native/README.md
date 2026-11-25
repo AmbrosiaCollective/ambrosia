@@ -519,3 +519,25 @@ finite single-thread timeouts, named lifetime and Microsoft ABI error behavior.
 They do not establish concurrent guest-thread correctness. Cross-process/global
 namespaces, security/inheritance attributes, alertable waits/APCs and other
 waitable object types remain unsupported. No worker thread or GPU is started.
+
+
+## Private registry key lookup
+
+RegOpenKeyA/W, read-only RegOpenKeyExA/W and RegCloseKey use a bounded guest
+configuration store. The five ordinary predefined roots exist; their children
+start empty. Host-side configuration can define keys explicitly. Opening never
+creates missing keys or reads host settings. ASCII names are case-insensitive;
+registry backslashes are logical separators independent of the host filesystem.
+
+Legacy empty-subkey calls return the original handle. Extended calls duplicate
+ordinary handles and preserve predefined roots. Closing an opened handle leaves
+configured keys and other handles alive. Registry and event directories share
+monotonic opaque IDs, so neither can consume the other's handles. CloseHandle
+reports success for a registry handle without closing it; RegCloseKey owns that
+operation. Registry status returns preserve last-error and CRT errno.
+
+Limits are 4,096 configured keys including roots, 1 MiB of logical path text,
+4,096 opened handles, 255 characters per component and 32,767 per path. This is
+an in-memory configuration namespace with no persistence or invented Windows
+installation metadata. Values, guest key creation/deletion, Unicode case folding,
+symbolic links, writes/security changes and 32-bit views remain unsupported.

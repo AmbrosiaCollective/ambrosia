@@ -6,6 +6,7 @@
 #include "kernel_services.h"
 #include "loader_services.h"
 #include "locale_services.h"
+#include "registry_services.h"
 #include "slist_services.h"
 #include <array>
 #include <stdexcept>
@@ -89,7 +90,8 @@ std::int32_t &crt_error() noexcept {
 }
 
 Runtime::Runtime(std::size_t memory_budget)
-    : memory_(memory_budget), pointers_(host::random_pointer_secret()) {
+    : memory_(memory_budget), pointers_(host::random_pointer_secret()), objects_(4096, handle_ids_),
+      registry_keys_(handle_ids_) {
     const auto locale_error = locale_sections_.initialize(locale_lock_.data(), 0, 0);
     if (locale_error) {
         throw std::runtime_error("CRT locale lock initialization failed");
@@ -107,6 +109,7 @@ Runtime::Runtime(std::size_t memory_budget)
     register_crt_startup(registry_);
     register_crt_exit(registry_);
     register_kernel_services(registry_);
+    register_registry_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",

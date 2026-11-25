@@ -13,6 +13,7 @@
 #include "memory_services.h"
 #include "native_modules.h"
 #include "pointer_codec.h"
+#include "registry_keys.h"
 
 namespace ambrosia::services {
 std::uint32_t get_last_error() noexcept;
@@ -34,6 +35,10 @@ class Runtime {
 
     KernelObjects &objects() {
         return objects_;
+    }
+
+    RegistryKeys &registry_keys() {
+        return registry_keys_;
     }
 
     MemoryServices &memory() {
@@ -97,7 +102,9 @@ class Runtime {
     CrtStartup startup_;
     ExitCallbacks exit_callbacks_;
     ImportRegistry registry_;
+    std::shared_ptr<HandleIds> handle_ids_ = std::make_shared<HandleIds>();
     KernelObjects objects_;
+    RegistryKeys registry_keys_;
     std::unique_ptr<NativeModules> native_modules_;
 };
 

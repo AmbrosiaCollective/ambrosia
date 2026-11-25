@@ -122,3 +122,10 @@ Microsoft SDK API documentation at
 `ff2631c6ed3d1721cd050d951671c307ade32b90` was read to check signatures and
 creation last-error behavior. The owned signal model, handle directory and
 standard C++ waiting adapter import no external implementation, header or runtime.
+
+
+Registry open/extended-open/close contracts were checked against Microsoft SDK
+API documentation at `656e9656bfaef34dd29cd7ee9e1146aec17e924c`, including
+case-insensitive lookup and the distinct legacy/extended empty-subkey rules.
+The private configured-key store, shared opaque ID allocator and Microsoft ABI
+adapters import no external source, headers or system registry implementation.

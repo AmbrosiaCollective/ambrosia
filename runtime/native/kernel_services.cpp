@@ -96,6 +96,20 @@ std::uint32_t AMBROSIA_GUEST_ABI wait_single(void *handle, std::uint32_t millise
     }
 }
 
+std::int32_t AMBROSIA_GUEST_ABI close_handle(void *handle) noexcept {
+    try {
+        auto *runtime = current_runtime();
+        if (runtime && runtime->registry_keys().owns(reinterpret_cast<std::uintptr_t>(handle))) {
+            // CloseHandle reports success for registry handles but does not close
+            // them. Their lifetime belongs to the distinct RegCloseKey operation.
+            return 1;
+        }
+        return object_operation<&KernelObjects::close>(handle);
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::uint32_t AMBROSIA_GUEST_ABI wait_single_ex(void *handle, std::uint32_t milliseconds,
                                                 std::int32_t alertable) noexcept {
     if (alertable) {
@@ -118,8 +132,7 @@ void register_kernel_services(ImportRegistry &registry) {
         registry.add(module, "WaitForSingleObjectEx", reinterpret_cast<std::uintptr_t>(&wait_single_ex));
     }
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-handle-l1-1-0.dll"}) {
-        registry.add(module, "CloseHandle",
-                     reinterpret_cast<std::uintptr_t>(&object_operation<&KernelObjects::close>));
+        registry.add(module, "CloseHandle", reinterpret_cast<std::uintptr_t>(&close_handle));
     }
 }
 } // namespace ambrosia::services
