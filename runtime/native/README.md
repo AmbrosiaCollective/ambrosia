@@ -24,7 +24,7 @@ These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
 The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 463 checks under a
+as errors. Each build's native shared-object entry passed 472 checks under a
 Python launcher that blocks network, process creation and execution, hides
 credentials/home and mounts source read-only. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
@@ -154,8 +154,8 @@ denied and GPU/display devices hidden. Generated stop code is sealed RX before
 initialization and never returns fabricated API values.
 
 Both native builds execute supplied PE startup code beyond the first clock call
-and now stop at `EncodePointer`, after passing runtime-owned CRT locale locks,
-bounded allocation, standard-stream access and the earlier TEB access. This occurs during module initialization; the game's
+and now stop at `_get_stream_buffer_pointers`, after passing reversible pointer
+encoding, CRT locale locking, bounded allocation and the earlier TEB access. This occurs during module initialization; the game's
 main bootstrap entry and menu have not been reached. The read-only package and
 actual runtime code now guide the next service implementation. Private trace
 records and input bytes remain outside Git.
@@ -365,3 +365,17 @@ scope, unmatched unlock and invalid runtime teardown fail explicitly. No worker
 contention or locale conversion/configuration support is claimed. The internal
 zero-argument void ABI is provisional and validated only against current startup;
 a pinned contract refresh is still required.
+
+## Runtime-owned pointer encoding
+
+EncodePointer/DecodePointer use a stable reversible full-width XOR/rotation with
+a private secret per scoped runtime. Null and arbitrary x64 bit patterns round-
+trip without being dereferenced. The transform is local; Windows does not supply
+its exact encoding algorithm here. It is obfuscation, not pointer validation or
+cryptographic authentication. Win32/API-set aliases preserve CRT/Win32 errors.
+
+The host entropy adapter uses installed standard C++ random_device and requires
+positive reported entropy plus a nonzero result. Unavailability fails runtime
+construction, with no fixed/address-derived fallback. Secrets never enter reports.
+Only Linux was run; other hosts may fail explicitly depending on their standard
+library. System-wide/cross-process pointer encoding is not provided.

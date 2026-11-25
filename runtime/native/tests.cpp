@@ -156,6 +156,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "crt_stream_tests.h"
 #include "crt_heap_tests.h"
 #include "locale_tests.h"
+#include "pointer_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -315,6 +316,7 @@ extern "C" int ambrosia_native_tests() {
         crt_stream_checks();
         crt_heap_checks();
         locale_lock_checks();
+        pointer_codec_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';

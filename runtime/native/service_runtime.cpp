@@ -87,7 +87,8 @@ std::int32_t &crt_error() noexcept {
     return thread ? thread->crt_error() : native_state().fallback_crt_error;
 }
 
-Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
+Runtime::Runtime(std::size_t memory_budget)
+    : memory_(memory_budget), pointers_(host::random_pointer_secret()) {
     const auto locale_error = locale_sections_.initialize(locale_lock_.data(), 0, 0);
     if (locale_error) {
         throw std::runtime_error("CRT locale lock initialization failed");
@@ -101,6 +102,7 @@ Runtime::Runtime(std::size_t memory_budget) : memory_(memory_budget) {
     register_crt_streams(registry_);
     register_crt_heap(registry_);
     register_locale_services(registry_);
+    register_pointer_services(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",

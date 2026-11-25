@@ -6,6 +6,7 @@
 #include "fls_slots.h"
 #include "import_registry.h"
 #include "memory_services.h"
+#include "pointer_codec.h"
 
 namespace ambrosia::services {
 std::uint32_t get_last_error() noexcept;
@@ -44,6 +45,10 @@ class Runtime {
     void lock_locales();
     void unlock_locales();
 
+    const PointerCodec &pointers() const {
+        return pointers_;
+    }
+
   private:
     MemoryServices memory_;
     CriticalSections critical_sections_;
@@ -53,6 +58,7 @@ class Runtime {
     CrtHeap heap_;
     CriticalSections locale_sections_;
     alignas(8) std::array<std::byte, 40> locale_lock_{};
+    PointerCodec pointers_;
     ImportRegistry registry_;
 };
 

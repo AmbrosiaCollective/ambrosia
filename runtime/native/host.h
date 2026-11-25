@@ -5,6 +5,9 @@
 #include <filesystem>
 
 namespace ambrosia::host {
+// A nonzero runtime secret from the host's nondeterministic entropy source.
+// Fail closed if the installed implementation cannot provide entropy.
+std::uintptr_t random_pointer_secret();
 std::uint64_t filetime_from_unix_ticks(std::int64_t ticks_100ns);
 std::uint64_t utc_filetime();
 std::int64_t performance_counter() noexcept;
