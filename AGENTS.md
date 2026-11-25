@@ -77,6 +77,13 @@ branch settings; these repository files alone do not enforce permissions.
   limits, not a hard RSS cap. It is for the measured committed XMem boot path;
   fail-closed checks precede code. No GPU/display/process/thread or higher-memory
   permission is implied. Tiny regression checks retain the original strict profile.
+- Task065's 8 GiB boot-memory profile is explicitly approved: outer-workspace
+  run_boot_memory_8g_isolated.py and isolation_boot_memory_8g_bootstrap.py retain
+  the sparse profile's isolation and mapping restrictions with 64 GiB address
+  space, 8 GiB data and a sampled 8 GiB RSS watchdog. There is no hard RSS cap.
+  Fail-closed checks precede code. Original profiles remain unchanged; tiny
+  regression checks still use run_isolated.py. No GPU/display, process/thread
+  creation, higher memory or other host integration is authorized by this profile.
 
 ## Before you guess, look
 

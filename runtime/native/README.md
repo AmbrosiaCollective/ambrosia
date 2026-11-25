@@ -615,10 +615,10 @@ coverage remains unverified.
 Diagnostic --boot-memory selects a 2 GiB private allowance alongside 48 GiB of
 no-access windows. It grants no OS resources. Its separate approved boot-memory
 sandbox raises the data/RSS watchdog bounds to 2 GiB; the earlier approved sparse
-profile remains at 512 MiB. Tiny
-regression tests still use the original strict profile. Successful fixtures are
-not evidence of the menu. Actual diagnostic runs now accept the committed block
-and stop at semaphore creation; GPU initialization/rendering remain unverified.
+profile remains at 512 MiB. Tiny regression tests still use the original strict
+profile. The larger approved diagnostic profile described below also passes
+subsequent semaphore and committed-allocation startup steps. Successful fixtures
+and startup steps do not establish menu or GPU initialization/rendering support.
 
 
 ## Owned semaphores and handle rights
@@ -658,7 +658,14 @@ The selected cap reaches the real memory owner; combined accounting includes
 both private and window allowances. A tiny original PE confirms that the same
 2 MiB request fails under 1 MiB and succeeds under 2 MiB. Selecting 8192 alongside
 sparse windows allows 56 GiB aggregate virtual reservations. The CLI grants no
-OS resources and cannot bypass its execution sandbox. An 8 GiB data/RSS-watchdog
-profile is prepared separately and requires explicit approval before use; until
-then actual runs retain the already approved 2 GiB profile. No GPU/thread or
-higher-memory integration follows from this option.
+OS resources and cannot bypass its execution sandbox.
+
+The separate 8 GiB boot-memory profile is approved and passes fail-closed checks,
+including refusal of above-limit writable mappings and protection upgrades. It
+retains 64 GiB address space, read-only inputs and the earlier filesystem,
+credential, network, exec, process/thread, GPU/display and mapping restrictions.
+Its sampled RSS watchdog is not a hard RSS cap. Earlier profiles are unchanged.
+Actual GCC and Clang diagnostic runs now pass the measured memory requests and
+stop at the unsupported GetLogicalProcessorInformation import. No window, menu
+or rendering has been verified. No GPU/thread or higher-memory integration
+follows from this option or its approved profile.
