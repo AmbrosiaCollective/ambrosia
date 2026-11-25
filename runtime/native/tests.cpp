@@ -177,6 +177,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "private_memory_option_tests.h"
 #include "processor_topology_tests.h"
 #include "exception_filter_tests.h"
+#include "new_allocation_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -354,6 +355,7 @@ extern "C" int ambrosia_native_tests() {
         semaphore_checks();
         processor_topology_checks();
         exception_filter_checks();
+        new_allocation_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {
         ++failures;
@@ -406,6 +408,15 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
 
 extern "C" int ambrosia_native_trace(const char *image, const char *package) {
     return trace_native_image(image, package, 0);
+}
+
+extern "C" int ambrosia_native_invalid_new_mode() {
+    ambrosia::services::Runtime runtime;
+    ambrosia::services::Scope scope(runtime);
+    using SetMode = std::int32_t(AMBROSIA_GUEST_ABI *)(std::int32_t);
+    const auto set_mode =
+        reinterpret_cast<SetMode>(runtime.resolve(service_symbol("_set_new_mode", "ucrtbase.dll")));
+    return set_mode(2);
 }
 
 extern "C" int ambrosia_native_trace_sparse(const char *image, const char *package) {

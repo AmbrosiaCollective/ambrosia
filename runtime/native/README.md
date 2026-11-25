@@ -721,5 +721,31 @@ concurrency run is claimed. Native signal dispositions remain unchanged.
 This implements registration, not exception dispatch. UnhandledExceptionFilter,
 RaiseException and Linux-to-Windows exception/continuation translation remain
 unsupported. Diagnostic faults still terminate without invoking guest callbacks
-or pretending execution can resume. Actual startup now passes registration and
-reaches the CRT's unsupported _set_new_mode import. No window or menu is verified.
+or pretending execution can resume. Actual startup passed registration and
+reached CRT allocation-mode initialization. No window or menu is verified.
+
+## CRT allocation-failure policy
+
+_set_new_mode/_query_new_mode and _set_new_handler/_query_new_handler retain
+process-owned atomic state. _callnewh invokes the current Microsoft-ABI callback
+with the full requested size and normalizes its result to zero or one. Default
+mode is zero with no handler; setters return the previous value without changing
+successful Win32/CRT error state. Separate Runtime instances remain independent.
+
+When enabled, failed malloc/calloc/realloc attempts call the handler after the
+heap lock is released. A nonzero result retries allocation; zero or no handler
+returns null with guest ENOMEM. A handler may free other storage or clear itself.
+Zero-byte malloc/calloc requests normalize to one byte; overflow and requests
+beyond the x64 CRT maximum fail without invoking the handler. Failed realloc
+retains the original block. Retry loops remain under execution time/resource
+bounds rather than inventing an API-specific retry count.
+
+The Runtime constructor accepts an explicit CRT heap budget for bounded use and
+deterministic tiny fixtures; the default remains 64 MiB, independent of virtual-
+memory caps. Tests recover allocations from a 64-byte heap, including calloc
+zeroing and realloc prefix preservation. No host/guest concurrency coverage is
+claimed. Invalid-mode parameter dispatch and guest C++ exception propagation
+remain unsupported and stop explicitly rather than returning fabricated results.
+
+Actual startup now accepts allocation-mode initialization and reaches the CRT
+math import tanf. No window, rendering or interactive menu is verified.

@@ -14,6 +14,7 @@
 #include "kernel_objects.h"
 #include "memory_services.h"
 #include "native_modules.h"
+#include "new_allocations.h"
 #include "pointer_codec.h"
 #include "processor_information.h"
 #include "registry_keys.h"
@@ -28,7 +29,7 @@ std::int32_t &crt_error() noexcept;
 class Runtime {
   public:
     explicit Runtime(std::size_t memory_budget = 64 * 1024 * 1024);
-    explicit Runtime(MemoryLimits memory_limits);
+    explicit Runtime(MemoryLimits memory_limits, std::size_t heap_budget = 64 * 1024 * 1024);
     Runtime(MemoryLimits memory_limits, const host::ProcessorTopology &topology);
     std::uintptr_t resolve(const pe::Import &symbol) const;
     const ProcessorInformation &processor_information();
@@ -81,6 +82,10 @@ class Runtime {
         return heap_;
     }
 
+    NewAllocations &new_allocations() {
+        return new_allocations_;
+    }
+
     void lock_locales();
     void unlock_locales();
 
@@ -111,6 +116,7 @@ class Runtime {
     OnExitTables on_exit_;
     StandardStreams streams_;
     CrtHeap heap_;
+    NewAllocations new_allocations_;
     CriticalSections locale_sections_;
     alignas(8) std::array<std::byte, 40> locale_lock_{};
     PointerCodec pointers_;

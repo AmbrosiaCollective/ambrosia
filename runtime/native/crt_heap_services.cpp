@@ -6,12 +6,16 @@
 
 namespace ambrosia::services {
 namespace {
-CrtHeap &heap() noexcept {
+Runtime &runtime() noexcept {
     auto *runtime = current_runtime();
     if (!runtime) {
         diagnostics::stop_trace("CRT heap accessed without scoped runtime", 78);
     }
-    return runtime->heap();
+    return *runtime;
+}
+
+CrtHeap &heap() noexcept {
+    return runtime().heap();
 }
 
 void *allocation_result(HeapResult result) noexcept {
@@ -24,20 +28,57 @@ void *allocation_result(HeapResult result) noexcept {
     return result.address;
 }
 
+bool invoke_new_handler(std::size_t bytes) noexcept {
+    const auto handler = runtime().new_allocations().handler();
+    if (!handler) {
+        return false;
+    }
+    try {
+        return handler(bytes) != 0;
+    } catch (...) {
+        diagnostics::stop_trace("guest new-handler exception propagation is not implemented", 78);
+    }
+}
+
+template <class Operation> void *retry_allocation(std::size_t bytes, Operation operation) noexcept {
+    for (;;) {
+        const auto result = operation();
+        // The heap operation has released its lock before guest code runs. A
+        // handler may free storage, allocate recursively or replace itself.
+        if (result.error != HeapError::exhausted || runtime().new_allocations().mode() == 0 ||
+            !invoke_new_handler(bytes)) {
+            return allocation_result(result);
+        }
+    }
+}
+
+constexpr std::size_t maximum_crt_request = SIZE_MAX - 31;
+
 void *AMBROSIA_GUEST_ABI allocate(std::size_t bytes) noexcept {
-    return allocation_result(heap().allocate(bytes));
+    if (bytes > maximum_crt_request) {
+        return allocation_result({nullptr, HeapError::exhausted});
+    }
+    const auto actual = bytes ? bytes : 1;
+    return retry_allocation(actual, [&] { return heap().allocate(actual); });
 }
 
 void *AMBROSIA_GUEST_ABI allocate_zero(std::size_t count, std::size_t bytes) noexcept {
-    if (bytes && count > std::numeric_limits<std::size_t>::max() / bytes) {
+    if (count && bytes > maximum_crt_request / count) {
         crt_error() = 12;
         return nullptr;
     }
-    return allocation_result(heap().allocate(count * bytes, true));
+    const auto actual = count && bytes ? count * bytes : 1;
+    return retry_allocation(actual, [&] { return heap().allocate(actual, true); });
 }
 
 void *AMBROSIA_GUEST_ABI resize(void *address, std::size_t bytes) noexcept {
-    return allocation_result(heap().resize(address, bytes));
+    if (!address) {
+        return allocate(bytes);
+    }
+    if (bytes > maximum_crt_request) {
+        return allocation_result({nullptr, HeapError::exhausted});
+    }
+    return retry_allocation(bytes, [&] { return heap().resize(address, bytes); });
 }
 
 void AMBROSIA_GUEST_ABI release(void *address) noexcept {
@@ -63,10 +104,41 @@ std::int32_t AMBROSIA_GUEST_ABI set_error(std::int32_t error) noexcept {
     crt_error() = error;
     return 0;
 }
+
+std::int32_t AMBROSIA_GUEST_ABI set_new_mode(std::int32_t mode) noexcept {
+    const auto previous = runtime().new_allocations().replace_mode(mode);
+    if (previous < 0) {
+        crt_error() = 22;
+        diagnostics::stop_trace("CRT invalid-parameter dispatch is not implemented", 78);
+    }
+    diagnostics::write_service_trace("TRACE CRT allocation-failure mode accepted\n");
+    return previous;
+}
+
+std::int32_t AMBROSIA_GUEST_ABI query_new_mode() noexcept {
+    return runtime().new_allocations().mode();
+}
+
+NewAllocationHandler AMBROSIA_GUEST_ABI set_new_handler(NewAllocationHandler handler) noexcept {
+    return runtime().new_allocations().replace_handler(handler);
+}
+
+NewAllocationHandler AMBROSIA_GUEST_ABI query_new_handler() noexcept {
+    return runtime().new_allocations().handler();
+}
+
+std::int32_t AMBROSIA_GUEST_ABI call_new_handler(std::size_t bytes) noexcept {
+    return invoke_new_handler(bytes) ? 1 : 0;
+}
 } // namespace
 
 void register_crt_heap(ImportRegistry &registry) {
     for (const auto *module : {"ucrtbase.dll", "msvcrt.dll", "api-ms-win-crt-heap-l1-1-0.dll"}) {
+        registry.add(module, "_set_new_mode", reinterpret_cast<std::uintptr_t>(&set_new_mode));
+        registry.add(module, "_query_new_mode", reinterpret_cast<std::uintptr_t>(&query_new_mode));
+        registry.add(module, "_set_new_handler", reinterpret_cast<std::uintptr_t>(&set_new_handler));
+        registry.add(module, "_query_new_handler", reinterpret_cast<std::uintptr_t>(&query_new_handler));
+        registry.add(module, "_callnewh", reinterpret_cast<std::uintptr_t>(&call_new_handler));
         for (const auto *name : {"malloc", "_malloc_base"}) {
             registry.add(module, name, reinterpret_cast<std::uintptr_t>(&allocate));
         }
