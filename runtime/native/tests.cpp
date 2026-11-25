@@ -174,6 +174,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "memory_budget_tests.h"
 #include "xmem_committed_tests.h"
 #include "semaphore_tests.h"
+#include "private_memory_option_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -349,6 +350,7 @@ extern "C" int ambrosia_native_tests() {
         memory_budget_checks();
         xmem_committed_checks();
         semaphore_checks();
+        private_memory_option_checks();
     } catch (const std::exception &error) {
         ++failures;
         std::cerr << "unexpected: " << error.what() << '\n';
@@ -386,6 +388,10 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
             arguments.emplace_back("--sparse-windows");
         } else if (memory_profile == 2) {
             arguments.emplace_back("--boot-memory");
+        } else if (memory_profile == 3) {
+            arguments.emplace_back("--sparse-windows");
+            arguments.emplace_back("--private-memory-mib");
+            arguments.emplace_back("8192");
         }
         return ambrosia::run_native_command(arguments, std::cout, std::cerr);
     } catch (...) {
@@ -404,6 +410,10 @@ extern "C" int ambrosia_native_trace_sparse(const char *image, const char *packa
 
 extern "C" int ambrosia_native_trace_boot_memory(const char *image, const char *package) {
     return trace_native_image(image, package, 2);
+}
+
+extern "C" int ambrosia_native_trace_memory_8g(const char *image, const char *package) {
+    return trace_native_image(image, package, 3);
 }
 
 extern "C" int ambrosia_native_trace_fixture(unsigned scenario) {

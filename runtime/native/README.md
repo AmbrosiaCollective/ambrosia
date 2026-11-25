@@ -643,3 +643,22 @@ limits remain 4,096 handles, 1 MiB name text and 64 queued waiters per object.
 Deterministic signal interleavings, finite single-thread timeouts and ABI tests
 provide CPU coverage; guest-thread contention and APC/alertable waits remain
 unrun or unsupported. No new host thread or semaphore service is started.
+
+
+## Bounded diagnostic private-memory option
+
+Trace mode accepts --private-memory-mib N, a strict decimal value from 1 through
+8192 MiB. Missing, signed, overflowing, suffixed, duplicate and conflicting
+arguments fail before input loading. Inspection and normal bootstrap modes reject
+it. Defaults and the fixed --boot-memory profile stay unchanged. Explicit private
+selection cannot combine with that fixed profile; --sparse-windows remains the
+independent 48 GiB no-access window option.
+
+The selected cap reaches the real memory owner; combined accounting includes
+both private and window allowances. A tiny original PE confirms that the same
+2 MiB request fails under 1 MiB and succeeds under 2 MiB. Selecting 8192 alongside
+sparse windows allows 56 GiB aggregate virtual reservations. The CLI grants no
+OS resources and cannot bypass its execution sandbox. An 8 GiB data/RSS-watchdog
+profile is prepared separately and requires explicit approval before use; until
+then actual runs retain the already approved 2 GiB profile. No GPU/thread or
+higher-memory integration follows from this option.

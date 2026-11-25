@@ -4,6 +4,8 @@
 #include "package_modules.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
+#include <charconv>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 
@@ -17,22 +19,47 @@ struct Options {
     bool trace = false;
     bool sparse_windows = false;
     bool boot_memory = false;
+    std::optional<std::size_t> private_memory_bytes;
 };
 
 constexpr const char *usage =
     "ambrosia-host --inspect IMAGE [--package DIR] [--work DIR]\n"
     "              --run-bootstrap IMAGE [--package DIR] [--work DIR]\n"
     "              --trace-startup IMAGE [--package DIR] [--work DIR] [--sparse-windows | --boot-memory]\n"
+    "                                   [--private-memory-mib N]\n"
     "Inspect maps supported PE dependencies without running callbacks.\n"
     "Run-bootstrap supports synthetic PE startup only.\n"
     "Trace-startup is diagnostic: unsupported calls/faults terminate the process.\n"
     "Sparse-windows allows 48 GiB of no-access reservations; use the approved sparse sandbox.\n"
-    "Boot-memory also allows 2 GiB private reservations; requires its separately approved memory sandbox.\n";
+    "Boot-memory also allows 2 GiB private reservations; requires its separately approved memory sandbox.\n"
+    "Private-memory-mib selects 1..8192 MiB for diagnostics; use a matching approved sandbox.\n";
+
+std::size_t parse_private_memory(const std::filesystem::path &argument) {
+    const auto text = argument.string();
+    std::uint64_t mib = 0;
+    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), mib);
+    constexpr std::size_t one_mib = 1024 * 1024;
+    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || !mib || mib > 8192 ||
+        mib > std::numeric_limits<std::size_t>::max() / one_mib) {
+        throw std::invalid_argument("private-memory-mib must be a decimal integer from 1 to 8192");
+    }
+    return static_cast<std::size_t>(mib) * one_mib;
+}
 
 Options parse_options(std::span<const std::filesystem::path> arguments) {
     Options options;
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const auto &flag = arguments[index];
+        if (flag == "--private-memory-mib") {
+            if (options.private_memory_bytes) {
+                throw std::invalid_argument("duplicate private-memory-mib option");
+            }
+            if (++index == arguments.size()) {
+                throw std::invalid_argument("private-memory-mib requires a value");
+            }
+            options.private_memory_bytes = parse_private_memory(arguments[index]);
+            continue;
+        }
         if (flag == "--sparse-windows" || flag == "--boot-memory") {
             if (options.sparse_windows || options.boot_memory) {
                 throw std::invalid_argument("duplicate sparse-window or boot-memory option");
@@ -75,6 +102,12 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
     if ((options.sparse_windows || options.boot_memory) && !options.trace) {
         throw std::invalid_argument("sparse-window option requires trace-startup mode");
     }
+    if (options.private_memory_bytes && !options.trace) {
+        throw std::invalid_argument("private-memory-mib requires trace-startup mode");
+    }
+    if (options.private_memory_bytes && options.boot_memory) {
+        throw std::invalid_argument("private-memory-mib conflicts with the fixed boot-memory profile");
+    }
     return options;
 }
 } // namespace
@@ -106,8 +139,13 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         if (options.boot_memory) {
             memory_limits.private_bytes = 2ull << 30;
         }
+        if (options.private_memory_bytes) {
+            memory_limits.private_bytes = *options.private_memory_bytes;
+        }
         if (options.sparse_windows || options.boot_memory) {
             memory_limits.window_bytes = 48ull << 30;
+        }
+        if (options.private_memory_bytes || options.sparse_windows || options.boot_memory) {
             memory_limits.total_bytes = memory_limits.window_bytes + memory_limits.private_bytes;
         }
         services::Runtime service_runtime(memory_limits);
