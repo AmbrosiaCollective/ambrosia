@@ -15,6 +15,7 @@
 #include "registry_services.h"
 #include "scan_services.h"
 #include "slist_services.h"
+#include "sort_services.h"
 #include "startup_trace.h"
 #include "string_services.h"
 #include "xmem_services.h"
@@ -162,6 +163,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     register_math_services(registry_);
     register_format_services(registry_);
     register_scan_services(registry_);
+    register_sort_services(registry_);
     register_random_services(registry_);
     register_string_services(registry_);
     register_nls_services(registry_);

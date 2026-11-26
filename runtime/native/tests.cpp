@@ -235,6 +235,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "tokenizer_tests.h"
 #include "format_tests.h"
 #include "scan_tests.h"
+#include "sort_tests.h"
 #include "wide_format_tests.h"
 #include "invalid_parameter_tests.h"
 #include "random_tests.h"
@@ -722,6 +723,7 @@ extern "C" int ambrosia_native_tests() {
         format_checks();
         scan_checks();
         scan_integer_checks();
+        sort_checks();
         wide_format_checks();
         invalid_parameter_checks();
         secure_random_checks();
@@ -914,6 +916,10 @@ extern "C" int ambrosia_native_trace_storage_8g(const char *image, const char *p
         return 2;
     }
     return trace_native_image(image, package, 3, inventory, storage);
+}
+
+extern "C" int ambrosia_native_sort_rejection(unsigned mode) {
+    return sort_rejection_probe(mode);
 }
 
 extern "C" int ambrosia_native_trace_fixture(unsigned scenario) {
