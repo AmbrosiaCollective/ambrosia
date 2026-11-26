@@ -29,6 +29,8 @@ class ThreadContext {
     std::uint32_t &last_error();
     std::int32_t &crt_error();
     void on_exit(std::function<void()> callback);
+    // Host-only notification after guest cleanup and restoration of native TLS.
+    void on_completion(std::function<void()> callback);
 
     std::uintptr_t invalid_parameter_handler() const {
         require_owner();
@@ -87,6 +89,7 @@ class ThreadContext {
     bool sealed_ = false;
     bool exiting_ = false;
     std::vector<std::function<void()>> exit_callbacks_;
+    std::function<void()> completion_callback_;
 };
 
 class ThreadContext::Activation {

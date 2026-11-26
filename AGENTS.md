@@ -196,3 +196,12 @@ other clone/process/exec/network/shared-memory/WX/GPU operations remain denied.
 All 35 fail-closed checks precede entry, including worker creation to the kernel
 limit and joining them back to one thread. No hard RSS cap is claimed. Preserve
 older profiles; ordinary threadless tests still use the original strict helper.
+
+
+Task096 adds the reviewed compiler-only scripts/build_native_long_isolated.py
+helper after Clang reached the 120-second command wall under concurrent load.
+Only that wall budget rises to 180 seconds. Read-only source, hidden home,
+credentials/game/GPU/network, 2 GiB AS, 45/50 CPU seconds per compiler process,
+64 MiB scratch/artifact limits and 128 FDs remain. Compiler children are allowed;
+the helper never runs output. Original helpers and every guest/test profile are
+preserved. This uses the standing necessary-resource authorization.

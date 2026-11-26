@@ -194,6 +194,7 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
                 JoinGuestThreads join_workers{service_runtime.threads()};
                 errors << "TRACE stage=executable-entry\n" << std::flush;
                 const auto returned = execution.run_bootstrap();
+                service_runtime.threads().owner_returned(static_cast<std::uint32_t>(returned));
                 service_runtime.threads().shutdown();
                 errors << "TRACE stage=returned-entry-cleanup\n" << std::flush;
                 execution.with_guest_context([&] { service_runtime.exit_callbacks().execute(); });
@@ -203,6 +204,7 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
             auto execution = graph.start();
             JoinGuestThreads join_workers{service_runtime.threads()};
             result = execution.run_bootstrap();
+            service_runtime.threads().owner_returned(static_cast<std::uint32_t>(*result));
             service_runtime.threads().shutdown();
             execution.with_guest_context([&] { service_runtime.exit_callbacks().execute(); });
         }

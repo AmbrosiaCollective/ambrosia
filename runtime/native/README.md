@@ -1230,7 +1230,7 @@ its worker. Completed jobs are joined/reaped, live jobs cap at64, waiters at64,
 and handles share the4,096-object directory budget. Stricter OS task limits still
 apply. The launcher and runtime owner join workers before process cleanup/detach;
 shutdown rejects new creation. This requires cooperative worker completion on
-normal executable return. Arbitrary SuspendThread of a running thread, ExitThread/termination, affinity and other thread APIs remain unsupported until implemented explicitly.
+normal executable return. Arbitrary SuspendThread of a running thread, ExitThread/termination and other thread APIs remain unsupported until implemented explicitly.
 
 Per-worker diagnostic stacks reuse the process fault handlers/ranges and do not
 replace shared signal dispositions. Faults still stop instead of resuming through
@@ -1354,3 +1354,22 @@ canonical module. The original64-module cap was reached when affinity contract
 aliases were added. Facades remain lazy; the16MiB aggregate executable-mapping
 budget,512KiB image cap, registry entry budget and game module graph limits are
 unchanged. A larger catalog is not permission to allocate more executable memory.
+
+
+## Reopening native guest threads
+
+OpenThread returns a new independently closable handle to a live owned worker
+or an owner lifetime registered from the active guest owner context. Handles
+retain the shared completion object, requested rights and inheritance marker.
+Queries, waits, resume, scheduling and affinity enforce their respective rights;
+zero/unknown/ended IDs cannot open unrelated or recycled native threads. Generic,
+maximum and security access mappings remain explicit unsupported boundaries.
+No child-process inheritance implementation is claimed.
+
+The owner context installs one host completion observer after guest cleanup and
+restoration of native TLS. The CLI records its actual entry result before worker
+drain and process cleanup; handles stay STILL_ACTIVE and unsignaled until cleanup
+finishes. An owner exit without a recorded result stops explicitly. A worker can
+reopen that registered owner; first registration from another host thread is
+unsupported. One Runtime models one owner guest lifetime. Worker ID lookup stays
+available throughout shutdown joins so draining callbacks can reopen themselves.

@@ -243,7 +243,8 @@ KernelObjects::KernelObjects(std::size_t limit, std::shared_ptr<HandleIds> ids)
     }
 }
 
-ObjectResult KernelObjects::insert_waitable(std::shared_ptr<WaitableObject> object, std::uint32_t access) {
+ObjectResult KernelObjects::insert_waitable(std::shared_ptr<WaitableObject> object, std::uint32_t access,
+                                            bool inherited) {
     const std::lock_guard lock(mutex_);
     if (!object) {
         return {0, 87};
@@ -255,13 +256,21 @@ ObjectResult KernelObjects::insert_waitable(std::shared_ptr<WaitableObject> obje
     if (!handle) {
         return {0, 8};
     }
-    handles_.emplace(handle, Handle{std::move(object), access});
+    handles_.emplace(handle, Handle{std::move(object), access, inherited});
     return {handle, 0};
 }
 
 std::shared_ptr<WaitableObject> KernelObjects::waitable(std::uintptr_t handle) const {
     const auto entry = find(handle);
     return entry ? entry->object : nullptr;
+}
+
+ObjectReference KernelObjects::reference(std::uintptr_t handle) const {
+    const auto entry = find(handle);
+    if (!entry) {
+        return {};
+    }
+    return {entry->object, entry->access, entry->inherited};
 }
 
 template <class Object, class Factory>

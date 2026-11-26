@@ -16,24 +16,34 @@ ThreadContext::ThreadContext() : owner_(std::this_thread::get_id()) {
 }
 
 ThreadContext::~ThreadContext() {
-    if (exit_callbacks_.empty()) {
-        return;
-    }
     try {
         require_owner();
         if (active_context == this) {
             std::terminate();
         }
         exiting_ = true;
-        // Cleanup sees the final guest TLS/error state while all blocks and
-        // callback-providing modules are still retained by the execution owner.
-        auto activation = activate();
-        for (auto callback = exit_callbacks_.rbegin(); callback != exit_callbacks_.rend(); ++callback) {
-            (*callback)();
+        if (!exit_callbacks_.empty()) {
+            // Cleanup sees the final guest TLS/error state while all blocks and
+            // callback-providing modules are retained by the execution owner.
+            auto activation = activate();
+            for (auto callback = exit_callbacks_.rbegin(); callback != exit_callbacks_.rend(); ++callback) {
+                (*callback)();
+            }
+        }
+        if (completion_callback_) {
+            completion_callback_();
         }
     } catch (...) {
         std::terminate();
     }
+}
+
+void ThreadContext::on_completion(std::function<void()> callback) {
+    require_owner();
+    if (!callback || exiting_ || completion_callback_) {
+        throw std::runtime_error("guest completion observer is absent, late or already installed");
+    }
+    completion_callback_ = std::move(callback);
 }
 
 void ThreadContext::on_exit(std::function<void()> callback) {

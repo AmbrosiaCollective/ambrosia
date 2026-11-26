@@ -80,11 +80,31 @@ class ThreadCompletion final : public WaitableObject {
     std::int32_t priority = 0;
     int base_niceness = 0;
     bool done = false;
+    bool result_known = false;
+    std::uint32_t pending_result = 0;
     unsigned waiters = 0;
     std::uint32_t id = 0;
     std::uint32_t start_error = 0;
     std::uint32_t code = 259; // STILL_ACTIVE until all guest cleanup completes.
 };
+
+struct ThreadReference {
+    std::shared_ptr<ThreadCompletion> state;
+    std::uint32_t error = 0;
+};
+
+ThreadReference thread_reference(const KernelObjects &objects, std::uintptr_t handle,
+                                 std::uint32_t required_access) {
+    const auto reference = objects.reference(handle);
+    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(reference.object);
+    if (!state) {
+        return {{}, 6};
+    }
+    if (required_access && !(reference.access & required_access)) {
+        return {{}, 5};
+    }
+    return {state, 0};
+}
 } // namespace
 
 struct NativeThreads::Job {
@@ -131,7 +151,7 @@ ThreadCreation NativeThreads::create(Runtime &runtime, pe::ModuleGraph &graph, T
     jobs_.push_back(job);
     ObjectResult object;
     try {
-        object = objects_.insert_waitable(job->completion, 0x1fffff);
+        object = objects_.insert_waitable(job->completion, thread_all_access);
         if (object.error) {
             jobs_.pop_back();
             return {0, 0, object.error};
@@ -219,29 +239,109 @@ std::uint32_t NativeThreads::exit_code(std::uintptr_t handle, void *output) cons
     if (!output) {
         return 87;
     }
-    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
-    if (!state) {
-        return 6;
+    const auto reference = thread_reference(objects_, handle, thread_query_access);
+    if (reference.error) {
+        return reference.error;
     }
+    const auto &state = reference.state;
     const std::lock_guard lock(state->mutex);
     std::memcpy(output, &state->code, sizeof(state->code));
     return 0;
 }
 
 std::uint32_t NativeThreads::thread_id(std::uintptr_t handle) const {
-    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
-    if (!state) {
-        return 0;
+    return identify(handle).id;
+}
+
+ThreadIdentity NativeThreads::identify(std::uintptr_t handle) const {
+    const auto reference = thread_reference(objects_, handle, thread_query_access);
+    if (reference.error) {
+        return {0, reference.error};
     }
+    const auto &state = reference.state;
     const std::lock_guard lock(state->mutex);
-    return state->id;
+    return {state->id, 0};
+}
+
+ObjectResult NativeThreads::open(std::uint32_t id, std::uint32_t access, bool inherited) {
+    if (!id || (access & ~thread_all_access)) {
+        return {0, 87};
+    }
+    const std::lock_guard directory(mutex_);
+    for (const auto &job : jobs_) {
+        const std::lock_guard state(job->completion->mutex);
+        if (job->completion->id == id && !job->completion->done) {
+            // A new independently closable handle retains the same wait/exit
+            // object. Holding completion prevents opening a recycled native ID.
+            return objects_.insert_waitable(job->completion, access, inherited);
+        }
+    }
+    if (id == owner_native_id_) {
+        auto state = std::dynamic_pointer_cast<ThreadCompletion>(owner_completion_);
+        if (!state) {
+            auto *context = guest::ThreadContext::current();
+            if (id != host::current_thread_id() || !context) {
+                diagnostics::stop_trace("process-owner lifetime must be registered from its guest context",
+                                        78);
+            }
+            const auto scheduling = host::thread_niceness(id);
+            if (scheduling.error != host::SchedulingError::none) {
+                return {0, priority_error(scheduling.error)};
+            }
+            state = std::make_shared<ThreadCompletion>();
+            state->id = id;
+            state->base_niceness = scheduling.value;
+            state->prepared = state->launched = true;
+            if (owner_result_) {
+                state->pending_result = *owner_result_;
+                state->result_known = true;
+            }
+            // Capture shared completion, never the Runtime: handles may outlive
+            // their directory. Signal only after all guest cleanup callbacks.
+            context->on_completion([state] {
+                const std::lock_guard lock(state->mutex);
+                if (!state->result_known) {
+                    diagnostics::stop_trace("guest owner exited without a recorded entry result", 78);
+                }
+                state->code = state->pending_result;
+                state->done = true;
+                state->changed.notify_all();
+            });
+            owner_completion_ = state;
+        }
+        const std::lock_guard lock(state->mutex);
+        if (!state->done) {
+            return objects_.insert_waitable(state, access, inherited);
+        }
+    } else if (id == host::current_thread_id() && guest::ThreadContext::current()) {
+        diagnostics::stop_trace("untracked guest thread lifetime is not modeled", 78);
+    }
+    return {0, 87};
+}
+
+void NativeThreads::owner_returned(std::uint32_t result) {
+    if (std::this_thread::get_id() != owner_) {
+        throw std::runtime_error("guest owner result must be recorded by its native owner");
+    }
+    const std::lock_guard directory(mutex_);
+    owner_result_ = result;
+    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(owner_completion_);
+    if (state) {
+        const std::lock_guard lock(state->mutex);
+        if (state->done) {
+            throw std::runtime_error("guest owner result cannot change after completion");
+        }
+        state->pending_result = result;
+        state->result_known = true;
+    }
 }
 
 std::uint32_t NativeThreads::set_priority(std::uintptr_t handle, std::int32_t priority) {
-    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
-    if (!state) {
-        return 6;
+    const auto reference = thread_reference(objects_, handle, thread_set_access);
+    if (reference.error) {
+        return reference.error;
     }
+    const auto &state = reference.state;
     int adjustment;
     switch (priority) {
     case -15:
@@ -283,16 +383,17 @@ std::uint32_t NativeThreads::set_priority(std::uintptr_t handle, std::int32_t pr
 }
 
 ThreadPriority NativeThreads::priority(std::uintptr_t handle) const {
-    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
-    if (!state) {
-        return {0x7fffffff, 6};
+    const auto reference = thread_reference(objects_, handle, thread_query_access);
+    if (reference.error) {
+        return {0x7fffffff, reference.error};
     }
+    const auto &state = reference.state;
     const std::lock_guard lock(state->mutex);
     return {state->priority, 0};
 }
 
 std::uint32_t
-NativeThreads::with_live_thread(std::uintptr_t handle,
+NativeThreads::with_live_thread(std::uintptr_t handle, std::uint32_t required_access,
                                 const std::function<std::uint32_t(std::uint32_t)> &operation) const {
     if (handle == static_cast<std::uintptr_t>(-2)) {
         if (!guest::ThreadContext::current()) {
@@ -300,10 +401,11 @@ NativeThreads::with_live_thread(std::uintptr_t handle,
         }
         return operation(host::current_thread_id());
     }
-    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
-    if (!state) {
-        return 6;
+    const auto reference = thread_reference(objects_, handle, required_access);
+    if (reference.error) {
+        return reference.error;
     }
+    const auto &state = reference.state;
     const std::lock_guard lock(state->mutex);
     if (state->done) {
         return 6;
@@ -313,19 +415,21 @@ NativeThreads::with_live_thread(std::uintptr_t handle,
 
 std::uint32_t NativeThreads::group_affinity(std::uintptr_t handle, const ThreadAffinity &mapping,
                                             GroupAffinity &output) const {
-    return with_live_thread(handle, [&](auto id) { return mapping.read(id, output); });
+    return with_live_thread(handle, thread_query_access, [&](auto id) { return mapping.read(id, output); });
 }
 
 std::uint32_t NativeThreads::set_group_affinity(std::uintptr_t handle, const ThreadAffinity &mapping,
                                                 const GroupAffinity &value, GroupAffinity &previous) {
-    return with_live_thread(handle, [&](auto id) { return mapping.write(id, value, previous); });
+    return with_live_thread(handle, thread_set_access,
+                            [&](auto id) { return mapping.write(id, value, previous); });
 }
 
 ThreadResume NativeThreads::resume(std::uintptr_t handle) {
-    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
-    if (!state) {
-        return {0xffffffffu, 6};
+    const auto reference = thread_reference(objects_, handle, thread_resume_access);
+    if (reference.error) {
+        return {0xffffffffu, reference.error};
     }
+    const auto &state = reference.state;
     std::lock_guard lock(state->mutex);
     const auto previous = state->suspend_count;
     if (previous) {
@@ -344,7 +448,9 @@ void NativeThreads::shutdown() noexcept {
         {
             std::lock_guard lock(mutex_);
             closing_ = true;
-            jobs.swap(jobs_);
+            // Keep the ID registry available while joining: a draining guest
+            // callback may reopen its own live thread even after entry returns.
+            jobs = jobs_;
         }
         for (const auto &job : jobs) {
             {
@@ -356,6 +462,8 @@ void NativeThreads::shutdown() noexcept {
             }
             job->thread.join();
         }
+        const std::lock_guard lock(mutex_);
+        jobs_.clear();
     } catch (...) {
         diagnostics::stop_trace("cannot join native guest workers before process detach", 78);
     }

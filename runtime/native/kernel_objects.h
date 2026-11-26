@@ -37,6 +37,12 @@ class WaitableObject {
     virtual WaitResult wait(std::uint32_t milliseconds) = 0;
 };
 
+struct ObjectReference {
+    std::shared_ptr<WaitableObject> object;
+    std::uint32_t access = 0;
+    bool inherited = false;
+};
+
 class KernelObjects {
   public:
     explicit KernelObjects(std::size_t limit = 4096,
@@ -53,13 +59,16 @@ class KernelObjects {
     std::uint32_t reset_event(std::uintptr_t handle);
     WaitResult wait(std::uintptr_t handle, std::uint32_t milliseconds);
     std::uint32_t close(std::uintptr_t handle);
-    ObjectResult insert_waitable(std::shared_ptr<WaitableObject> object, std::uint32_t access);
+    ObjectResult insert_waitable(std::shared_ptr<WaitableObject> object, std::uint32_t access,
+                                 bool inherited = false);
     std::shared_ptr<WaitableObject> waitable(std::uintptr_t handle) const;
+    ObjectReference reference(std::uintptr_t handle) const;
 
   private:
     struct Handle {
         std::shared_ptr<WaitableObject> object;
         std::uint32_t access;
+        bool inherited = false;
     };
     template <class Object, class Factory>
     ObjectResult create_object(const std::optional<std::u16string> &name, std::uint32_t access,

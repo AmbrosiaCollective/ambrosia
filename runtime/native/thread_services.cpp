@@ -58,6 +58,27 @@ std::uintptr_t AMBROSIA_GUEST_ABI create_thread(void *attributes, std::size_t st
     }
 }
 
+std::uintptr_t AMBROSIA_GUEST_ABI open_thread(std::uint32_t access, std::int32_t inherited,
+                                              std::uint32_t id) noexcept {
+    RestoreNativeError restore;
+    if (access & ~thread_all_access) {
+        diagnostics::stop_trace("generic/maximum/security thread access masks are not modeled", 78);
+    }
+    try {
+        const auto result = runtime().threads().open(id, access, inherited != 0);
+        if (result.error) {
+            set_last_error(result.error);
+            return 0;
+        }
+        return result.handle;
+    } catch (const std::bad_alloc &) {
+        set_last_error(8);
+        return 0;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::int32_t AMBROSIA_GUEST_ABI exit_code(std::uintptr_t handle, void *output) noexcept {
     RestoreNativeError restore;
     try {
@@ -116,11 +137,11 @@ std::uint32_t AMBROSIA_GUEST_ABI resume_thread(std::uintptr_t handle) noexcept {
 std::uint32_t AMBROSIA_GUEST_ABI thread_id(std::uintptr_t handle) noexcept {
     RestoreNativeError restore;
     try {
-        const auto id = runtime().threads().thread_id(handle);
-        if (!id) {
-            set_last_error(6);
+        const auto result = runtime().threads().identify(handle);
+        if (result.error) {
+            set_last_error(result.error);
         }
-        return id;
+        return result.id;
     } catch (const std::exception &error) {
         diagnostics::stop_trace(error.what(), 78);
     }
@@ -131,6 +152,7 @@ void register_thread_services(ImportRegistry &registry) {
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-processthreads-l1-1-0.dll",
                                "api-ms-win-core-processthreads-l1-1-1.dll"}) {
         registry.add(module, "CreateThread", reinterpret_cast<std::uintptr_t>(&create_thread));
+        registry.add(module, "OpenThread", reinterpret_cast<std::uintptr_t>(&open_thread));
         registry.add(module, "GetExitCodeThread", reinterpret_cast<std::uintptr_t>(&exit_code));
         registry.add(module, "GetThreadId", reinterpret_cast<std::uintptr_t>(&thread_id));
         registry.add(module, "ResumeThread", reinterpret_cast<std::uintptr_t>(&resume_thread));
