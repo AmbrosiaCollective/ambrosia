@@ -72,6 +72,34 @@ std::int32_t AMBROSIA_GUEST_ABI exit_code(std::uintptr_t handle, void *output) n
     }
 }
 
+std::int32_t AMBROSIA_GUEST_ABI set_priority(std::uintptr_t handle, std::int32_t priority) noexcept {
+    RestoreNativeError restore;
+    try {
+        const auto error = runtime().threads().set_priority(handle, priority);
+        if (error) {
+            set_last_error(error);
+            diagnostics::write_service_trace("TRACE native thread priority request rejected by adapter\n");
+            return 0;
+        }
+        return 1;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
+std::int32_t AMBROSIA_GUEST_ABI get_priority(std::uintptr_t handle) noexcept {
+    RestoreNativeError restore;
+    try {
+        const auto result = runtime().threads().priority(handle);
+        if (result.error) {
+            set_last_error(result.error);
+        }
+        return result.value;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::uint32_t AMBROSIA_GUEST_ABI resume_thread(std::uintptr_t handle) noexcept {
     RestoreNativeError restore;
     try {
@@ -106,6 +134,8 @@ void register_thread_services(ImportRegistry &registry) {
         registry.add(module, "GetExitCodeThread", reinterpret_cast<std::uintptr_t>(&exit_code));
         registry.add(module, "GetThreadId", reinterpret_cast<std::uintptr_t>(&thread_id));
         registry.add(module, "ResumeThread", reinterpret_cast<std::uintptr_t>(&resume_thread));
+        registry.add(module, "SetThreadPriority", reinterpret_cast<std::uintptr_t>(&set_priority));
+        registry.add(module, "GetThreadPriority", reinterpret_cast<std::uintptr_t>(&get_priority));
     }
 }
 } // namespace ambrosia::services

@@ -1,6 +1,8 @@
 #include "native_threads.h"
+#include "host_priority.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -9,6 +11,24 @@
 
 namespace ambrosia::services {
 namespace {
+std::uint32_t priority_error(host::SchedulingError error) {
+    switch (error) {
+    case host::SchedulingError::none:
+        return 0;
+    case host::SchedulingError::denied:
+        return 5;
+    case host::SchedulingError::missing_thread:
+        return 6;
+    case host::SchedulingError::invalid:
+        return 87;
+    case host::SchedulingError::unsupported:
+        return 50;
+    case host::SchedulingError::failure:
+        return 31;
+    }
+    return 31;
+}
+
 class ThreadCompletion final : public WaitableObject {
   public:
     WaitResult wait(std::uint32_t milliseconds) override {
@@ -57,6 +77,8 @@ class ThreadCompletion final : public WaitableObject {
     bool prepared = false;
     bool launched = false;
     std::uint32_t suspend_count = 0;
+    std::int32_t priority = 0;
+    int base_niceness = 0;
     bool done = false;
     unsigned waiters = 0;
     std::uint32_t id = 0;
@@ -122,7 +144,15 @@ ThreadCreation NativeThreads::create(Runtime &runtime, pe::ModuleGraph &graph, T
                 if (bounds.upper <= bounds.lower || bounds.upper - bounds.lower < stack_bytes) {
                     job->completion->ready(0, 8);
                 } else {
-                    job->completion->ready(host::current_thread_id(), 0);
+                    const auto id = host::current_thread_id();
+                    const auto scheduling = host::thread_niceness(id);
+                    if (scheduling.error != host::SchedulingError::none) {
+                        job->completion->ready(0, priority_error(scheduling.error));
+                        job->finished.store(true, std::memory_order_release);
+                        return;
+                    }
+                    job->completion->base_niceness = scheduling.value;
+                    job->completion->ready(id, 0);
                     {
                         std::unique_lock gate(job->completion->mutex);
                         job->completion->changed.wait(gate, [&] {
@@ -205,6 +235,60 @@ std::uint32_t NativeThreads::thread_id(std::uintptr_t handle) const {
     }
     const std::lock_guard lock(state->mutex);
     return state->id;
+}
+
+std::uint32_t NativeThreads::set_priority(std::uintptr_t handle, std::int32_t priority) {
+    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
+    if (!state) {
+        return 6;
+    }
+    int adjustment;
+    switch (priority) {
+    case -15:
+        adjustment = 19;
+        break;
+    case -2:
+        adjustment = 10;
+        break;
+    case -1:
+        adjustment = 5;
+        break;
+    case 0:
+        adjustment = 0;
+        break;
+    case 1:
+        adjustment = -5;
+        break;
+    case 2:
+        adjustment = -10;
+        break;
+    case 15:
+        adjustment = -20;
+        break;
+    default:
+        return 87;
+    }
+    // Completion cannot publish/exit/recycle its native TID while this lock
+    // protects the scheduling syscall. Only live owned IDs reach the host.
+    std::lock_guard lock(state->mutex);
+    if (state->done) {
+        return 6;
+    }
+    const auto target = std::clamp(state->base_niceness + adjustment, -20, 19);
+    const auto error = priority_error(host::set_thread_niceness(state->id, target));
+    if (!error) {
+        state->priority = priority;
+    }
+    return error;
+}
+
+ThreadPriority NativeThreads::priority(std::uintptr_t handle) const {
+    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
+    if (!state) {
+        return {0x7fffffff, 6};
+    }
+    const std::lock_guard lock(state->mutex);
+    return {state->priority, 0};
 }
 
 ThreadResume NativeThreads::resume(std::uintptr_t handle) {

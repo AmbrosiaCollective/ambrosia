@@ -269,3 +269,13 @@ separates stack commitment/reservation and CREATE_SUSPENDED, and wraps the nativ
 resume previous-count result. This is contract reference only; no Nt thread,
 signal-suspension or external implementation is copied/run. Ambrosia extends
 its existing C++ condition-variable startup gate before guest session activation.
+
+
+## Host-backed priority portability policy
+
+Installed Linux man-pages sched(7) and glibc resource/scheduling declarations
+record per-thread Linux nice values, SCHED_OTHER and privilege/limit constraints.
+Pinned Wine kernelbase-thread.c supplies Windows get/set error/return contracts
+only. No scheduler/kernel/Wine implementation is copied or run. The local host
+adapter applies and verifies bounded nice requests; the portable layer records a
+guest level only on host success. This is explicitly not a real-time scheduler.

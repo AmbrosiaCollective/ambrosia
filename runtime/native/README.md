@@ -1230,8 +1230,7 @@ its worker. Completed jobs are joined/reaped, live jobs cap at64, waiters at64,
 and handles share the4,096-object directory budget. Stricter OS task limits still
 apply. The launcher and runtime owner join workers before process cleanup/detach;
 shutdown rejects new creation. This requires cooperative worker completion on
-normal executable return. Arbitrary SuspendThread of a running thread, ExitThread/termination, priorities,
-affinity and other thread APIs remain unsupported until implemented explicitly.
+normal executable return. Arbitrary SuspendThread of a running thread, ExitThread/termination, affinity and other thread APIs remain unsupported until implemented explicitly.
 
 Per-worker diagnostic stacks reuse the process fault handlers/ranges and do not
 replace shared signal dispositions. Faults still stop instead of resuming through
@@ -1300,3 +1299,25 @@ all workers and let them finish before normal process teardown. Creation/close/
 wait/result semantics otherwise stay shared with ordinary native threads. Tests
 verify no early callback/entry, exact resume counts, one attach/detach and real
 entry/result under the same bounded-thread profile; menu evidence is separate.
+
+
+## Native priority adapter
+
+SetThreadPriority validates a live owned thread handle and the normal-process
+Windows levels -15,-2,-1,0,1,2,15. Under Linux SCHED_OTHER these map to nice
+adjustments +19,+10,+5,0,-5,-10,-20 relative to that worker's inherited native
+baseline, clamped to[-20,19]. This is a portability policy rather than an exact
+Windows scheduler/CPU-share or real-time guarantee. No scheduler class is changed.
+GetThreadPriority returns the last successfully applied guest level, initially0.
+A host permission denial returns false/ERROR_ACCESS_DENIED and leaves that level
+unchanged. Lowering nice may require privileges/limits that the isolation profile
+does not grant; no elevated execution, silent success or priority bypass is used.
+
+The narrow host adapter observes policy/nice, requests a change and verifies the
+result. Only a live owned native ID reaches it, with completion held so the ID
+cannot exit/recycle during the syscall. Other policies/hosts report unsupported.
+Completed handles retain their last successful guest level but cannot change an
+exited thread's scheduling; closed/non-thread handles fail. Worker creation checks
+SCHED_OTHER baseline availability before publishing a handle. Ordinary thread/
+stack/callback/teardown controls remain unchanged. Host nice changes on synthetic
+workers and truthful failure paths are verified separately from game/menu evidence.

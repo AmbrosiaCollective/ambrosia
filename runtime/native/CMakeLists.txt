@@ -8,7 +8,7 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8 OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_
   message(FATAL_ERROR "The native PE bootstrap currently requires an x86-64 host")
 endif()
 
-add_library(ambrosia_host_support STATIC host.cpp host_tls.cpp host_time.cpp host_stack.cpp host_random.cpp host_topology.cpp)
+add_library(ambrosia_host_support STATIC host.cpp host_tls.cpp host_time.cpp host_stack.cpp host_random.cpp host_topology.cpp host_priority.cpp)
 target_compile_features(ambrosia_host_support PUBLIC cxx_std_20)
 target_include_directories(ambrosia_host_support PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 add_library(ambrosia_pe_core STATIC pe_image.cpp pe_exports.cpp guest_thread.cpp module_execution.cpp module_graph.cpp unwind_table.cpp unwind_program.cpp unwind_epilogue.cpp)
