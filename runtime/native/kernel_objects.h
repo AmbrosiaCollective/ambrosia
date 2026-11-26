@@ -53,6 +53,8 @@ class KernelObjects {
     std::uint32_t reset_event(std::uintptr_t handle);
     WaitResult wait(std::uintptr_t handle, std::uint32_t milliseconds);
     std::uint32_t close(std::uintptr_t handle);
+    ObjectResult insert_waitable(std::shared_ptr<WaitableObject> object, std::uint32_t access);
+    std::shared_ptr<WaitableObject> waitable(std::uintptr_t handle) const;
 
   private:
     struct Handle {

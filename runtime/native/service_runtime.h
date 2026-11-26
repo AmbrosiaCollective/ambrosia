@@ -19,6 +19,7 @@
 #include "library_references.h"
 #include "memory_services.h"
 #include "native_modules.h"
+#include "native_threads.h"
 #include "new_allocations.h"
 #include "pointer_codec.h"
 #include "processor_information.h"
@@ -67,6 +68,10 @@ class Runtime {
     }
 
     unsigned notify_app_lifecycle(AppNotification kind, bool value);
+
+    NativeThreads &threads() {
+        return threads_;
+    }
 
     WinsockLifecycle &winsock() {
         return winsock_;
@@ -182,6 +187,7 @@ class Runtime {
     std::mutex processor_mutex_;
     std::optional<ProcessorInformation> processor_information_;
     std::unique_ptr<NativeModules> native_modules_;
+    NativeThreads threads_;
 };
 
 Runtime *current_runtime() noexcept;

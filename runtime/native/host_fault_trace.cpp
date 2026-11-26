@@ -105,8 +105,36 @@ FaultScope::FaultScope(std::vector<pe::ModuleRange> ranges) : state_(std::make_u
     }
     active_ranges.store(&state_->ranges, std::memory_order_relaxed);
 }
+
+struct ThreadFaultStack::State {
+    host::Mapping memory{64 * 1024};
+    stack_t previous{};
+    bool installed = false;
+
+    ~State() {
+        if (installed && sigaltstack(&previous, nullptr)) {
+            std::terminate();
+        }
+    }
+};
+
+ThreadFaultStack::ThreadFaultStack() : state_(std::make_unique<State>()) {
+    stack_t stack{};
+    stack.ss_sp = state_->memory.data();
+    stack.ss_size = state_->memory.size();
+    if (sigaltstack(&stack, &state_->previous)) {
+        throw std::runtime_error("cannot install worker diagnostic alternate stack");
+    }
+    state_->installed = true;
+}
 #else
 struct FaultScope::State {};
+
+struct ThreadFaultStack::State {};
+
+ThreadFaultStack::ThreadFaultStack() {
+    throw std::runtime_error("worker diagnostic stacks require native x64 Linux");
+}
 
 FaultScope::FaultScope(std::vector<pe::ModuleRange>) {
     throw std::runtime_error("diagnostic fault tracing requires native x64 Linux");
@@ -114,4 +142,5 @@ FaultScope::FaultScope(std::vector<pe::ModuleRange>) {
 #endif
 
 FaultScope::~FaultScope() = default;
+ThreadFaultStack::~ThreadFaultStack() = default;
 } // namespace ambrosia::diagnostics

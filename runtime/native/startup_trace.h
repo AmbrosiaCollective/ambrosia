@@ -54,4 +54,18 @@ class FaultScope {
     struct State;
     std::unique_ptr<State> state_;
 };
+
+// Worker-local alternate stack only. Process signal handlers/ranges remain
+// owned by the enclosing FaultScope until every guest worker has joined.
+class ThreadFaultStack {
+  public:
+    ThreadFaultStack();
+    ~ThreadFaultStack();
+    ThreadFaultStack(const ThreadFaultStack &) = delete;
+    ThreadFaultStack &operator=(const ThreadFaultStack &) = delete;
+
+  private:
+    struct State;
+    std::unique_ptr<State> state_;
+};
 } // namespace ambrosia::diagnostics

@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <csignal>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -184,6 +185,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "gdk_networking_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
+#include "native_thread_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -331,6 +333,51 @@ void host_checks() {
     check(missing_rejected, "missing executable rejected");
 }
 } // namespace
+
+extern "C" int ambrosia_native_thread_tests() {
+    checks = failures = 0;
+    try {
+        native_thread_handle_checks();
+        native_thread_launcher_checks();
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL native thread exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << checks << " native thread checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_thread_probe(unsigned mode) {
+    using namespace ambrosia;
+    using namespace services;
+    Runtime runtime;
+    auto bytes = native_thread_fixture();
+    if (mode == 1) {
+        bytes[0x380] = std::byte{0x0f};
+        bytes[0x381] = std::byte{0x0b};
+    }
+    pe::ModuleGraph graph([&](const auto &symbol) { return runtime.resolve(symbol); });
+    graph.add("thread-fault.exe", bytes);
+    graph.load("thread-fault.exe");
+    Scope scope(runtime, &graph);
+    diagnostics::FaultScope faults(graph.diagnostic_ranges());
+    auto process = graph.start();
+    using Create =
+        std::uintptr_t(AMBROSIA_GUEST_ABI *)(void *, std::size_t, ThreadEntry, void *, std::uint32_t, void *);
+    const auto create =
+        reinterpret_cast<Create>(runtime.resolve(service_symbol("CreateThread", "kernel32.dll")));
+    const auto entry = reinterpret_cast<ThreadEntry>(graph.loaded_module() + 0x1180);
+    std::uint32_t id = 0xfaceb00c;
+    const auto handle = create(nullptr, 65536, entry, reinterpret_cast<void *>(23), mode == 2 ? 4 : 0, &id);
+    const auto error = get_last_error();
+    if (handle) {
+        (void)runtime.objects().wait(handle, 2000);
+        (void)runtime.objects().close(handle);
+    }
+    runtime.threads().shutdown();
+    process.close();
+    return mode == 0 && !handle && error == 8 && id == 0xfaceb00c ? 0 : 99;
+}
 
 extern "C" int ambrosia_native_worker_module_tests() {
     checks = failures = 0;

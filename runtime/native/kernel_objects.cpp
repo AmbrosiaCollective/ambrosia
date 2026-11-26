@@ -243,6 +243,27 @@ KernelObjects::KernelObjects(std::size_t limit, std::shared_ptr<HandleIds> ids)
     }
 }
 
+ObjectResult KernelObjects::insert_waitable(std::shared_ptr<WaitableObject> object, std::uint32_t access) {
+    const std::lock_guard lock(mutex_);
+    if (!object) {
+        return {0, 87};
+    }
+    if (handles_.size() >= limit_) {
+        return {0, 8};
+    }
+    const auto handle = ids_->allocate();
+    if (!handle) {
+        return {0, 8};
+    }
+    handles_.emplace(handle, Handle{std::move(object), access});
+    return {handle, 0};
+}
+
+std::shared_ptr<WaitableObject> KernelObjects::waitable(std::uintptr_t handle) const {
+    const auto entry = find(handle);
+    return entry ? entry->object : nullptr;
+}
+
 template <class Object, class Factory>
 ObjectResult KernelObjects::create_object(const std::optional<std::u16string> &name, std::uint32_t access,
                                           Factory factory) {

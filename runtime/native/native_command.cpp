@@ -11,6 +11,14 @@
 
 namespace ambrosia {
 namespace {
+struct JoinGuestThreads {
+    services::NativeThreads &threads;
+
+    ~JoinGuestThreads() {
+        threads.shutdown();
+    }
+};
+
 struct Options {
     std::filesystem::path image;
     std::filesystem::path package;
@@ -183,15 +191,19 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
                        << std::flush;
                 errors << "TRACE stage=module-initialization\n" << std::flush;
                 auto execution = graph.start();
+                JoinGuestThreads join_workers{service_runtime.threads()};
                 errors << "TRACE stage=executable-entry\n" << std::flush;
                 const auto returned = execution.run_bootstrap();
+                service_runtime.threads().shutdown();
                 errors << "TRACE stage=returned-entry-cleanup\n" << std::flush;
                 execution.with_guest_context([&] { service_runtime.exit_callbacks().execute(); });
                 output << "{\"diagnostic_startup\":true,\"trace_returned\":" << returned << "}\n";
                 return 3;
             }
             auto execution = graph.start();
+            JoinGuestThreads join_workers{service_runtime.threads()};
             result = execution.run_bootstrap();
+            service_runtime.threads().shutdown();
             execution.with_guest_context([&] { service_runtime.exit_callbacks().execute(); });
         }
         output << "{\"modules\":" << statistics.modules << ",\"mapped_bytes\":" << statistics.mapped_bytes

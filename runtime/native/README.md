@@ -1209,6 +1209,33 @@ Thread creation during process initialization, guest exception unwinding and
 Windows guard-page stack growth remain unsupported. The host launcher must bound
 native stacks and retain its runtime service scope around the complete worker.
 
-This supplies guest thread initialization/lifetime for a native launcher, not the
-CreateThread handle/OS-thread implementation. Synthetic real-worker PE tests do
+This section supplies guest thread initialization/lifetime; the native thread
+handle layer below supplies CreateThread and its OS-thread implementation. Synthetic real-worker PE tests do
 not prove an actual game worker or interactive menu has started.
+
+
+## Native thread handles and launcher integration
+
+CreateThread with null security attributes and flags zero creates a real native
+thread, publishes its native ID and returns an opaque waitable handle. The
+worker has its own runtime/module scope, static TLS, module callouts and64KiB
+alternate signal stack. It uses the native stack policy; requested commitment is
+checked against actual usable bounds, with an8MiB per-request ceiling. Exact
+Windows reserve/commit/guard growth and suspended/reservation flags are not
+implemented. No thread is faked when native creation or stack validation fails.
+
+GetThreadId and GetExitCodeThread query owned thread objects. Completion becomes
+signaled after guest entry, thread detach and TLS cleanup; the actual DWORD result
+is retained, with STILL_ACTIVE while running. Closing a handle does not cancel
+its worker. Completed jobs are joined/reaped, live jobs cap at64, waiters at64,
+and handles share the4,096-object directory budget. Stricter OS task limits still
+apply. The launcher and runtime owner join workers before process cleanup/detach;
+shutdown rejects new creation. This requires cooperative worker completion on
+normal executable return. Suspended threads, ExitThread/termination, priorities,
+affinity and other thread APIs remain unsupported until implemented explicitly.
+
+Per-worker diagnostic stacks reuse the process fault handlers/ranges and do not
+replace shared signal dispositions. Faults still stop instead of resuming through
+unimplemented guest SEH. Synthetic tests cover real PE worker entry/arguments,
+TLS/errors/IDs/stacks, waits/results, close-without-cancel, repeated reaping and
+actual CLI teardown; these alone do not prove a running game menu.
