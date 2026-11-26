@@ -42,6 +42,10 @@ class GdkPackages {
     ~GdkPackages();
     void bind(const ReadonlyFiles &files);
     void bind_installation(std::span<const std::byte> inventory, const ReadonlyFiles &files);
+    // The host binds only this process game after validating an executable root
+    // and its inventory. Additional installed package roots are not registered.
+    void bind_current_game_catalog();
+    std::int32_t enumerate_packages(std::uint32_t kind, std::uint32_t scope, bool callback_present) const;
     std::shared_ptr<const PackageInstallation> installation() const;
     std::int32_t query(const Guid &interface_id, void *output) noexcept;
     std::int32_t identifier(std::size_t bytes, char *output) const;
@@ -75,6 +79,7 @@ class GdkPackages {
     mutable std::mutex mutex_;
     bool configured_ = false;
     bool quiescing_ = false;
+    bool game_catalog_bound_ = false;
     std::optional<PackageIdentity> identity_;
     std::shared_ptr<const PackageInstallation> installation_;
     std::map<std::uintptr_t, std::shared_ptr<Monitor>> monitors_;

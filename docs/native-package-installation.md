@@ -90,3 +90,17 @@ before joining queue workers, retaining progress for handlers already in flight.
 Selectors, other completion dispatch modes, DLC, licensing, downloads and other
 package methods remain unsupported. Absence of a trusted inventory returns an
 unsupported result when creating a monitor; identity metadata alone is insufficient.
+
+With an expected inventory, the diagnostic host also binds a catalog containing
+only the current game after checking that the mapped process root is executable.
+Identity or size evidence alone does not bind it. Additional installed package
+roots are not registered by this configuration; asset folders remain part of
+their containing game package.
+
+Enumeration currently supports `Content` with `ThisOnly`, which asks for DLC
+associated with the current title. The explicitly single-game catalog has no
+DLC entries, so that query completes without invoking a callback. Game-entry
+details, publisher content and broader scopes remain unsupported. Invalid enum
+values, missing or unmapped callbacks, an unbound catalog and teardown are
+rejected explicitly. Enumeration is limited to the configured runtime catalog;
+additional package roots require explicit registration support.

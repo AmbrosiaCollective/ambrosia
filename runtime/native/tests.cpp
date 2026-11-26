@@ -208,6 +208,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "worker_module_tests.h"
 #include "guest_callback_tests.h"
 #include "package_progress_tests.h"
+#include "package_enumeration_tests.h"
 #include "native_thread_tests.h"
 #include "thread_priority_tests.h"
 #include "thread_affinity_tests.h"
@@ -692,6 +693,7 @@ extern "C" int ambrosia_native_tests() {
         native_package_context_checks();
         package_installation_checks();
         package_monitor_checks();
+        package_enumeration_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();

@@ -198,6 +198,9 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
             if (!statistics.executable_root) {
                 throw std::runtime_error("bootstrap mode requires an executable root");
             }
+            if (service_runtime.gdk_packages().installation()) {
+                service_runtime.gdk_packages().bind_current_game_catalog();
+            }
             services::Scope scope(service_runtime, &graph);
             if (options.trace) {
                 stops->seal();

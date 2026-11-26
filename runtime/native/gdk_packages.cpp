@@ -506,6 +506,27 @@ bool AMBROSIA_GUEST_ABI unregister_progress(void *self, std::uintptr_t monitor, 
     }
 }
 
+using EnumerationRoutine = bool(AMBROSIA_GUEST_ABI *)(void *, const void *);
+
+std::int32_t AMBROSIA_GUEST_ABI enumerate_packages(void *self, std::uint32_t kind, std::uint32_t scope,
+                                                   void *, EnumerationRoutine callback) noexcept {
+    NativeErrorScope restore;
+    try {
+        auto &owner = packages(self);
+        require_ordinary_thread();
+        if (!callback) {
+            return gdk_invalid_argument;
+        }
+        const auto *graph = current_modules();
+        if (!graph || !graph->module_base_for_address(reinterpret_cast<std::uintptr_t>(callback))) {
+            return not_supported;
+        }
+        return owner.enumerate_packages(kind, scope, true);
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 template <std::size_t Slot> [[noreturn]] void AMBROSIA_GUEST_ABI unsupported() noexcept {
     diagnostics::stop_trace("unsupported local package interface slot " + std::to_string(Slot), 78);
 }
@@ -524,6 +545,7 @@ template <std::size_t... Slots> auto make_vtable(std::index_sequence<Slots...>) 
     result[8] = reinterpret_cast<std::uintptr_t>(&update_monitor);
     result[9] = reinterpret_cast<std::uintptr_t>(&register_progress);
     result[10] = reinterpret_cast<std::uintptr_t>(&unregister_progress);
+    result[39] = reinterpret_cast<std::uintptr_t>(&enumerate_packages);
     return result;
 }
 
@@ -605,6 +627,33 @@ void GdkPackages::bind_installation(std::span<const std::byte> inventory, const 
     diagnostics::write_service_trace(
         "TRACE native loose package inventory files=" + std::to_string(readiness.expected_files) + " ready=" +
         std::to_string(readiness.ready_files) + " complete=" + (readiness.completed() ? "1\n" : "0\n"));
+}
+
+void GdkPackages::bind_current_game_catalog() {
+    const std::lock_guard lock(mutex_);
+    if (quiescing_ || game_catalog_bound_ || !identity_ || !installation_) {
+        throw std::runtime_error("current-game catalog requires a bound identity/inventory and binds once");
+    }
+    game_catalog_bound_ = true;
+}
+
+std::int32_t GdkPackages::enumerate_packages(std::uint32_t kind, std::uint32_t scope,
+                                             bool callback_present) const {
+    if (!callback_present || kind > 2 || scope > 2) {
+        return gdk_invalid_argument;
+    }
+    const std::lock_guard lock(mutex_);
+    if (quiescing_ || !game_catalog_bound_) {
+        return not_supported;
+    }
+    // XPackageKind::Content / XPackageEnumerationScope::ThisOnly. The explicit
+    // catalog contains the current game, with no registered DLC package roots.
+    // Asset subdirectories are not separate installed packages.
+    if (kind != 1 || scope != 0) {
+        return not_supported;
+    }
+    diagnostics::write_service_trace("TRACE native current-title catalog enumerated no DLC packages\n");
+    return 0;
 }
 
 std::shared_ptr<const PackageInstallation> GdkPackages::installation() const {
