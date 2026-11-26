@@ -424,6 +424,13 @@ std::uint32_t NativeThreads::set_group_affinity(std::uintptr_t handle, const Thr
                             [&](auto id) { return mapping.write(id, value, previous); });
 }
 
+std::uint32_t NativeThreads::set_priority_boost(std::uintptr_t handle, bool disabled) const {
+    (void)disabled;
+    // Linux nice requests have a real adapter; Windows dynamic priority
+    // boosts do not. Validate rights/lifetime, then report that capability.
+    return with_live_thread(handle, thread_set_access, [](std::uint32_t) { return 50u; });
+}
+
 ThreadResume NativeThreads::resume(std::uintptr_t handle) {
     const auto reference = thread_reference(objects_, handle, thread_resume_access);
     if (reference.error) {

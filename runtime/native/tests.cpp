@@ -192,6 +192,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "thread_priority_tests.h"
 #include "thread_affinity_tests.h"
 #include "open_thread_tests.h"
+#include "priority_boost_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -414,6 +415,7 @@ extern "C" int ambrosia_native_thread_tests() {
         native_thread_priority_checks();
         native_thread_affinity_checks();
         open_thread_checks();
+        thread_priority_boost_checks();
     } catch (const std::exception &error) {
         std::cerr << "FAIL native thread exception: " << error.what() << '\n';
         ++failures;
@@ -539,6 +541,7 @@ extern "C" int ambrosia_native_tests() {
         trace_configuration_checks();
         clock_service_checks();
         current_process_handle_checks();
+        process_priority_boost_checks();
         crt_time_checks();
         uptime_checks();
         critical_section_checks();

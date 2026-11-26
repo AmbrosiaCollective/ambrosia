@@ -54,6 +54,7 @@ class NativeThreads {
     ThreadResume resume(std::uintptr_t handle);
     std::uint32_t set_priority(std::uintptr_t handle, std::int32_t priority);
     ThreadPriority priority(std::uintptr_t handle) const;
+    std::uint32_t set_priority_boost(std::uintptr_t handle, bool disabled) const;
     std::uint32_t group_affinity(std::uintptr_t handle, const ThreadAffinity &mapping,
                                  GroupAffinity &output) const;
     std::uint32_t set_group_affinity(std::uintptr_t handle, const ThreadAffinity &mapping,

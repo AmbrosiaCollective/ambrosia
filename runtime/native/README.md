@@ -1379,3 +1379,13 @@ GetCurrentProcess returns the exact full-width Windows guest pseudo-handle -1
 across the process/thread API contracts. It owns no kernel handle or host file
 descriptor. Each consuming API must validate this guest identity explicitly;
 this facade does not enable arbitrary host-process access or missing process APIs.
+
+
+SetProcessPriorityBoost and SetThreadPriorityBoost recognize supported current-
+process/live-thread targets and report FALSE/ERROR_NOT_SUPPORTED. Windows dynamic
+boost control has no native-host backend here; Linux nice control stays separate
+and real. No boost flag or scheduler success is invented. Invalid targets and
+missing thread SET rights report their own handle/access errors first. The thread
+pseudo-handle requires an active guest context. Callers may handle the unsupported
+capability through the API's normal error path. Process/thread contracts extend
+through l1-1-2; other services are not implied.

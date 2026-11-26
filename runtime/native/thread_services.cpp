@@ -126,6 +126,34 @@ std::int32_t AMBROSIA_GUEST_ABI get_priority(std::uintptr_t handle) noexcept {
     }
 }
 
+std::int32_t AMBROSIA_GUEST_ABI set_process_boost(std::uintptr_t process, std::int32_t disabled) noexcept {
+    RestoreNativeError restore;
+    (void)disabled;
+    if (process != static_cast<std::uintptr_t>(-1)) {
+        set_last_error(6);
+        return 0;
+    }
+    // The current guest process is recognized, but no native-host backend
+    // implements Windows dynamic boosts. Let callers handle this real failure.
+    set_last_error(50);
+    diagnostics::write_service_trace("TRACE native process priority boost unavailable\n");
+    return 0;
+}
+
+std::int32_t AMBROSIA_GUEST_ABI set_thread_boost(std::uintptr_t handle, std::int32_t disabled) noexcept {
+    RestoreNativeError restore;
+    try {
+        const auto error = runtime().threads().set_priority_boost(handle, disabled != 0);
+        if (error) {
+            set_last_error(error);
+            return 0;
+        }
+        return 1;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::uint32_t AMBROSIA_GUEST_ABI resume_thread(std::uintptr_t handle) noexcept {
     RestoreNativeError restore;
     try {
@@ -154,8 +182,11 @@ std::uint32_t AMBROSIA_GUEST_ABI thread_id(std::uintptr_t handle) noexcept {
 } // namespace
 
 void register_thread_services(ImportRegistry &registry) {
-    for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-processthreads-l1-1-0.dll",
-                               "api-ms-win-core-processthreads-l1-1-1.dll"}) {
+    for (const auto *module :
+         {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-processthreads-l1-1-0.dll",
+          "api-ms-win-core-processthreads-l1-1-1.dll", "api-ms-win-core-processthreads-l1-1-2.dll"}) {
+        registry.add(module, "SetProcessPriorityBoost", reinterpret_cast<std::uintptr_t>(&set_process_boost));
+        registry.add(module, "SetThreadPriorityBoost", reinterpret_cast<std::uintptr_t>(&set_thread_boost));
         registry.add(module, "GetCurrentProcess", reinterpret_cast<std::uintptr_t>(&current_process));
         registry.add(module, "CreateThread", reinterpret_cast<std::uintptr_t>(&create_thread));
         registry.add(module, "OpenThread", reinterpret_cast<std::uintptr_t>(&open_thread));
