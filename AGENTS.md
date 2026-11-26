@@ -205,3 +205,10 @@ credentials/game/GPU/network, 2 GiB AS, 45/50 CPU seconds per compiler process,
 64 MiB scratch/artifact limits and 128 FDs remain. Compiler children are allowed;
 the helper never runs output. Original helpers and every guest/test profile are
 preserved. This uses the standing necessary-resource authorization.
+
+
+For native C++ changes, use the reviewed long compiler helper's repeated
+--syntax-unit option for changed translation units and tests.cpp before a full
+rebuild. This source-only mode emits no binary and retains all compiler isolation
+controls. Compiler errors must return nonzero even with no expected artifacts.
+Keep artifact source/hash checks and isolated runtime tests after full builds.

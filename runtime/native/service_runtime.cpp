@@ -9,6 +9,7 @@
 #include "loader_services.h"
 #include "locale_services.h"
 #include "math_services.h"
+#include "nls_services.h"
 #include "random_services.h"
 #include "registry_services.h"
 #include "slist_services.h"
@@ -129,6 +130,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     register_format_services(registry_);
     register_random_services(registry_);
     register_string_services(registry_);
+    register_nls_services(registry_);
     register_gdk_bootstrap(registry_);
     register_task_queues(registry_);
     register_app_lifecycle(registry_);

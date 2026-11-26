@@ -4,6 +4,7 @@
 #include "guest_thread.h"
 #include "host_affinity.h"
 #include "host_priority.h"
+#include "nls_services.h"
 #include "module_graph.h"
 #include "native_command.h"
 #include "package_modules.h"
@@ -191,6 +192,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "gdk_user_tests.h"
 #include "game_input_tests.h"
 #include "storage_factory_tests.h"
+#include "nls_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
@@ -410,6 +412,14 @@ extern "C" int ambrosia_native_wide_format_probe(unsigned mode) {
     }
     return format(options, output.data(), size, pattern, locale,
                   reinterpret_cast<const std::byte *>(slots.data()));
+}
+
+extern "C" int ambrosia_native_codepage_probe() {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    using Convert = std::int32_t(AMBROSIA_GUEST_ABI *)(std::uint32_t, std::uint32_t, const char *, std::int32_t, void *, std::int32_t);
+    const auto convert = reinterpret_cast<Convert>(runtime.resolve(service_symbol("MultiByteToWideChar", "kernel32.dll")));
+    return convert(1252, 0, "test", -1, nullptr, 0);
 }
 
 extern "C" int ambrosia_native_storage_factory_probe(unsigned mode) {
@@ -652,6 +662,7 @@ extern "C" int ambrosia_native_tests() {
         gdk_user_subscription_checks();
         game_input_checks();
         storage_factory_checks();
+        native_text_conversion_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();

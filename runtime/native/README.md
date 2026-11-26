@@ -1473,3 +1473,22 @@ Files, status arrays, queue variants and requests remain explicit stops until
 their native ownership/read/execute paths exist. No queue or completed request is
 invented. No new host integration is needed for this factory; inputs stay RO.
 Staging allocation alone does not establish data loading or menu progress.
+
+
+## Native UTF conversion
+
+MultiByteToWideChar and WideCharToMultiByte use the installed ICU Unicode core
+behind thin Windows ABI facades. GetACP reports the explicit native UTF8 process
+policy (65001), and CP_ACP resolves to it; guest CRT C locale is separate. Other
+code pages stop explicitly. The wrappers implement exact positive counts and
+embedded NULs, count-minus-one including NUL, size queries, unaligned buffers,
+strict invalid-character flags and replacement behavior. UTF8 default-character
+arguments and unsupported flags return documented errors. Successful calls
+preserve caller error channels; insufficient output publishes no partial result.
+
+Input processing is bounded to16Mi units per call, with a guest allocation error
+before oversized reads. Temporary aligned conversion storage prevents aliasing
+ICU UChar with guest UTF16 and avoids ICU convenience terminators changing a
+Windows explicit-count result. ICU74+ is a portable installed build dependency;
+no runtime setup, host locale profile or online service is used. The retained
+LICENSE.ICU describes that dependency; no ICU implementation is copied here.

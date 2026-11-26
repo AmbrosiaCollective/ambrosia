@@ -309,3 +309,9 @@ VIctory and xbox-emulator declarations: X2 identity and console configuration/
 queue slots differ from the generic PC table. Its counted identity and actual
 staging allocation are original native code. No external I/O/decompression code
 is copied or compiled; future imports must retain their applicable licenses.
+
+
+`text_conversion.{h,cpp}` links the installed ICU74+ Unicode core through its
+public UTF conversion C API; Windows facades live in `nls_services.cpp`. The
+system dependency's MIT notice is retained as LICENSE.ICU. ABI/error facts come
+from pinned Microsoft SDK documentation. No external implementation is copied.
