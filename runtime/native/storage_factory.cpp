@@ -162,7 +162,7 @@ const std::array<std::uintptr_t, 16> factory_vtable{
 struct StorageFactory::File {
     RuntimeInterface object{file_vtable.data(), storage_file_x_id};
     mutable std::mutex mutex;
-    std::unique_ptr<host::ReadonlyFile> descriptor;
+    std::shared_ptr<host::ReadonlyFile> descriptor;
 };
 
 StorageFactory::StorageFactory() : object_(factory_vtable.data(), storage_factory_x2_id) {}

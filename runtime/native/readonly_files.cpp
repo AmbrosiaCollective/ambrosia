@@ -230,7 +230,11 @@ FileAttributes ReadonlyFiles::attributes(std::string_view path) const {
     return {1u | (found.metadata.directory ? 0x10u : 0u), 0};
 }
 
-ReadonlyFileOpen ReadonlyFiles::open(std::string_view path) const {
+ReadonlyFileOpen ReadonlyFiles::open(std::string_view path, bool read_data, std::uint32_t share,
+                                     bool unbuffered) const {
+    if (share & ~7u) {
+        return {nullptr, 87};
+    }
     const auto resolved = resolve(path);
     if (resolved.error) {
         return {nullptr, resolved.error};
@@ -238,7 +242,27 @@ ReadonlyFileOpen ReadonlyFiles::open(std::string_view path) const {
     if (resolved.directory_only) {
         return {nullptr, 5};
     }
-    auto result = resolved.directory->open(resolved.components);
-    return {std::move(result.file), guest_error(result.error)};
+    auto result = resolved.directory->open(resolved.components, unbuffered);
+    if (result.error != host::FileLookupError::none) {
+        return {nullptr, guest_error(result.error)};
+    }
+    const auto found = result.file->inspect();
+    if (found.error != host::FileLookupError::none) {
+        return {nullptr, guest_error(found.error)};
+    }
+    const std::lock_guard lock(mutex_);
+    std::erase_if(open_files_, [](const auto &entry) { return entry.file.expired(); });
+    if (open_files_.size() >= 32) {
+        return {nullptr, 8};
+    }
+    for (const auto &entry : open_files_) {
+        if (entry.device == found.metadata.device && entry.identity == found.metadata.identity && read_data &&
+            entry.read_data && (!(entry.share & 1) || !(share & 1))) {
+            return {nullptr, 32}; // Symmetric read sharing, also for hard-link aliases.
+        }
+    }
+    std::shared_ptr<host::ReadonlyFile> retained(std::move(result.file));
+    open_files_.push_back({retained, found.metadata.device, found.metadata.identity, read_data, share});
+    return {std::move(retained), 0};
 }
 } // namespace ambrosia::services

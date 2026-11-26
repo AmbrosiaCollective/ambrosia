@@ -21,6 +21,9 @@ enum class FileLookupError {
 struct FileMetadata {
     bool directory = false;
     std::uint64_t bytes = 0;
+    std::uint64_t device = 0;
+    std::uint64_t identity = 0;
+    bool unbuffered = false;
 };
 
 struct FileLookup {
@@ -56,7 +59,7 @@ class ReadonlyDirectory {
     ReadonlyDirectory(const ReadonlyDirectory &) = delete;
     ReadonlyDirectory &operator=(const ReadonlyDirectory &) = delete;
     FileLookup inspect(std::span<const std::string> components) const;
-    FileOpen open(std::span<const std::string> components) const;
+    FileOpen open(std::span<const std::string> components, bool unbuffered = false) const;
 
   private:
     struct State;

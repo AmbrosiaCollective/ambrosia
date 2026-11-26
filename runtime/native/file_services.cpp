@@ -94,11 +94,100 @@ std::uint32_t AMBROSIA_GUEST_ABI attributes_bytes(const char *source) noexcept {
         diagnostics::stop_trace(error.what(), 78);
     }
 }
+
+void *invalid_handle(std::uint32_t error) noexcept {
+    set_last_error(error);
+    return reinterpret_cast<void *>(~std::uintptr_t{0});
+}
+
+void *create_file(std::string_view path, std::uint32_t access, std::uint32_t share, const void *security,
+                  std::uint32_t disposition, std::uint32_t flags, void *template_file) {
+    auto *runtime = current_runtime();
+    if (!runtime) {
+        diagnostics::stop_trace("file creation requires a scoped native runtime", 78);
+    }
+    if (access != 0 && access != 0x80000000u) {
+        return invalid_handle(5); // The mounted asset namespace never grants writes.
+    }
+    if (disposition != 3) {
+        return invalid_handle(disposition >= 1 && disposition <= 5 ? 5 : 87);
+    }
+    if (share & ~7u) {
+        return invalid_handle(87);
+    }
+    if (security || template_file || (flags & ~(0x20000000u | 0x80u | 1u))) {
+        return invalid_handle(50);
+    }
+    const bool read_data = access != 0;
+    auto opened = runtime->files().open(path, read_data, share, (flags & 0x20000000u) != 0);
+    if (opened.error) {
+        return invalid_handle(opened.error);
+    }
+    auto file = std::make_shared<ReadonlyFileObject>(std::move(opened.file), read_data);
+    const auto result = runtime->objects().insert_waitable(file, access | object_synchronize);
+    if (result.error) {
+        return invalid_handle(result.error);
+    }
+    diagnostics::write_service_trace("TRACE native read-only file handle opened\n");
+    return reinterpret_cast<void *>(result.handle);
+}
+
+void *AMBROSIA_GUEST_ABI create_file_wide(const void *path, std::uint32_t access, std::uint32_t share,
+                                          const void *security, std::uint32_t disposition,
+                                          std::uint32_t flags, void *template_file) noexcept {
+    NativeErrorScope restore;
+    if (!path) {
+        return invalid_handle(87);
+    }
+    try {
+        const auto wide = read_filename<char16_t>(path);
+        if (!wide) {
+            return invalid_handle(206);
+        }
+        const auto utf8 = unicode::utf16_to_utf8(*wide, true);
+        return utf8 ? create_file(*utf8, access, share, security, disposition, flags, template_file)
+                    : invalid_handle(123);
+    } catch (const std::bad_alloc &) {
+        return invalid_handle(8);
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
+void *AMBROSIA_GUEST_ABI create_file_bytes(const char *path, std::uint32_t access, std::uint32_t share,
+                                           const void *security, std::uint32_t disposition,
+                                           std::uint32_t flags, void *template_file) noexcept {
+    NativeErrorScope restore;
+    if (!path) {
+        return invalid_handle(87);
+    }
+    try {
+        const auto bytes = read_filename<char>(path);
+        return bytes ? create_file(*bytes, access, share, security, disposition, flags, template_file)
+                     : invalid_handle(206);
+    } catch (const std::bad_alloc &) {
+        return invalid_handle(8);
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
 } // namespace
+
+WaitResult ReadonlyFileObject::wait(std::uint32_t milliseconds) {
+    (void)milliseconds;
+    // There are no pending I/O operations on these synchronous source handles.
+    return {wait_object_0, 0};
+}
+
+host::FileLookup ReadonlyFileObject::inspect() const {
+    return file_->inspect();
+}
 
 void register_file_services(ImportRegistry &registry) {
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-file-l1-1-0.dll",
                                "api-ms-win-core-file-l1-2-0.dll"}) {
+        registry.add(module, "CreateFileW", reinterpret_cast<std::uintptr_t>(&create_file_wide));
+        registry.add(module, "CreateFileA", reinterpret_cast<std::uintptr_t>(&create_file_bytes));
         registry.add(module, "GetFileAttributesW", reinterpret_cast<std::uintptr_t>(&attributes_wide));
         registry.add(module, "GetFileAttributesA", reinterpret_cast<std::uintptr_t>(&attributes_bytes));
     }

@@ -170,12 +170,19 @@ FileLookup metadata(int descriptor) {
         return {{}, lookup_error(errno)};
     }
     if (S_ISDIR(value.st_mode)) {
-        return {{true, 0}, FileLookupError::none};
+        return {{true, 0, static_cast<std::uint64_t>(value.st_dev), static_cast<std::uint64_t>(value.st_ino)},
+                FileLookupError::none};
     }
     if (!S_ISREG(value.st_mode) || value.st_size < 0) {
         return {{}, FileLookupError::unsupported};
     }
-    return {{false, static_cast<std::uint64_t>(value.st_size)}, FileLookupError::none};
+    const auto flags = ::fcntl(descriptor, F_GETFL);
+    if (flags < 0) {
+        return {{}, lookup_error(errno)};
+    }
+    return {{false, static_cast<std::uint64_t>(value.st_size), static_cast<std::uint64_t>(value.st_dev),
+             static_cast<std::uint64_t>(value.st_ino), (flags & O_DIRECT) != 0},
+            FileLookupError::none};
 }
 
 int walk(int root, std::span<const std::string> components, int final_flags, FileLookupError &error) {
@@ -292,7 +299,7 @@ FileLookup ReadonlyFile::inspect() const {
 #endif
 }
 
-FileOpen ReadonlyDirectory::open(std::span<const std::string> components) const {
+FileOpen ReadonlyDirectory::open(std::span<const std::string> components, bool unbuffered) const {
     NativeErrorScope restore;
 #ifdef __linux__
     if (components.empty()) {
@@ -300,7 +307,8 @@ FileOpen ReadonlyDirectory::open(std::span<const std::string> components) const 
     }
     FileLookupError error = FileLookupError::none;
     // NONBLOCK avoids waiting on a FIFO before fstat can reject non-files.
-    Descriptor descriptor(walk(state_->root.get(), components, O_RDONLY | O_NONBLOCK, error));
+    Descriptor descriptor(
+        walk(state_->root.get(), components, O_RDONLY | O_NONBLOCK | (unbuffered ? O_DIRECT : 0), error));
     if (descriptor.get() < 0) {
         return {nullptr, error};
     }
@@ -316,6 +324,7 @@ FileOpen ReadonlyDirectory::open(std::span<const std::string> components) const 
     return {std::move(file), FileLookupError::none};
 #else
     (void)components;
+    (void)unbuffered;
     return {nullptr, FileLookupError::unsupported};
 #endif
 }

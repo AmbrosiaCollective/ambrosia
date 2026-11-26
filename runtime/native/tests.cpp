@@ -1,6 +1,7 @@
 // Original tiny PE byte fixtures only. No SDK, game, driver or network needed.
 #include "clock_services.h"
 #include "event_signal.h"
+#include "file_services.h"
 #include "guest_thread.h"
 #include "host_affinity.h"
 #include "host_priority.h"
@@ -195,6 +196,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "storage_file_tests.h"
 #include "nls_tests.h"
 #include "file_tests.h"
+#include "file_handle_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
@@ -667,6 +669,7 @@ extern "C" int ambrosia_native_tests() {
         storage_file_checks();
         native_text_conversion_checks();
         readonly_file_checks();
+        native_file_handle_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();

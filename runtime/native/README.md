@@ -1520,3 +1520,12 @@ Close/final release close it. A bounded runtime pin keeps object addresses from
 being reused (32 open descriptors, 1024 lifetime objects). Descriptor metadata
 survives pathname replacement. File-information ABI slots and storage request
 queues remain explicit unsupported paths; this does not claim asset streaming.
+
+CreateFileA/W now open existing read-only source handles, with ordinary or actual
+Linux O_DIRECT access for FILE_FLAG_NO_BUFFERING. The same namespace tracks
+read-sharing by native file identity, including hard links and DirectStorage
+opens; metadata-only access does not restrict data sharing. One32-source budget
+spans both APIs. Handles use the existing opaque kernel-object directory and
+CloseHandle ownership; native owners can retain a source after handle close.
+Writes, creation, asynchronous/security/template semantics and other flags fail
+with explicit Windows errors. File data I/O remains a separate startup capability.

@@ -20,7 +20,7 @@ struct FileAttributes {
 };
 
 struct ReadonlyFileOpen {
-    std::unique_ptr<host::ReadonlyFile> file;
+    std::shared_ptr<host::ReadonlyFile> file;
     std::uint32_t error = 0;
 };
 
@@ -31,11 +31,22 @@ class ReadonlyFiles {
     void bind(const std::filesystem::path &package, const std::filesystem::path &image);
     ResolvedFilePath resolve(std::string_view path) const;
     FileAttributes attributes(std::string_view path) const;
-    ReadonlyFileOpen open(std::string_view path) const;
+    ReadonlyFileOpen open(std::string_view path, bool read_data = true, std::uint32_t share = 1,
+                          bool unbuffered = false) const;
 
   private:
     struct Roots;
+
+    struct SharedOpen {
+        std::weak_ptr<host::ReadonlyFile> file;
+        std::uint64_t device;
+        std::uint64_t identity;
+        bool read_data;
+        std::uint32_t share;
+    };
+
     mutable std::mutex mutex_;
+    mutable std::vector<SharedOpen> open_files_;
     std::shared_ptr<const Roots> roots_;
 };
 } // namespace ambrosia::services

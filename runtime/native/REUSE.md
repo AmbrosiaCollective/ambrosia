@@ -327,3 +327,9 @@ the pinned Task045 public console ABI references. No implementation is copied;
 Linux descriptor confinement remains behind the portable host-file boundary.
 The existing runtime-owned interface pin/lifetime model is extended for real
 file descriptors, with final guest release/Close disposing native resources.
+
+Task108 follows the pinned official CreateFileW contract for read-only existing
+opens, symmetric read sharing and metadata-only access. Linux O_DIRECT is requested
+for the observed no-buffering flag and verified from descriptor status. Original
+shared source ownership and opaque handle integration reuse the existing portable
+object directory; no external implementation or host file handle is exposed.
