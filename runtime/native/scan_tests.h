@@ -114,3 +114,90 @@ void scan_checks() {
           "an original PE passes scanner locale and argument-slot pointers in the Windows stack positions");
     errno = saved_errno;
 }
+
+void scan_integer_checks() {
+    using namespace ambrosia;
+    using namespace services;
+    Runtime runtime;
+    Scope scope(runtime);
+    using Scan = std::int32_t(AMBROSIA_GUEST_ABI *)(std::uint64_t, const char *, std::size_t, const char *,
+                                                    void *, const std::byte *);
+    const auto scan =
+        reinterpret_cast<Scan>(runtime.resolve(service_symbol("__stdio_common_vsscanf", "ucrtbase.dll")));
+    const auto call = [&](const char *input, const char *format, std::initializer_list<std::uint64_t> slots) {
+        return scan(2, input, std::numeric_limits<std::size_t>::max(), format, nullptr,
+                    reinterpret_cast<const std::byte *>(slots.begin()));
+    };
+    const auto pointer = [](auto *value) { return reinterpret_cast<std::uintptr_t>(value); };
+    const auto saved_errno = errno;
+    errno = E2BIG;
+    crt_error() = 19;
+    set_last_error(87);
+    std::int32_t first = 0;
+    std::int32_t second = 0;
+    check(call(" \t-42 +017", "%d%d", {pointer(&first), pointer(&second)}) == 2 && first == -42 &&
+              second == 17,
+          "observed decimal scanning parses actual signed values and retains decimal leading zeroes");
+    first = 123;
+    check(call("letters", "%d", {pointer(&first)}) == 0 && first == 123 &&
+              call("-", "%d", {pointer(&first)}) == 0 && first == 123,
+          "numeric matching failures make no assignment, including a sign without digits");
+    check(call("", "%d", {pointer(&first)}) == -1 &&
+              call("12", "%d%d", {pointer(&first), pointer(&second)}) == 1 && first == 12 &&
+              call("12", "%*d%d", {pointer(&first)}) == 0,
+          "integer input exhaustion distinguishes the first and later completed conversions");
+    char trailing = 0;
+    check(call("-12X", "%3d%c", {pointer(&first), pointer(&trailing)}) == 2 && first == -12 &&
+              trailing == 'X',
+          "numeric widths include the sign and leave following bytes for the next conversion");
+    std::int8_t tiny = 0;
+    std::int16_t small = 0;
+    std::array<std::int64_t, 6> large{};
+    check(call("-128 -32768 -2147483648 2147483647 -9223372036854775808 9223372036854775807 -7 -8 -9 -10",
+               "%hhd %hd %ld %I32d %lld %I64d %jd %zd %td %Id",
+               {pointer(&tiny), pointer(&small), pointer(&first), pointer(&second), pointer(&large[0]),
+                pointer(&large[1]), pointer(&large[2]), pointer(&large[3]), pointer(&large[4]),
+                pointer(&large[5])}) == 10 &&
+              tiny == -128 && small == -32768 && first == INT32_MIN && second == INT32_MAX &&
+              large == std::array<std::int64_t, 6>{INT64_MIN, INT64_MAX, -7, -8, -9, -10},
+          "signed scanning uses Windows LLP64 destination widths and exact 64-bit limits");
+    std::uint8_t byte_value = 0;
+    std::uint16_t short_value = 0;
+    std::uint32_t long_value = 0;
+    std::uint64_t wide_value = 0;
+    check(call("255 65535 4294967295 18446744073709551615", "%hhu %hu %lu %I64u",
+               {pointer(&byte_value), pointer(&short_value), pointer(&long_value), pointer(&wide_value)}) ==
+                  4 &&
+              byte_value == UINT8_MAX && short_value == UINT16_MAX && long_value == UINT32_MAX &&
+              wide_value == UINT64_MAX,
+          "unsigned scanning stores full-width maxima without a host long or signed intermediate");
+    std::array<std::uint32_t, 3> hex{};
+    std::int32_t third = 0;
+    check(call("017 0x2a -23 17 0xff FF", "%i %i %i %o %x %X",
+               {pointer(&first), pointer(&second), pointer(&third), pointer(&hex[0]), pointer(&hex[1]),
+                pointer(&hex[2])}) == 6 &&
+              first == 15 && second == 42 && third == -23 && hex[0] == 15 && hex[1] == 255 && hex[2] == 255,
+          "auto-base, octal and hexadecimal scanning accept real prefixes and stop at field boundaries");
+    check(call("-1 -0x2", "%u %x", {pointer(&long_value), pointer(&hex[0])}) == 2 &&
+              long_value == UINT32_MAX && hex[0] == UINT32_MAX - 1,
+          "negative unsigned conversions negate the parsed magnitude at the Windows destination width");
+    check(call("12:34", "%*d:%d", {pointer(&first)}) == 1 && first == 34,
+          "suppressed integer fields consume no guest destination slot or assignment count");
+    second = 456;
+    check(call("12,none", "%d,%d", {pointer(&first), pointer(&second)}) == 1 && first == 12 && second == 456,
+          "a later numeric matching failure preserves prior assignments and the unmatched destination");
+    std::array<unsigned char, 6> guarded{};
+    guarded.fill(0xaa);
+    check(call("-2", "%ld", {pointer(guarded.data() + 1)}) == 1 &&
+              guarded == std::array<unsigned char, 6>{0xaa, 0xfe, 0xff, 0xff, 0xff, 0xaa},
+          "unaligned Windows long destinations receive exactly four bytes without overwriting guards");
+    check(call("0z", "%i%c", {pointer(&first), pointer(&trailing)}) == 2 && first == 0 && trailing == 'z',
+          "auto-base zero succeeds and leaves a nonnumeric suffix unread");
+    std::array<char, 8> text_value{};
+    check(call("ok:7", "%2s:%d", {pointer(text_value.data()), pointer(&first)}) == 2 &&
+              std::string(text_value.data()) == "ok" && first == 7,
+          "text and integer conversions share input position and Windows slot ordering");
+    check(errno == E2BIG && crt_error() == 19 && get_last_error() == 87,
+          "integer scanning uses locale-independent library parsing and preserves native and guest errors");
+    errno = saved_errno;
+}

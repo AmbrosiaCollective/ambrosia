@@ -717,6 +717,7 @@ extern "C" int ambrosia_native_tests() {
         secure_tokenizer_checks();
         format_checks();
         scan_checks();
+        scan_integer_checks();
         wide_format_checks();
         invalid_parameter_checks();
         secure_random_checks();
