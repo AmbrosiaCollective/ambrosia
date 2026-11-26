@@ -9,6 +9,11 @@ class Runtime;
 class ImportRegistry;
 using ThreadEntry = std::uint32_t(AMBROSIA_GUEST_ABI *)(void *);
 
+struct ThreadResume {
+    std::uint32_t previous = 0xffffffffu;
+    std::uint32_t error = 0;
+};
+
 struct ThreadCreation {
     std::uintptr_t handle = 0;
     std::uint32_t id = 0;
@@ -23,9 +28,10 @@ class NativeThreads {
 
     ~NativeThreads();
     ThreadCreation create(Runtime &runtime, pe::ModuleGraph &graph, ThreadEntry entry, void *argument,
-                          std::size_t stack_bytes);
+                          std::size_t stack_bytes, bool suspended = false);
     std::uint32_t exit_code(std::uintptr_t handle, void *output) const;
     std::uint32_t thread_id(std::uintptr_t handle) const;
+    ThreadResume resume(std::uintptr_t handle);
     void shutdown() noexcept;
 
   private:

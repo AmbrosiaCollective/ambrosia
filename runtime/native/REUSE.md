@@ -260,3 +260,12 @@ exchange and thread-local-before-global/no-info dispatch contracts. These are
 reference use only; no external handler/Watson implementation is copied or run.
 The native component uses runtime atomic state and guest context-owned local
 pointers; default fatal behavior stays an explicit unsupported Watson boundary.
+
+
+## Initial thread suspension
+
+Pinned Wine kernelbase-thread.c at ff2631c6ed3d1721cd050d951671c307ade32b90
+separates stack commitment/reservation and CREATE_SUSPENDED, and wraps the native
+resume previous-count result. This is contract reference only; no Nt thread,
+signal-suspension or external implementation is copied/run. Ambrosia extends
+its existing C++ condition-variable startup gate before guest session activation.

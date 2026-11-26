@@ -56,6 +56,7 @@ class ThreadCompletion final : public WaitableObject {
     std::condition_variable changed;
     bool prepared = false;
     bool launched = false;
+    std::uint32_t suspend_count = 0;
     bool done = false;
     unsigned waiters = 0;
     std::uint32_t id = 0;
@@ -87,7 +88,7 @@ void NativeThreads::reap_finished() {
 }
 
 ThreadCreation NativeThreads::create(Runtime &runtime, pe::ModuleGraph &graph, ThreadEntry entry,
-                                     void *argument, std::size_t stack_bytes) {
+                                     void *argument, std::size_t stack_bytes, bool suspended) {
     if (!entry) {
         return {0, 0, 87};
     }
@@ -104,6 +105,7 @@ ThreadCreation NativeThreads::create(Runtime &runtime, pe::ModuleGraph &graph, T
         return {0, 0, 8};
     }
     auto job = std::make_shared<Job>();
+    job->completion->suspend_count = suspended ? 1 : 0;
     jobs_.push_back(job);
     ObjectResult object;
     try {
@@ -123,7 +125,9 @@ ThreadCreation NativeThreads::create(Runtime &runtime, pe::ModuleGraph &graph, T
                     job->completion->ready(host::current_thread_id(), 0);
                     {
                         std::unique_lock gate(job->completion->mutex);
-                        job->completion->changed.wait(gate, [&] { return job->completion->launched; });
+                        job->completion->changed.wait(gate, [&] {
+                            return job->completion->launched && !job->completion->suspend_count;
+                        });
                     }
                     std::uint32_t code;
                     {
@@ -203,6 +207,20 @@ std::uint32_t NativeThreads::thread_id(std::uintptr_t handle) const {
     return state->id;
 }
 
+ThreadResume NativeThreads::resume(std::uintptr_t handle) {
+    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
+    if (!state) {
+        return {0xffffffffu, 6};
+    }
+    std::lock_guard lock(state->mutex);
+    const auto previous = state->suspend_count;
+    if (previous) {
+        --state->suspend_count;
+        state->changed.notify_all();
+    }
+    return {previous, 0};
+}
+
 void NativeThreads::shutdown() noexcept {
     try {
         if (std::this_thread::get_id() != owner_) {
@@ -215,6 +233,13 @@ void NativeThreads::shutdown() noexcept {
             jobs.swap(jobs_);
         }
         for (const auto &job : jobs) {
+            {
+                const std::lock_guard state(job->completion->mutex);
+                if (job->completion->suspend_count && !job->completion->done) {
+                    diagnostics::stop_trace(
+                        "shutdown of an unresumed guest thread requires unmodeled thread termination", 78);
+                }
+            }
             job->thread.join();
         }
     } catch (...) {

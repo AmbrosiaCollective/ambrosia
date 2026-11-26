@@ -209,3 +209,85 @@ void native_thread_launcher_checks() {
               record.context_valid && record.exit_cleanup,
           "the real native CLI joins guest workers and their TLS cleanup before process/module teardown");
 }
+
+std::atomic<unsigned> suspended_attach_calls{0};
+std::atomic<unsigned> suspended_detach_calls{0};
+
+void AMBROSIA_GUEST_ABI suspended_thread_tls(void *, std::uint32_t reason, void *) {
+    if (reason == 2) {
+        ++suspended_attach_calls;
+    } else if (reason == 3) {
+        ++suspended_detach_calls;
+    }
+}
+
+void native_suspended_thread_checks() {
+    using namespace ambrosia;
+    using namespace services;
+    using namespace std::chrono_literals;
+    Runtime runtime;
+    auto bytes = native_thread_fixture();
+    jump_to_host(bytes, 0x300, reinterpret_cast<std::uintptr_t>(&suspended_thread_tls));
+    pe::ModuleGraph graph([&](const auto &symbol) { return runtime.resolve(symbol); });
+    graph.add("suspended.exe", bytes);
+    graph.load("suspended.exe");
+    Scope scope(runtime, &graph);
+    auto process = graph.start();
+    using Create =
+        std::uintptr_t(AMBROSIA_GUEST_ABI *)(void *, std::size_t, ThreadEntry, void *, std::uint32_t, void *);
+    using Resume = std::uint32_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t);
+    const auto create =
+        reinterpret_cast<Create>(runtime.resolve(service_symbol("CreateThread", "kernel32.dll")));
+    const auto resume =
+        reinterpret_cast<Resume>(runtime.resolve(service_symbol("ResumeThread", "kernel32.dll")));
+    const auto entry = reinterpret_cast<ThreadEntry>(graph.loaded_module() + 0x1000);
+    NativeThreadRecord record;
+    suspended_attach_calls = suspended_detach_calls = 0;
+    std::uint32_t id = 0;
+    const auto handle = create(nullptr, 358400, entry, &record, 4, &id);
+    bool entered_before_resume;
+    {
+        std::unique_lock lock(record.mutex);
+        entered_before_resume = record.changed.wait_for(lock, 100ms, [&] { return record.entered; });
+    }
+    std::uint32_t code = 0;
+    const auto status_error = runtime.threads().exit_code(handle, &code);
+    check(handle && id && !entered_before_resume && suspended_attach_calls == 0 &&
+              suspended_detach_calls == 0 && !status_error && code == 259 &&
+              runtime.objects().wait(handle, 0).result == wait_timeout,
+          "CREATE_SUSPENDED creates a real unsignaled thread but does not run guest TLS/module callbacks or "
+          "entry before resume");
+    const auto saved_error = errno;
+    errno = EDOM;
+    set_last_error(91);
+    const auto previous = resume(handle);
+    const auto repeated = resume(handle);
+    check(previous == 1 && repeated == 0 && errno == EDOM && get_last_error() == 91,
+          "ResumeThread releases the initial suspension once, reports the previous count and preserves "
+          "success error state");
+    bool entered_after_resume;
+    {
+        std::unique_lock lock(record.mutex);
+        entered_after_resume = record.changed.wait_for(lock, 2s, [&] { return record.entered; });
+        record.release = true;
+    }
+    record.changed.notify_all();
+    const auto done = runtime.objects().wait(handle, 2000);
+    const auto code_error = runtime.threads().exit_code(handle, &code);
+    check(entered_after_resume && done.result == wait_object_0 && !code_error && code == 0x1234 &&
+              record.exit_cleanup && suspended_attach_calls == 1 && suspended_detach_calls == 1,
+          "resuming dispatches guest attach, original PE entry and detach/TLS cleanup exactly once with the "
+          "real exit code");
+    (void)runtime.objects().close(handle);
+    const auto stale_resume = resume(handle);
+    const auto stale_error = get_last_error();
+    const auto event = runtime.objects().create_event(true, false);
+    const auto event_resume = resume(event.handle);
+    check(stale_resume == 0xffffffffu && stale_error == 6 && event_resume == 0xffffffffu &&
+              get_last_error() == 6,
+          "ResumeThread rejects stale and non-thread handles without changing another object's state");
+    (void)runtime.objects().close(event.handle);
+    runtime.threads().shutdown();
+    process.close();
+    errno = saved_error;
+}

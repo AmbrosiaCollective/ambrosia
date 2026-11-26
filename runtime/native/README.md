@@ -1216,13 +1216,12 @@ not prove an actual game worker or interactive menu has started.
 
 ## Native thread handles and launcher integration
 
-CreateThread with null security attributes and flags zero creates a real native
+CreateThread with null security attributes and flags zero or CREATE_SUSPENDED creates a real native
 thread, publishes its native ID and returns an opaque waitable handle. The
 worker has its own runtime/module scope, static TLS, module callouts and64KiB
 alternate signal stack. It uses the native stack policy; requested commitment is
 checked against actual usable bounds, with an8MiB per-request ceiling. Exact
-Windows reserve/commit/guard growth and suspended/reservation flags are not
-implemented. No thread is faked when native creation or stack validation fails.
+Windows reserve/commit/guard growth and reservation flags are not implemented. No thread is faked when native creation or stack validation fails.
 
 GetThreadId and GetExitCodeThread query owned thread objects. Completion becomes
 signaled after guest entry, thread detach and TLS cleanup; the actual DWORD result
@@ -1231,7 +1230,7 @@ its worker. Completed jobs are joined/reaped, live jobs cap at64, waiters at64,
 and handles share the4,096-object directory budget. Stricter OS task limits still
 apply. The launcher and runtime owner join workers before process cleanup/detach;
 shutdown rejects new creation. This requires cooperative worker completion on
-normal executable return. Suspended threads, ExitThread/termination, priorities,
+normal executable return. Arbitrary SuspendThread of a running thread, ExitThread/termination, priorities,
 affinity and other thread APIs remain unsupported until implemented explicitly.
 
 Per-worker diagnostic stacks reuse the process fault handlers/ranges and do not
@@ -1283,3 +1282,21 @@ stop explicitly; guest SEH/Watson reporting is not emulated. Callback-providing
 modules must remain mapped for the process lifetime. Other CRT APIs still need
 individual validation-path integration; handler registration alone does not make
 every secure CRT operation complete or prove the menu is running.
+
+
+## Initially suspended guest threads
+
+CREATE_SUSPENDED (flag4) starts a real native thread and publishes its ID/handle,
+then blocks it at the existing startup gate before guest TLS, module callouts and
+entry. ResumeThread on that owned handle reports the previous initial count and
+releases it once. Further resumes report0 and do not call entry again. Invalid
+or non-thread handles return0xffffffff/ERROR_INVALID_HANDLE. Stack requests use
+the same checked native minimum and8MiB ceiling; no OS signal-based suspension
+or Windows guard-growth emulation is used. Arbitrary SuspendThread is unsupported.
+
+Normal shutdown refuses an unresumed thread with an explicit unmodeled-termination
+stop rather than fabricating an exit code or hanging on that startup gate. Resume
+all workers and let them finish before normal process teardown. Creation/close/
+wait/result semantics otherwise stay shared with ordinary native threads. Tests
+verify no early callback/entry, exact resume counts, one attach/detach and real
+entry/result under the same bounded-thread profile; menu evidence is separate.

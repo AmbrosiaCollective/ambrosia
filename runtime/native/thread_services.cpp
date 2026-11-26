@@ -28,8 +28,8 @@ std::uintptr_t AMBROSIA_GUEST_ABI create_thread(void *attributes, std::size_t st
                                                 void *argument, std::uint32_t flags,
                                                 void *id_output) noexcept {
     RestoreNativeError restore;
-    if (attributes || flags) {
-        diagnostics::stop_trace("thread security attributes/suspended/reservation flags are not modeled", 78);
+    if (attributes || (flags & ~std::uint32_t{4})) {
+        diagnostics::stop_trace("thread security attributes/reservation/unknown flags are not modeled", 78);
     }
     try {
         auto *graph = current_modules();
@@ -37,7 +37,7 @@ std::uintptr_t AMBROSIA_GUEST_ABI create_thread(void *attributes, std::size_t st
             diagnostics::stop_trace("thread creation requires a live module graph", 78);
         }
         auto &owner = runtime();
-        const auto result = owner.threads().create(owner, *graph, entry, argument, stack_bytes);
+        const auto result = owner.threads().create(owner, *graph, entry, argument, stack_bytes, flags & 4);
         if (result.error) {
             set_last_error(result.error);
             return 0;
@@ -72,6 +72,19 @@ std::int32_t AMBROSIA_GUEST_ABI exit_code(std::uintptr_t handle, void *output) n
     }
 }
 
+std::uint32_t AMBROSIA_GUEST_ABI resume_thread(std::uintptr_t handle) noexcept {
+    RestoreNativeError restore;
+    try {
+        const auto result = runtime().threads().resume(handle);
+        if (result.error) {
+            set_last_error(result.error);
+        }
+        return result.previous;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::uint32_t AMBROSIA_GUEST_ABI thread_id(std::uintptr_t handle) noexcept {
     RestoreNativeError restore;
     try {
@@ -92,6 +105,7 @@ void register_thread_services(ImportRegistry &registry) {
         registry.add(module, "CreateThread", reinterpret_cast<std::uintptr_t>(&create_thread));
         registry.add(module, "GetExitCodeThread", reinterpret_cast<std::uintptr_t>(&exit_code));
         registry.add(module, "GetThreadId", reinterpret_cast<std::uintptr_t>(&thread_id));
+        registry.add(module, "ResumeThread", reinterpret_cast<std::uintptr_t>(&resume_thread));
     }
 }
 } // namespace ambrosia::services

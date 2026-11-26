@@ -404,6 +404,7 @@ extern "C" int ambrosia_native_thread_tests() {
     try {
         native_thread_handle_checks();
         native_thread_launcher_checks();
+        native_suspended_thread_checks();
     } catch (const std::exception &error) {
         std::cerr << "FAIL native thread exception: " << error.what() << '\n';
         ++failures;
@@ -433,9 +434,13 @@ extern "C" int ambrosia_native_thread_probe(unsigned mode) {
         reinterpret_cast<Create>(runtime.resolve(service_symbol("CreateThread", "kernel32.dll")));
     const auto entry = reinterpret_cast<ThreadEntry>(graph.loaded_module() + 0x1180);
     std::uint32_t id = 0xfaceb00c;
-    const auto handle = create(nullptr, 65536, entry, reinterpret_cast<void *>(23), mode == 2 ? 4 : 0, &id);
+    const auto handle = create(nullptr, 65536, entry, reinterpret_cast<void *>(23),
+                               mode == 2   ? 8
+                               : mode == 3 ? 4
+                                           : 0,
+                               &id);
     const auto error = get_last_error();
-    if (handle) {
+    if (handle && mode != 3) {
         (void)runtime.objects().wait(handle, 2000);
         (void)runtime.objects().close(handle);
     }
