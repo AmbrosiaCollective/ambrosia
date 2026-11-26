@@ -1,7 +1,10 @@
 #include "host.h"
 #include <chrono>
+#include <condition_variable>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
+#include <thread>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -31,6 +34,44 @@ std::uint64_t utc_filetime() {
     using FileTicks = std::chrono::duration<std::int64_t, std::ratio<1, 10000000>>;
     const auto elapsed = std::chrono::system_clock::now().time_since_epoch();
     return filetime_from_unix_ticks(std::chrono::duration_cast<FileTicks>(elapsed).count());
+}
+
+std::uint64_t precise_utc_filetime() {
+#ifdef _WIN32
+    FILETIME value{};
+    GetSystemTimePreciseAsFileTime(&value);
+    return static_cast<std::uint64_t>(value.dwLowDateTime) |
+           (static_cast<std::uint64_t>(value.dwHighDateTime) << 32);
+#elif defined(__linux__)
+    static_assert(std::chrono::system_clock::period::num * 1000000 <= std::chrono::system_clock::period::den);
+    timespec resolution{};
+    if (clock_getres(CLOCK_REALTIME, &resolution) || resolution.tv_sec != 0 || resolution.tv_nsec <= 0 ||
+        resolution.tv_nsec > 1000) {
+        throw std::runtime_error("native UTC clock lacks microsecond resolution");
+    }
+    // Reuse the checked epoch conversion and native system_clock source.
+    // Clock resolution does not promise synchronization or absolute accuracy.
+    return utc_filetime();
+#else
+    throw std::runtime_error("native precise UTC adapter is unsupported");
+#endif
+}
+
+void sleep_milliseconds(std::uint32_t milliseconds) {
+    if (!milliseconds) {
+        std::this_thread::yield();
+        return;
+    }
+    if (milliseconds == 0xffffffffu) {
+        // An infinite, non-alertable guest sleep never returns on a spurious
+        // host wake. Process teardown remains responsible for termination.
+        std::mutex mutex;
+        std::condition_variable changed;
+        std::unique_lock lock(mutex);
+        changed.wait(lock, [] { return false; });
+        return;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
 }
 
 std::uint64_t uptime_from_parts(std::int64_t seconds, std::int64_t nanoseconds) {

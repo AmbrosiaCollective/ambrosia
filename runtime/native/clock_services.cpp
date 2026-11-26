@@ -20,6 +20,34 @@ void AMBROSIA_GUEST_ABI system_filetime(void *output) noexcept {
     }
 }
 
+void AMBROSIA_GUEST_ABI precise_filetime(void *output) noexcept {
+    const auto saved_error = errno;
+    if (!output) {
+        set_last_error(error_invalid_parameter);
+        errno = saved_error;
+        return;
+    }
+    try {
+        const auto time = host::precise_utc_filetime();
+        std::memcpy(output, &time, sizeof(time));
+        errno = saved_error;
+    } catch (...) {
+        errno = saved_error;
+        diagnostics::stop_trace("native precise UTC clock is unavailable", 78);
+    }
+}
+
+void AMBROSIA_GUEST_ABI sleep(std::uint32_t milliseconds) noexcept {
+    const auto saved_error = errno;
+    try {
+        host::sleep_milliseconds(milliseconds);
+        errno = saved_error;
+    } catch (...) {
+        errno = saved_error;
+        diagnostics::stop_trace("native thread sleep is unavailable", 78);
+    }
+}
+
 std::uint64_t AMBROSIA_GUEST_ABI tick_count64() noexcept {
     const auto saved_error = errno;
     try {
@@ -119,6 +147,16 @@ void register_clock_services(ImportRegistry &registry) {
         registry.add(module, "GetSystemTimeAsFileTime", reinterpret_cast<std::uintptr_t>(&system_filetime));
         registry.add(module, "GetTickCount64", reinterpret_cast<std::uintptr_t>(&tick_count64));
         registry.add(module, "GetTickCount", reinterpret_cast<std::uintptr_t>(&tick_count32));
+    }
+    for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-sysinfo-l1-2-0.dll",
+                               "api-ms-win-core-sysinfo-l1-2-1.dll", "api-ms-win-core-sysinfo-l1-2-2.dll",
+                               "api-ms-win-core-sysinfo-l1-2-3.dll"}) {
+        registry.add(module, "GetSystemTimePreciseAsFileTime",
+                     reinterpret_cast<std::uintptr_t>(&precise_filetime));
+    }
+    for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-synch-l1-1-0.dll",
+                               "api-ms-win-core-synch-l1-2-0.dll", "api-ms-win-core-synch-l1-2-1.dll"}) {
+        registry.add(module, "Sleep", reinterpret_cast<std::uintptr_t>(&sleep));
     }
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-profile-l1-1-0.dll"}) {
         registry.add(module, "QueryPerformanceCounter", reinterpret_cast<std::uintptr_t>(&query_counter));

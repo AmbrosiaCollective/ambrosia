@@ -161,6 +161,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "trace_tests.h"
 #include "clock_tests.h"
 #include "process_handle_tests.h"
+#include "precise_time_sleep_tests.h"
 #include "critical_tests.h"
 #include "slim_lock_tests.h"
 #include "fls_tests.h"
@@ -406,6 +407,14 @@ extern "C" int ambrosia_native_wide_format_probe(unsigned mode) {
                   reinterpret_cast<const std::byte *>(slots.data()));
 }
 
+extern "C" int ambrosia_native_infinite_sleep_probe() {
+    ambrosia::services::Runtime runtime;
+    using Sleep = void(AMBROSIA_GUEST_ABI *)(std::uint32_t);
+    const auto sleep = reinterpret_cast<Sleep>(runtime.resolve(service_symbol("Sleep", "kernel32.dll")));
+    sleep(0xffffffffu);
+    return 99;
+}
+
 extern "C" int ambrosia_native_thread_tests() {
     checks = failures = 0;
     try {
@@ -542,6 +551,7 @@ extern "C" int ambrosia_native_tests() {
         clock_service_checks();
         current_process_handle_checks();
         process_priority_boost_checks();
+        precise_time_sleep_checks();
         crt_time_checks();
         uptime_checks();
         critical_section_checks();

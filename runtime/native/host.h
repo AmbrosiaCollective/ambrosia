@@ -12,6 +12,8 @@ std::uintptr_t random_pointer_secret();
 std::uint32_t secure_random_u32();
 std::uint64_t filetime_from_unix_ticks(std::int64_t ticks_100ns);
 std::uint64_t utc_filetime();
+std::uint64_t precise_utc_filetime();
+void sleep_milliseconds(std::uint32_t milliseconds);
 std::uint64_t uptime_from_parts(std::int64_t seconds, std::int64_t nanoseconds);
 std::uint64_t uptime_milliseconds();
 std::int64_t performance_counter() noexcept;

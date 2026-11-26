@@ -1389,3 +1389,16 @@ missing thread SET rights report their own handle/access errors first. The threa
 pseudo-handle requires an active guest context. Callers may handle the unsupported
 capability through the API's normal error path. Process/thread contracts extend
 through l1-1-2; other services are not implied.
+
+
+GetSystemTimePreciseAsFileTime uses the native high-resolution UTC source and
+existing checked100ns FILETIME conversion. Linux verifies CLOCK_REALTIME reports
+at most1us resolution; Windows has a direct native adapter, currently untested.
+Other hosts fail explicitly. Resolution is not a promise of absolute clock
+accuracy or synchronization. Eight-byte outputs may be unaligned; null outputs
+retain the diagnostic invalid-parameter behavior of the ordinary UTC service.
+Sleep yields at0, performs real non-alertable native sleeps for finite milliseconds,
+and waits indefinitely at INFINITE, including across spurious wakes. It preserves
+caller errors and guest TLS. Infinite sleeps need process termination to end;
+normal worker-joining shutdown cannot cancel them. Alertable SleepEx/APCs are
+not implied. Existing sandbox wall watchdogs continue to bound diagnostic runs.
