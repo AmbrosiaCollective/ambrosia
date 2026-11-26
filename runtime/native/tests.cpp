@@ -192,6 +192,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "gdk_user_tests.h"
 #include "game_input_tests.h"
 #include "storage_factory_tests.h"
+#include "storage_file_tests.h"
 #include "nls_tests.h"
 #include "file_tests.h"
 #include "winsock_tests.h"
@@ -663,6 +664,7 @@ extern "C" int ambrosia_native_tests() {
         gdk_user_subscription_checks();
         game_input_checks();
         storage_factory_checks();
+        storage_file_checks();
         native_text_conversion_checks();
         readonly_file_checks();
         ordinal_service_checks();

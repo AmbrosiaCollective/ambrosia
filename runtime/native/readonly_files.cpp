@@ -229,4 +229,16 @@ FileAttributes ReadonlyFiles::attributes(std::string_view path) const {
     // invent host archive/hidden/system flags from filename conventions.
     return {1u | (found.metadata.directory ? 0x10u : 0u), 0};
 }
+
+ReadonlyFileOpen ReadonlyFiles::open(std::string_view path) const {
+    const auto resolved = resolve(path);
+    if (resolved.error) {
+        return {nullptr, resolved.error};
+    }
+    if (resolved.directory_only) {
+        return {nullptr, 5};
+    }
+    auto result = resolved.directory->open(resolved.components);
+    return {std::move(result.file), guest_error(result.error)};
+}
 } // namespace ambrosia::services

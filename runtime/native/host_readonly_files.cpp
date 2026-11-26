@@ -39,6 +39,12 @@ class Descriptor {
         return value_;
     }
 
+    int release() noexcept {
+        const auto result = value_;
+        value_ = -1;
+        return result;
+    }
+
     void reset(int value) noexcept {
         if (value_ >= 0) {
             (void)::close(value_);
@@ -171,6 +177,45 @@ FileLookup metadata(int descriptor) {
     }
     return {{false, static_cast<std::uint64_t>(value.st_size)}, FileLookupError::none};
 }
+
+int walk(int root, std::span<const std::string> components, int final_flags, FileLookupError &error) {
+    Descriptor current(open_confined(root, ".", O_PATH | O_DIRECTORY));
+    if (current.get() < 0) {
+        error = lookup_error(errno);
+        return -1;
+    }
+    for (std::size_t index = 0; index < components.size(); ++index) {
+        const auto &component = components[index];
+        if (component.empty() || component == "." || component == ".." ||
+            component.find('/') != std::string::npos || component.find('\\') != std::string::npos ||
+            component.find('\0') != std::string::npos) {
+            error = FileLookupError::invalid;
+            return -1;
+        }
+        const bool last = index + 1 == components.size();
+        const auto flags = last ? final_flags : O_PATH | O_DIRECTORY;
+        auto next = open_confined(current.get(), component.c_str(), flags);
+        if (next < 0 && errno == ENOENT) {
+            const auto found = case_name(current.get(), component);
+            if (found.error != FileLookupError::none) {
+                error = found.error == FileLookupError::missing && !last ? FileLookupError::missing_directory
+                                                                         : found.error;
+                return -1;
+            }
+            next = open_confined(current.get(), found.name->c_str(), flags);
+        }
+        if (next < 0) {
+            error = lookup_error(errno);
+            if (error == FileLookupError::missing && !last) {
+                error = FileLookupError::missing_directory;
+            }
+            return -1;
+        }
+        current.reset(next);
+    }
+    return current.release();
+}
+
 #endif
 } // namespace
 
@@ -210,43 +255,68 @@ ReadonlyDirectory::~ReadonlyDirectory() = default;
 FileLookup ReadonlyDirectory::inspect(std::span<const std::string> components) const {
     NativeErrorScope restore;
 #ifdef __linux__
-    Descriptor current(open_confined(state_->root.get(), ".", O_PATH | O_DIRECTORY));
-    if (current.get() < 0) {
-        return {{}, lookup_error(errno)};
+    FileLookupError error = FileLookupError::none;
+    Descriptor descriptor(walk(state_->root.get(), components, O_PATH, error));
+    if (descriptor.get() < 0) {
+        return {{}, error};
     }
-    for (std::size_t index = 0; index < components.size(); ++index) {
-        const auto &component = components[index];
-        if (component.empty() || component == "." || component == ".." ||
-            component.find('/') != std::string::npos || component.find('\\') != std::string::npos ||
-            component.find('\0') != std::string::npos) {
-            return {{}, FileLookupError::invalid};
-        }
-        const bool last = index + 1 == components.size();
-        const auto flags = O_PATH | (last ? 0 : O_DIRECTORY);
-        auto next = open_confined(current.get(), component.c_str(), flags);
-        if (next < 0 && errno == ENOENT) {
-            const auto found = case_name(current.get(), component);
-            if (found.error != FileLookupError::none) {
-                const auto error = found.error == FileLookupError::missing && !last
-                                       ? FileLookupError::missing_directory
-                                       : found.error;
-                return {{}, error};
-            }
-            next = open_confined(current.get(), found.name->c_str(), flags);
-        }
-        if (next < 0) {
-            auto error = lookup_error(errno);
-            if (error == FileLookupError::missing && !last) {
-                error = FileLookupError::missing_directory;
-            }
-            return {{}, error};
-        }
-        current.reset(next);
-    }
-    return metadata(current.get());
+    return metadata(descriptor.get());
 #else
     (void)components;
     return {{}, FileLookupError::unsupported};
+#endif
+}
+
+struct ReadonlyFile::State {
+#ifdef __linux__
+    Descriptor descriptor;
+#endif
+};
+
+ReadonlyFile::ReadonlyFile(int descriptor) : state_(std::make_unique<State>()) {
+#ifdef __linux__
+    state_->descriptor.reset(descriptor);
+#else
+    (void)descriptor;
+#endif
+}
+
+ReadonlyFile::~ReadonlyFile() = default;
+
+FileLookup ReadonlyFile::inspect() const {
+    NativeErrorScope restore;
+#ifdef __linux__
+    return metadata(state_->descriptor.get());
+#else
+    return {{}, FileLookupError::unsupported};
+#endif
+}
+
+FileOpen ReadonlyDirectory::open(std::span<const std::string> components) const {
+    NativeErrorScope restore;
+#ifdef __linux__
+    if (components.empty()) {
+        return {nullptr, FileLookupError::denied};
+    }
+    FileLookupError error = FileLookupError::none;
+    // NONBLOCK avoids waiting on a FIFO before fstat can reject non-files.
+    Descriptor descriptor(walk(state_->root.get(), components, O_RDONLY | O_NONBLOCK, error));
+    if (descriptor.get() < 0) {
+        return {nullptr, error};
+    }
+    const auto found = metadata(descriptor.get());
+    if (found.error != FileLookupError::none) {
+        return {nullptr, found.error};
+    }
+    if (found.metadata.directory) {
+        return {nullptr, FileLookupError::denied};
+    }
+    auto file = std::unique_ptr<ReadonlyFile>(new ReadonlyFile(-1));
+    file->state_->descriptor.reset(descriptor.release());
+    return {std::move(file), FileLookupError::none};
+#else
+    (void)components;
+    return {nullptr, FileLookupError::unsupported};
 #endif
 }
 } // namespace ambrosia::host

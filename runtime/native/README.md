@@ -1512,3 +1512,11 @@ Other host adapters remain explicit extension points. Returned flags describe th
 virtual read-only policy and real file/directory kind,not invented host archive/
 hidden/system attributes. No file writes,networking or data-read capability is
 introduced. File content and DirectStorage queue execution remain separate work.
+
+Console storage OpenFile uses the shared confined read-only namespace and a real
+owned native descriptor. The public console file identity and IUnknown are
+accepted; arbitrary IDs are rejected. Guest references retain the descriptor;
+Close/final release close it. A bounded runtime pin keeps object addresses from
+being reused (32 open descriptors, 1024 lifetime objects). Descriptor metadata
+survives pathname replacement. File-information ABI slots and storage request
+queues remain explicit unsupported paths; this does not claim asset streaming.

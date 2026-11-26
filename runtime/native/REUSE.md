@@ -321,3 +321,9 @@ from pinned Microsoft SDK documentation. No external implementation is copied.
 policy; `host_readonly_files` contains Linux descriptor confinement only. Public
 pinned Microsoft API contracts and installed Linux UAPI declarations are references.
 No external filesystem implementation is copied. No Windows/Wine runtime is used.
+
+Task107's file-open signature/console file GUID and Close slot are compared with
+the pinned Task045 public console ABI references. No implementation is copied;
+Linux descriptor confinement remains behind the portable host-file boundary.
+The existing runtime-owned interface pin/lifetime model is extended for real
+file descriptors, with final guest release/Close disposing native resources.
