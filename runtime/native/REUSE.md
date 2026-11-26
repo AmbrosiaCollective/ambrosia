@@ -217,3 +217,14 @@ waits for other-thread callbacks; delivery requires a reviewed guest execution
 scope. Windows global registries, telemetry, watchers and system integration are
 not imported. No external source is executed. Existing archived Victory/TomBox
 code was inspected for ABI comparison only; none is copied into this component.
+
+
+## Offline GDK networking interface
+
+gdk_networking.* adapts inherited runtime/shims/xgameruntime.cpp's networking
+class/v2 IDs, slot order, 16-byte hint layout and explicit offline query policy
+at e05cbc8. Project license/credits remain. It uses the native runtime-owned
+interface prefix and fixed-width/unaligned-safe buffers, excluding Windows globals,
+XAsync callbacks and certificate handling. Unsupported slots remain nonreturning
+rather than copying the inherited private E_NOTIMPL shortcuts. No host-interface
+query, fabricated internet/UDP availability or certificate bypass is imported.

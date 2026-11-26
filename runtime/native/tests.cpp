@@ -181,6 +181,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "gdk_threading_tests.h"
 #include "task_queue_tests.h"
 #include "app_lifecycle_tests.h"
+#include "gdk_networking_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -329,6 +330,19 @@ void host_checks() {
 }
 } // namespace
 
+extern "C" int ambrosia_native_networking_probe() {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    Scope scope(runtime);
+    (void)runtime.gdk_bootstrap().initialize(1, 2);
+    void *object = nullptr;
+    (void)runtime.gdk_networking().query(networking_v2_id, &object);
+    const auto *table = *static_cast<const std::uintptr_t *const *>(object);
+    using Unsupported = void(AMBROSIA_GUEST_ABI *)();
+    reinterpret_cast<Unsupported>(table[16])();
+    return 99;
+}
+
 extern "C" int ambrosia_native_lifecycle_thread_tests() {
     checks = failures = 0;
     try {
@@ -413,6 +427,7 @@ extern "C" int ambrosia_native_tests() {
         gdk_threading_checks();
         task_queue_manual_checks();
         app_lifecycle_checks();
+        gdk_networking_checks();
         native_module_checks();
         event_checks();
         registry_checks();

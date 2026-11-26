@@ -1141,3 +1141,22 @@ batch and cross-thread draining under the reviewed thread profile. This componen
 adapts OpenScarlett's MIT registry pattern; its license is retained separately.
 Linux suspend/window-event wiring is pending. Registration success does not claim
 host suspend/resume integration, game callbacks delivered, or an interactive menu.
+
+
+## Offline networking provider
+
+The owned XNetworkingImpl/base and v2 IDs share the bounded Windows interface
+identity implementation. Slot15 and the flat connectivity query return the
+16-byte GDK hint: provider initialized, connectivity None, unknown cost/interface,
+and no data-limit/roaming flags. This is an explicit offline-only provider policy,
+not detection of host interfaces or a claim of internet access. Slot3 and the flat
+preferred UDP-port query clear the two-byte port and return network-unreachable;
+no socket or port is acquired. HRESULT queries preserve error channels and accept
+unaligned output buffers. Unsupported async, registration, security/certificate,
+configuration and statistics slots stop explicitly before returning any value.
+No notification is silently discarded and no certificate is accepted.
+
+This advances class provisioning and synchronous offline queries only. Queue
+completion/TLS support is still needed before change callbacks or async failures
+can be delivered faithfully. Network denial remains part of the execution profile.
+An interface/hint test alone proves neither menu startup nor online functionality.

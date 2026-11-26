@@ -11,6 +11,7 @@
 #include "exception_filter.h"
 #include "fls_slots.h"
 #include "gdk_bootstrap.h"
+#include "gdk_networking.h"
 #include "gdk_threading.h"
 #include "graphics_memory_policy.h"
 #include "import_registry.h"
@@ -72,6 +73,10 @@ class Runtime {
 
     TaskQueues &task_queues() {
         return task_queues_;
+    }
+
+    GdkNetworking &gdk_networking() {
+        return gdk_networking_;
     }
 
     GdkThreading &gdk_threading() {
@@ -165,6 +170,7 @@ class Runtime {
     ExceptionFilter exception_filter_;
     GdkBootstrap gdk_bootstrap_;
     GdkThreading gdk_threading_;
+    GdkNetworking gdk_networking_;
     TaskQueues task_queues_;
     AppLifecycle app_lifecycle_;
     std::mutex processor_mutex_;

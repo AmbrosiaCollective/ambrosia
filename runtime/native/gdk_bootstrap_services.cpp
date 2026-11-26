@@ -101,6 +101,9 @@ std::int32_t AMBROSIA_GUEST_ABI query_api(const void *class_id, const void *inte
         if (requested_class == threading_class_id) {
             return current_runtime()->gdk_threading().query(requested_interface, output);
         }
+        if (requested_class == networking_class_id) {
+            return current_runtime()->gdk_networking().query(requested_interface, output);
+        }
         // No placeholder vtable or successful class result. Numeric request
         // metadata belongs in private startup evidence, never public game logs.
         diagnostics::write_service_trace("TRACE unsupported GDK class=" + guid_bytes(class_id) +
