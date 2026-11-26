@@ -1457,3 +1457,19 @@ delimiter/context or absent initial/continuation text sets guest EINVAL and invo
 the real invalid-parameter handler before returning NULL if the handler returns.
 Input/continuation stay unchanged on that error; native errno is preserved. This
 is the Windows API, not the four-argument bounds-checking Annex K variant.
+
+
+## Native console storage factory
+
+DStorageGetFactory in xcrdapi.dll uses the known console X2 factory identity and
+slot order, which differs from the PC DirectStorage factory. It returns a counted
+runtime-owned interface; unknown layouts fail. SetStagingBufferSize allocates,
+replaces and releases actual owned memory transactionally, bounded to256MiB per
+factory. Debug flags are retained as policy for later request execution. Methods
+verify the interface belongs to the current runtime. I/O-worker affinity reports
+unsupported rather than changing the caller or nonexistent worker threads.
+
+Files, status arrays, queue variants and requests remain explicit stops until
+their native ownership/read/execute paths exist. No queue or completed request is
+invented. No new host integration is needed for this factory; inputs stay RO.
+Staging allocation alone does not establish data loading or menu progress.

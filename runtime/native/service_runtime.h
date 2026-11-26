@@ -28,6 +28,7 @@
 #include "processor_information.h"
 #include "registry_keys.h"
 #include "slim_locks.h"
+#include "storage_factory.h"
 #include "task_queues.h"
 #include "winsock_lifecycle.h"
 #include <mutex>
@@ -86,6 +87,10 @@ class Runtime {
 
     TaskQueues &task_queues() {
         return task_queues_;
+    }
+
+    StorageFactory &storage_factory() {
+        return storage_factory_;
     }
 
     GameInput &game_input() {
@@ -199,6 +204,7 @@ class Runtime {
     GdkNetworking gdk_networking_;
     GdkUsers gdk_users_;
     GameInput game_input_;
+    StorageFactory storage_factory_;
     TaskQueues task_queues_;
     AppLifecycle app_lifecycle_;
     WinsockLifecycle winsock_;

@@ -135,6 +135,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     register_networking_services(registry_);
     register_user_services(registry_);
     register_game_input(registry_);
+    register_storage_factory(registry_);
     register_winsock_lifecycle(registry_);
     register_thread_services(registry_);
     register_affinity_services(registry_);

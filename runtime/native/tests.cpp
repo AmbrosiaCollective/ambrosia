@@ -190,6 +190,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "gdk_networking_tests.h"
 #include "gdk_user_tests.h"
 #include "game_input_tests.h"
+#include "storage_factory_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
@@ -409,6 +410,25 @@ extern "C" int ambrosia_native_wide_format_probe(unsigned mode) {
     }
     return format(options, output.data(), size, pattern, locale,
                   reinterpret_cast<const std::byte *>(slots.data()));
+}
+
+extern "C" int ambrosia_native_storage_factory_probe(unsigned mode) {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    Scope scope(runtime);
+    void *object = nullptr;
+    if (runtime.storage_factory().query(&storage_factory_x2_id, &object) != 0) {
+        return 99;
+    }
+    const auto *table = *static_cast<const std::uintptr_t *const *>(object);
+    if (mode == 1) {
+        using Debug = void(AMBROSIA_GUEST_ABI *)(void *, std::uint32_t);
+        reinterpret_cast<Debug>(table[7])(object, 8);
+    } else {
+        using Unsupported = void(AMBROSIA_GUEST_ABI *)(void *);
+        reinterpret_cast<Unsupported>(table[10])(object);
+    }
+    return 99;
 }
 
 extern "C" int ambrosia_native_tokenizer_invalid_probe() {
@@ -631,6 +651,7 @@ extern "C" int ambrosia_native_tests() {
         gdk_networking_checks();
         gdk_user_subscription_checks();
         game_input_checks();
+        storage_factory_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();

@@ -302,3 +302,10 @@ compiled or copied. Broader user/async/event behavior remains separate.
 export definition for interface/ordinal ABI facts. Its native counted identity,
 empty-device collection and callback directory are original; SDL/Windows code is
 not copied or compiled. Native interactive input remains a separate backend.
+
+
+`storage_factory.{h,cpp}` uses pinned console DirectStorage ABI facts from cached
+VIctory and xbox-emulator declarations: X2 identity and console configuration/
+queue slots differ from the generic PC table. Its counted identity and actual
+staging allocation are original native code. No external I/O/decompression code
+is copied or compiled; future imports must retain their applicable licenses.
