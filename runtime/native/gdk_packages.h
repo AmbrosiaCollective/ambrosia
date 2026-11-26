@@ -1,5 +1,6 @@
 #pragma once
 #include "package_identity.h"
+#include "package_installation.h"
 #include "readonly_files.h"
 #include "runtime_interface.h"
 #include <mutex>
@@ -18,6 +19,8 @@ class GdkPackages {
   public:
     GdkPackages();
     void bind(const ReadonlyFiles &files);
+    void bind_installation(std::span<const std::byte> inventory, const ReadonlyFiles &files);
+    std::shared_ptr<const PackageInstallation> installation() const;
     std::int32_t query(const Guid &interface_id, void *output) noexcept;
     std::int32_t identifier(std::size_t bytes, char *output) const;
     bool is_packaged() const;
@@ -35,5 +38,6 @@ class GdkPackages {
     mutable std::mutex mutex_;
     bool configured_ = false;
     std::optional<PackageIdentity> identity_;
+    std::shared_ptr<const PackageInstallation> installation_;
 };
 } // namespace ambrosia::services

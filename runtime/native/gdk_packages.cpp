@@ -107,6 +107,25 @@ void GdkPackages::bind(const ReadonlyFiles &files) {
     configured_ = true;
 }
 
+void GdkPackages::bind_installation(std::span<const std::byte> inventory, const ReadonlyFiles &files) {
+    const auto parsed = parse_package_inventory(inventory);
+    const std::lock_guard lock(mutex_);
+    if (!identity_ || parsed.identity != *identity_ || installation_) {
+        throw std::runtime_error("package inventory must match an existing identity and bind only once");
+    }
+    auto installation = std::make_shared<PackageInstallation>(parsed, files);
+    const auto readiness = installation->inspect();
+    installation_ = std::move(installation);
+    diagnostics::write_service_trace(
+        "TRACE native loose package inventory files=" + std::to_string(readiness.expected_files) + " ready=" +
+        std::to_string(readiness.ready_files) + " complete=" + (readiness.completed() ? "1\n" : "0\n"));
+}
+
+std::shared_ptr<const PackageInstallation> GdkPackages::installation() const {
+    const std::lock_guard lock(mutex_);
+    return installation_;
+}
+
 std::int32_t GdkPackages::query(const Guid &interface_id, void *output) noexcept {
     return interface_query(&object_, &interface_id, output);
 }

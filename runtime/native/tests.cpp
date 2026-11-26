@@ -201,6 +201,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "file_read_tests.h"
 #include "file_offset_tests.h"
 #include "package_context_tests.h"
+#include "package_installation_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
@@ -679,6 +680,7 @@ extern "C" int ambrosia_native_tests() {
         synchronous_file_offset_checks();
         package_identity_checks();
         native_package_context_checks();
+        package_installation_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();
@@ -729,7 +731,8 @@ extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
     }
 }
 
-int trace_native_image(const char *image, const char *package, unsigned memory_profile) {
+int trace_native_image(const char *image, const char *package, unsigned memory_profile,
+                       const char *inventory = nullptr) {
     if (!image || !package) {
         return 2;
     }
@@ -737,6 +740,10 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
         std::vector<std::filesystem::path> arguments{
             "--trace-startup", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(image))),
             "--package", std::filesystem::path(std::u8string(reinterpret_cast<const char8_t *>(package)))};
+        if (inventory) {
+            arguments.emplace_back("--package-inventory");
+            arguments.emplace_back(std::u8string(reinterpret_cast<const char8_t *>(inventory)));
+        }
         if (memory_profile == 1) {
             arguments.emplace_back("--sparse-windows");
         } else if (memory_profile == 2) {
@@ -867,6 +874,14 @@ extern "C" int ambrosia_native_trace_boot_memory(const char *image, const char *
 
 extern "C" int ambrosia_native_trace_memory_8g(const char *image, const char *package) {
     return trace_native_image(image, package, 3);
+}
+
+extern "C" int ambrosia_native_trace_inventory_8g(const char *image, const char *package,
+                                                  const char *inventory) {
+    if (!inventory) {
+        return 2;
+    }
+    return trace_native_image(image, package, 3, inventory);
 }
 
 extern "C" int ambrosia_native_trace_fixture(unsigned scenario) {
