@@ -107,15 +107,20 @@ void TaskQueues::shutdown() {
     pool_.shutdown();
 }
 
-NativeQueueScheduler TaskQueues::thread_pool_scheduler(std::uintptr_t handle) {
+NativeQueueScheduler TaskQueues::thread_pool_scheduler(std::uintptr_t handle, QueuePort port) {
     const auto queue = inspect(handle);
-    if (!queue || queue->work != QueueMode::thread_pool) {
+    if (!queue || (port != QueuePort::work && port != QueuePort::completion)) {
+        return {};
+    }
+    const auto mode = port == QueuePort::work ? queue->work : queue->completion;
+    if (mode != QueueMode::thread_pool) {
         return {};
     }
     // The closure retains the actual queue after its public handle closes. It
     // belongs to this runtime; all users must stop before pool destruction ends.
-    return [this, queue](std::uint32_t delay, std::weak_ptr<void> owner, std::function<void()> job) {
-        if (queue->work != QueueMode::thread_pool) {
+    return [this, queue, port](std::uint32_t delay, std::weak_ptr<void> owner, std::function<void()> job) {
+        const auto mode = port == QueuePort::work ? queue->work : queue->completion;
+        if (mode != QueueMode::thread_pool) {
             return false;
         }
         return pool_.submit_after(std::chrono::milliseconds(delay), std::move(owner), std::move(job));

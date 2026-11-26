@@ -108,6 +108,7 @@ Runtime::~Runtime() {
 void Runtime::shutdown_workers() {
     // Queue callbacks can enter guest modules and access every runtime service.
     // Join them while those services and the process execution still exist.
+    gdk_packages_.quiesce();
     task_queues_.shutdown();
     threads_.shutdown();
 }

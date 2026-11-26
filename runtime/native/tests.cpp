@@ -207,6 +207,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "guest_callback_tests.h"
+#include "package_progress_tests.h"
 #include "native_thread_tests.h"
 #include "thread_priority_tests.h"
 #include "thread_affinity_tests.h"
@@ -604,6 +605,8 @@ extern "C" int ambrosia_native_queue_tests() {
         delayed_queue_checks();
         periodic_package_monitor_checks();
         guest_callback_scope_checks();
+        package_progress_abi_checks();
+        package_progress_lifetime_checks();
     } catch (const std::exception &error) {
         std::cerr << "FAIL queue exception: " << error.what() << '\n';
         ++failures;

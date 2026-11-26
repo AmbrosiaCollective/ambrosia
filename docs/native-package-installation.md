@@ -70,8 +70,23 @@ stale cached completion is not returned after a known failure. Handles are opaqu
 never reused and limited to 128 live monitors per runtime. Pending timers share
 the existing 1,024-job bound and do not delay runtime shutdown.
 
-Selectors, progress callback registration/delivery, DLC, licensing, downloads and
-other package methods remain unsupported. No package progress callback is
-dispatched until registration support is implemented. Absence of a trusted
-inventory returns an unsupported result
-when creating a monitor; identity metadata alone is insufficient.
+Progress handlers have owned opaque registration tokens, bounded to 128 across
+the runtime. Registration captures an initialized guest context and requires a
+thread-pool completion port. It does not create an initial change event: query the
+existing snapshot directly. Later real snapshot changes queue a scoped handler;
+unchanged progress produces no event. Changes during a pending or active handler
+coalesce into a later delivery of current progress. Each handler runs serially
+with respect to its own registration. See [native callbacks](native-callbacks.md).
+
+Unregistering disables future delivery immediately. With `wait=false`, it returns
+false while a handler is still active, and repeated polling remains pending until
+that handler finishes. With `wait=true`, it joins the handler. Waiting for one's
+own unregistration is explicitly unsupported. A handler can close its own monitor.
+Other close callers wait for active handlers outside registry locks; cached
+progress stays readable until close completes. Concurrent duplicate closes are
+not a separate synchronization operation. Runtime shutdown quiesces monitors
+before joining queue workers, retaining progress for handlers already in flight.
+
+Selectors, other completion dispatch modes, DLC, licensing, downloads and other
+package methods remain unsupported. Absence of a trusted inventory returns an
+unsupported result when creating a monitor; identity metadata alone is insufficient.

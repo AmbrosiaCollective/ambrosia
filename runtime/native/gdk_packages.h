@@ -37,6 +37,7 @@ static_assert(sizeof(InstallationProgress) == 32 && offsetof(InstallationProgres
 class GdkPackages {
   public:
     static constexpr unsigned monitor_limit = 128;
+    static constexpr unsigned registration_limit = 128;
     explicit GdkPackages(std::shared_ptr<HandleIds> ids = std::make_shared<HandleIds>());
     ~GdkPackages();
     void bind(const ReadonlyFiles &files);
@@ -46,10 +47,14 @@ class GdkPackages {
     std::int32_t identifier(std::size_t bytes, char *output) const;
     bool is_packaged() const;
     std::int32_t create_monitor(std::string_view identifier, std::uint32_t selectors, std::uint32_t interval,
-                                NativeQueueScheduler scheduler, void *output);
+                                NativeQueueScheduler scheduler, void *output,
+                                NativeQueueScheduler completion = {});
     void close_monitor(std::uintptr_t handle);
     InstallationProgress progress(std::uintptr_t handle) const;
     bool update_monitor(std::uintptr_t handle);
+    std::int32_t register_progress(std::uintptr_t monitor, std::function<void()> delivery, void *token);
+    bool unregister_progress(std::uintptr_t monitor, std::uintptr_t token, bool wait);
+    void quiesce();
 
     bool owns_interface(const void *object) const noexcept {
         return object == &object_;
@@ -61,11 +66,15 @@ class GdkPackages {
 
   private:
     struct Monitor;
+    struct Registration;
+    struct RegistrationBudget;
     std::shared_ptr<Monitor> find_monitor(std::uintptr_t handle) const;
     RuntimeInterface object_;
     std::shared_ptr<HandleIds> ids_;
+    std::shared_ptr<RegistrationBudget> registration_budget_;
     mutable std::mutex mutex_;
     bool configured_ = false;
+    bool quiescing_ = false;
     std::optional<PackageIdentity> identity_;
     std::shared_ptr<const PackageInstallation> installation_;
     std::map<std::uintptr_t, std::shared_ptr<Monitor>> monitors_;

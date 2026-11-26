@@ -7,6 +7,7 @@
 
 namespace ambrosia::services {
 enum class QueueMode : std::uint32_t { manual, thread_pool, serialized_thread_pool, immediate };
+enum class QueuePort : std::uint32_t { work, completion };
 
 struct QueueState {
     QueueMode work;
@@ -30,7 +31,7 @@ class TaskQueues {
     unsigned workers() const;
     void shutdown();
     // Native adapters only. Other work modes need their own dispatch contract.
-    NativeQueueScheduler thread_pool_scheduler(std::uintptr_t handle);
+    NativeQueueScheduler thread_pool_scheduler(std::uintptr_t handle, QueuePort port = QueuePort::work);
 
   private:
     std::uintptr_t publish(std::shared_ptr<QueueState> queue, void *output);
