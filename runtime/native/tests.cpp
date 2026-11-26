@@ -200,6 +200,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "file_metadata_tests.h"
 #include "file_read_tests.h"
 #include "file_offset_tests.h"
+#include "package_context_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
@@ -676,6 +677,8 @@ extern "C" int ambrosia_native_tests() {
         native_file_metadata_checks();
         native_file_read_checks();
         synchronous_file_offset_checks();
+        package_identity_checks();
+        native_package_context_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();

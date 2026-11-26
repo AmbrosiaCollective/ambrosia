@@ -13,6 +13,7 @@
 #include "game_input.h"
 #include "gdk_bootstrap.h"
 #include "gdk_networking.h"
+#include "gdk_packages.h"
 #include "gdk_threading.h"
 #include "gdk_users.h"
 #include "graphics_memory_policy.h"
@@ -62,6 +63,10 @@ class Runtime {
 
     LibraryReferences &library_references() {
         return library_references_;
+    }
+
+    GdkPackages &gdk_packages() {
+        return gdk_packages_;
     }
 
     ReadonlyFiles &files() {
@@ -209,6 +214,7 @@ class Runtime {
     GdkThreading gdk_threading_;
     GdkNetworking gdk_networking_;
     GdkUsers gdk_users_;
+    GdkPackages gdk_packages_;
     GameInput game_input_;
     StorageFactory storage_factory_;
     TaskQueues task_queues_;

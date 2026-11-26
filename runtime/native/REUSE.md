@@ -349,3 +349,10 @@ offsets, output status/count, EOF and cursor updates. A private bounded observer
 and hash-verified local analysis identify the actual retry condition without
 copying game code into source or changing a guest condition flag. Native reads
 remain real; event/async behavior is not fabricated.
+
+Task112 uses the installed Expat2.6.1 UTF8 library for original bounded package
+descriptor parsing. Its MIT notice is reproduced in LICENSE.Expat. No parser or
+package implementation is copied from another project. Pinned primary Microsoft
+XPackage contracts and existing pinned public console ABI tables supply interface
+facts; the process identity comes from matching local descriptors, not embedded
+title values. Public upstream license notices remain intact.

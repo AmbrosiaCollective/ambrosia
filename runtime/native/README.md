@@ -9,8 +9,9 @@ the portable fmt headers; guest execution does not use Wine or Proton.
 
 ## Build
 
-Use an existing C++20 compiler, CMake 3.24 or newer and fmt 9.1 or newer
-headers/CMake package. Formatting links its header-only target. These commands
+Use an existing C++20 compiler, CMake 3.24 or newer, fmt 9.1 or newer, ICU 74
+with its uc component, and UTF8 Expat 2.6 or newer. Formatting links fmt headers;
+text conversion and bounded package descriptors link ICU and Expat. These commands
 do not download dependencies. Choose a build path outside the source/package trees:
 
 ```sh
@@ -25,10 +26,12 @@ configuration fails clearly; existing portable targets remain available.
 These commands are not an OS sandbox. Follow your reviewed compiler/test
 isolation policy rather than executing unchecked repository builds on the host.
 
-The local Linux validation compiled with GCC 13 and Clang 18, warnings treated
-as errors. Each build's native shared-object entry passed 578 checks under a
-Python launcher that blocks network, process creation and execution, hides
-credentials/home and mounts source read-only. Offline CMake separately built
+Local Linux validation uses GCC 13 and Clang 18 with warnings treated as errors.
+Original synthetic fixtures exercise the native shared-object entry under
+reviewed Python launchers that block network and process execution, hide
+credentials/home and mount source read-only. Separate bounded profiles permit
+reviewed native workers and read-only local game startup; an interactive menu
+has not been verified. Offline CMake separately built
 the CLI and test executable. The shared CLI implementation is tested in-process;
 those standalone executables have not been run.
 Windows/macOS builds and the parent CMake configuration remain unverified.
@@ -1549,3 +1552,12 @@ completed status/count/next-offset fields and file-cursor updates. Explicit-offs
 EOF reports ERROR_HANDLE_EOF. Event-backed and asynchronous completion remain
 unsupported and return an explicit error without publishing a completion. No streaming/rendering/menu claim follows
 from these individual file services.
+
+The process package context reads bounded MicrosoftGame.Config/AppxManifest.xml
+descriptors through the same read-only namespace. Expat parses memory only; DTDs,
+entities, excessive depth/elements/attributes and invalid identities fail closed.
+Identifiers are validated without truncation and both descriptors must agree on
+name, publisher and four-component version when present. Absent metadata means
+unpackaged; a valid loose identity supports the owned XPackage identity methods.
+Package installation, chunks, DLC, licensing and online state are separate services
+and are not inferred from descriptor presence. The process identity is immutable.

@@ -160,6 +160,7 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         service_runtime.startup().bind_image(paths.image);
         if (options.run) {
             service_runtime.files().bind(paths.package, paths.image);
+            service_runtime.gdk_packages().bind(service_runtime.files());
         }
         std::unique_ptr<diagnostics::ImportStops> stops;
         pe::Resolver diagnostic_stop;
