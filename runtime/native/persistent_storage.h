@@ -1,5 +1,6 @@
 #pragma once
 #include "host_local_storage.h"
+#include "readonly_files.h"
 #include "runtime_interface.h"
 #include <memory>
 #include <mutex>
@@ -19,6 +20,7 @@ class PersistentStorage {
     PersistentStorage();
     void bind(const std::filesystem::path &root);
     std::optional<std::string> path() const;
+    std::uint32_t create_directory(const ResolvedFilePath &path) const;
     std::int32_t query(const Guid &interface_id, void *output) noexcept;
 
   private:

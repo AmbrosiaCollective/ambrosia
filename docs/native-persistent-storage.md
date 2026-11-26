@@ -21,9 +21,19 @@ An insufficient buffer returns the documented PC insufficient-buffer HRESULT.
 The directory is also available through confined native absolute read paths;
 DOS aliases continue to select assets. This read binding grants no write access.
 
-Directory/file creation and write APIs require separate storage-confined host
-operations. Returning a valid path does not claim those APIs, storage quotas,
-space reservation, save-game support or crash durability are implemented.
+`CreateDirectoryW` creates one final directory inside the bound state root. The
+host compares the resolved read-root identity with its writable capability,
+reuses confined parent lookup and ASCII case resolution, then performs mkdir
+relative to that parent descriptor. Existing names return already-exists;
+missing intermediate parents stay missing. Asset paths and symlink traversal
+are refused. Root mutations through this adapter are serialized. New directories
+use owner-only native permissions; explicit Windows security attributes remain
+unsupported. Ordinary failures map to Windows errors and successful creation
+preserves LastError, host errno and guest errno.
+
+File creation/writes, quotas, space reservation, save-game support and crash
+durability remain separate work. The root capability refers to the originally
+pinned filesystem object; external writers must coordinate path mutations.
 
 Diagnostic boot currently selects a directory in the existing sandbox's writable
 scratch. It is destroyed with that sandbox and is not a cross-launch persistence

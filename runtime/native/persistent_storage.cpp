@@ -129,6 +129,47 @@ std::optional<std::string> PersistentStorage::path() const {
     return result;
 }
 
+std::uint32_t PersistentStorage::create_directory(const ResolvedFilePath &path) const {
+    if (path.error) {
+        return path.error;
+    }
+    std::shared_ptr<const host::LocalStorageDirectory> directory;
+    {
+        const std::lock_guard guard(mutex_);
+        directory = directory_;
+    }
+    if (!directory || !path.directory) {
+        return 5;
+    }
+    const auto identity = path.directory->inspect({});
+    if (identity.error != host::FileLookupError::none) {
+        return 5;
+    }
+    switch (directory->create_directory(identity.metadata, path.components)) {
+    case host::DirectoryCreateError::none:
+        return 0;
+    case host::DirectoryCreateError::already_exists:
+        return 183;
+    case host::DirectoryCreateError::missing_parent:
+        return 3;
+    case host::DirectoryCreateError::denied:
+        return 5;
+    case host::DirectoryCreateError::invalid:
+        return 123;
+    case host::DirectoryCreateError::too_long:
+        return 206;
+    case host::DirectoryCreateError::no_space:
+        return 112;
+    case host::DirectoryCreateError::exhausted:
+        return 8;
+    case host::DirectoryCreateError::unsupported:
+        return 50;
+    case host::DirectoryCreateError::failure:
+        return 31;
+    }
+    return 31;
+}
+
 std::int32_t PersistentStorage::query(const Guid &interface_id, void *output) noexcept {
     return interface_query(&object_, &interface_id, output);
 }

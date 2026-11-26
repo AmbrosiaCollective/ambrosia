@@ -198,6 +198,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "nls_tests.h"
 #include "file_tests.h"
 #include "persistent_storage_tests.h"
+#include "storage_directory_tests.h"
 #include "file_handle_tests.h"
 #include "file_metadata_tests.h"
 #include "file_read_tests.h"
@@ -688,6 +689,7 @@ extern "C" int ambrosia_native_tests() {
         native_text_conversion_checks();
         readonly_file_checks();
         persistent_storage_checks();
+        storage_directory_checks();
         native_file_handle_checks();
         native_file_metadata_checks();
         native_file_read_checks();

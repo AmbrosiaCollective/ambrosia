@@ -48,6 +48,49 @@ template <class Unit> std::optional<std::basic_string<Unit>> read_filename(const
     return std::nullopt;
 }
 
+std::uint32_t directory_result(const std::string &path) {
+    auto *runtime = current_runtime();
+    if (!runtime) {
+        diagnostics::stop_trace("directory creation requires a scoped runtime", 78);
+    }
+    const auto error = runtime->persistent_storage().create_directory(runtime->files().resolve(path));
+    if (error) {
+        set_last_error(error);
+        return 0;
+    }
+    diagnostics::write_service_trace("TRACE native storage directory created\n");
+    return 1;
+}
+
+std::uint32_t AMBROSIA_GUEST_ABI create_directory_wide(const void *source, const void *security) noexcept {
+    NativeErrorScope restore;
+    if (!source) {
+        set_last_error(87);
+        return 0;
+    }
+    if (security) {
+        diagnostics::stop_trace("explicit directory security attributes are unsupported", 78);
+    }
+    try {
+        const auto path = read_filename<char16_t>(source);
+        if (!path) {
+            set_last_error(206);
+            return 0;
+        }
+        const auto utf8 = unicode::utf16_to_utf8(*path, true);
+        if (!utf8) {
+            set_last_error(123);
+            return 0;
+        }
+        return directory_result(*utf8);
+    } catch (const std::bad_alloc &) {
+        set_last_error(8);
+        return 0;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::uint32_t inspect(const std::string &path) {
     const auto result = files().attributes(path);
     if (result.error) {
@@ -429,6 +472,7 @@ std::optional<std::uint64_t> windows_filetime(host::FileTimestamp timestamp) noe
 void register_file_services(ImportRegistry &registry) {
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-file-l1-1-0.dll",
                                "api-ms-win-core-file-l1-2-0.dll"}) {
+        registry.add(module, "CreateDirectoryW", reinterpret_cast<std::uintptr_t>(&create_directory_wide));
         registry.add(module, "ReadFile", reinterpret_cast<std::uintptr_t>(&read_file));
         registry.add(module, "GetFileTime", reinterpret_cast<std::uintptr_t>(&get_file_time));
         registry.add(module, "GetFileSizeEx", reinterpret_cast<std::uintptr_t>(&get_file_size));

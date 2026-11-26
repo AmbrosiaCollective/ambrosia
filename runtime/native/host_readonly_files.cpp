@@ -275,6 +275,17 @@ FileLookup ReadonlyDirectory::inspect(std::span<const std::string> components) c
 #endif
 }
 
+int ReadonlyDirectory::open_directory(std::span<const std::string> components, FileLookupError &error) const {
+    NativeErrorScope restore;
+#ifdef __linux__
+    return walk(state_->root.get(), components, O_PATH | O_DIRECTORY, error);
+#else
+    (void)components;
+    error = FileLookupError::unsupported;
+    return -1;
+#endif
+}
+
 struct ReadonlyFile::State {
 #ifdef __linux__
     Descriptor descriptor;

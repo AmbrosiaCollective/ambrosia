@@ -86,6 +86,10 @@ class ReadonlyDirectory {
     FileOpen open(std::span<const std::string> components, bool unbuffered = false) const;
 
   private:
+    friend class LocalStorageDirectory;
+    // Transfer an owned, confined directory descriptor to the writable host
+    // adapter. Ordinary readers never receive a native descriptor capability.
+    int open_directory(std::span<const std::string> components, FileLookupError &error) const;
     struct State;
     std::unique_ptr<State> state_;
 };

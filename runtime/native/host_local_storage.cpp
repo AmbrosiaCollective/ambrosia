@@ -1,6 +1,7 @@
 #include "host_local_storage.h"
 #include "host.h"
 #include <cerrno>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #ifdef __linux__
@@ -24,6 +25,8 @@ struct RestoreError {
 
 struct LocalStorageDirectory::State {
     std::filesystem::path root;
+    std::unique_ptr<const ReadonlyDirectory> directory;
+    mutable std::mutex mutex;
 #ifdef __linux__
     int descriptor = -1;
 
@@ -46,7 +49,9 @@ LocalStorageDirectory::LocalStorageDirectory(const std::filesystem::path &root)
         throw std::runtime_error("local storage root must not use symlink aliases");
     }
 #ifdef __linux__
-    state_->descriptor = ::open(state_->root.c_str(), O_PATH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    state_->directory = std::make_unique<const ReadonlyDirectory>(state_->root);
+    auto lookup_error = FileLookupError::none;
+    state_->descriptor = state_->directory->open_directory({}, lookup_error);
     if (state_->descriptor < 0) {
         throw std::runtime_error("local storage directory cannot be pinned");
     }
@@ -98,6 +103,109 @@ std::filesystem::path LocalStorageDirectory::path() const {
     return state_->root;
 #else
     throw std::runtime_error("local storage host adapter is unsupported on this platform");
+#endif
+}
+
+DirectoryCreateError LocalStorageDirectory::create_directory(const FileMetadata &expected_root,
+                                                             std::span<const std::string> components) const {
+    RestoreError restore;
+#ifdef __linux__
+    const std::lock_guard guard(state_->mutex);
+    (void)path();
+
+    struct stat identity {};
+
+    if (::fstat(state_->descriptor, &identity) || !expected_root.directory ||
+        expected_root.device != static_cast<std::uint64_t>(identity.st_dev) ||
+        expected_root.identity != static_cast<std::uint64_t>(identity.st_ino)) {
+        return DirectoryCreateError::denied;
+    }
+    if (components.empty()) {
+        return DirectoryCreateError::already_exists;
+    }
+    if (components.size() > 1024) {
+        return DirectoryCreateError::too_long;
+    }
+    std::size_t bytes = 0;
+    for (const auto &component : components) {
+        if (component.size() > 131068 - bytes) {
+            return DirectoryCreateError::too_long;
+        }
+        bytes += component.size();
+    }
+    const auto map_lookup = [](FileLookupError error) {
+        switch (error) {
+        case FileLookupError::none:
+            return DirectoryCreateError::none;
+        case FileLookupError::missing:
+        case FileLookupError::missing_directory:
+            return DirectoryCreateError::missing_parent;
+        case FileLookupError::denied:
+            return DirectoryCreateError::denied;
+        case FileLookupError::invalid:
+            return DirectoryCreateError::invalid;
+        case FileLookupError::too_long:
+            return DirectoryCreateError::too_long;
+        case FileLookupError::exhausted:
+            return DirectoryCreateError::exhausted;
+        case FileLookupError::unsupported:
+            return DirectoryCreateError::unsupported;
+        case FileLookupError::failure:
+            return DirectoryCreateError::failure;
+        }
+        return DirectoryCreateError::failure;
+    };
+    // Existing lookup supplies the same component validation and ASCII case
+    // policy as asset reads. Only a missing final component permits creation.
+    const auto existing = state_->directory->inspect(components);
+    if (existing.error == FileLookupError::none) {
+        return DirectoryCreateError::already_exists;
+    }
+    if (existing.error != FileLookupError::missing) {
+        return map_lookup(existing.error);
+    }
+    auto lookup_error = FileLookupError::none;
+    const auto parent =
+        state_->directory->open_directory(components.first(components.size() - 1), lookup_error);
+    if (parent < 0) {
+        return map_lookup(lookup_error);
+    }
+    // No allocation or throwing operation between acquiring and closing parent.
+    // mkdirat creates only the final name and never follows a planted final link.
+    const auto result = ::mkdirat(parent, components.back().c_str(), 0700);
+    const auto native_error = errno;
+    (void)::close(parent);
+    if (!result) {
+        return DirectoryCreateError::none;
+    }
+    switch (native_error) {
+    case EEXIST:
+        return DirectoryCreateError::already_exists;
+    case ENOENT:
+    case ENOTDIR:
+        return DirectoryCreateError::missing_parent;
+    case EACCES:
+    case EPERM:
+    case EROFS:
+    case ELOOP:
+    case EXDEV:
+        return DirectoryCreateError::denied;
+    case ENAMETOOLONG:
+        return DirectoryCreateError::too_long;
+    case ENOSPC:
+    case EDQUOT:
+        return DirectoryCreateError::no_space;
+    case ENOMEM:
+    case EMFILE:
+    case ENFILE:
+        return DirectoryCreateError::exhausted;
+    default:
+        return DirectoryCreateError::failure;
+    }
+#else
+    (void)expected_root;
+    (void)components;
+    return DirectoryCreateError::unsupported;
 #endif
 }
 } // namespace ambrosia::host
