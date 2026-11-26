@@ -15,6 +15,7 @@
 #include "gdk_threading.h"
 #include "graphics_memory_policy.h"
 #include "import_registry.h"
+#include "invalid_parameters.h"
 #include "kernel_objects.h"
 #include "library_references.h"
 #include "memory_services.h"
@@ -129,6 +130,10 @@ class Runtime {
         return heap_;
     }
 
+    InvalidParameters &invalid_parameters() {
+        return invalid_parameters_;
+    }
+
     NewAllocations &new_allocations() {
         return new_allocations_;
     }
@@ -165,6 +170,7 @@ class Runtime {
     StandardStreams streams_;
     CrtHeap heap_;
     NewAllocations new_allocations_;
+    InvalidParameters invalid_parameters_;
     CriticalSections locale_sections_;
     alignas(8) std::array<std::byte, 40> locale_lock_{};
     PointerCodec pointers_;

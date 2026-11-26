@@ -204,6 +204,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "string_tests.h"
 #include "format_tests.h"
 #include "wide_format_tests.h"
+#include "invalid_parameter_tests.h"
 #include "random_tests.h"
 // clang-format on
 
@@ -334,6 +335,27 @@ void host_checks() {
     check(missing_rejected, "missing executable rejected");
 }
 } // namespace
+
+extern "C" int ambrosia_native_invalid_parameter_probe(unsigned mode) {
+    using namespace ambrosia;
+    using namespace services;
+    Runtime runtime;
+    Scope scope(runtime);
+    guest::ThreadContext thread;
+    auto activation = thread.activate();
+    if (mode == 0) {
+        dispatch_invalid_parameter();
+    } else if (mode == 1) {
+        InvalidParameterRecord record;
+        active_invalid_record = &record;
+        runtime.invalid_parameters().replace(&global_invalid_parameter);
+        using Fatal = void(AMBROSIA_GUEST_ABI *)();
+        const auto fatal = reinterpret_cast<Fatal>(
+            runtime.resolve(service_symbol("_invalid_parameter_noinfo_noreturn", "ucrtbase.dll")));
+        fatal();
+    }
+    return 99;
+}
 
 extern "C" int ambrosia_native_wide_format_probe(unsigned mode) {
     using namespace ambrosia::services;
@@ -552,6 +574,7 @@ extern "C" int ambrosia_native_tests() {
         string_service_checks();
         format_checks();
         wide_format_checks();
+        invalid_parameter_checks();
         secure_random_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {

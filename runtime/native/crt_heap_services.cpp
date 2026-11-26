@@ -109,7 +109,8 @@ std::int32_t AMBROSIA_GUEST_ABI set_new_mode(std::int32_t mode) noexcept {
     const auto previous = runtime().new_allocations().replace_mode(mode);
     if (previous < 0) {
         crt_error() = 22;
-        diagnostics::stop_trace("CRT invalid-parameter dispatch is not implemented", 78);
+        dispatch_invalid_parameter();
+        return -1;
     }
     diagnostics::write_service_trace("TRACE CRT allocation-failure mode accepted\n");
     return previous;

@@ -30,6 +30,18 @@ class ThreadContext {
     std::int32_t &crt_error();
     void on_exit(std::function<void()> callback);
 
+    std::uintptr_t invalid_parameter_handler() const {
+        require_owner();
+        return invalid_parameter_handler_;
+    }
+
+    std::uintptr_t replace_invalid_parameter_handler(std::uintptr_t handler) {
+        require_owner();
+        const auto previous = invalid_parameter_handler_;
+        invalid_parameter_handler_ = handler;
+        return previous;
+    }
+
     bool time_sensitive() const {
         require_owner();
         return time_sensitive_;
@@ -71,6 +83,7 @@ class ThreadContext {
     std::thread::id owner_;
     std::int32_t crt_error_ = 0;
     bool time_sensitive_ = false;
+    std::uintptr_t invalid_parameter_handler_ = 0;
     bool sealed_ = false;
     bool exiting_ = false;
     std::vector<std::function<void()>> exit_callbacks_;

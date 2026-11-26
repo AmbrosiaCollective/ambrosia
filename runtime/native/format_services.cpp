@@ -265,6 +265,10 @@ std::string render(const std::string &format, Arguments &arguments, std::uint64_
     return result;
 }
 
+struct SecureFormatError {
+    std::int32_t code;
+};
+
 struct WideField {
     std::string text;
     std::string flags;
@@ -339,7 +343,7 @@ WideField wide_field(const std::u16string &format, std::size_t &position) {
 
 std::u16string wide_argument(std::uint64_t address, bool wide, std::int64_t precision) {
     if (!address) {
-        throw std::runtime_error("secure wide CRT null-string invalid-parameter dispatch is unsupported");
+        throw SecureFormatError{22};
     }
     const auto limit = precision < 0 ? field_limit : static_cast<std::size_t>(precision);
     std::u16string value;
@@ -377,6 +381,9 @@ std::u16string render_wide(const std::u16string &format, Arguments &arguments, s
             continue;
         }
         auto field = wide_field(format, position);
+        if (field.conversion == 'n') {
+            throw SecureFormatError{22};
+        }
         if (!contains("sScC", field.conversion)) {
             // Numeric decoding/LLP64/rounding stays in one existing renderer.
             const auto numeric = render('%' + field.text, arguments, options);
@@ -439,7 +446,7 @@ std::int32_t AMBROSIA_GUEST_ABI common_vswprintf_s(std::uint64_t options, char16
             throw std::runtime_error("wide CRT formatting requires a scoped runtime");
         }
         if (!buffer || !size || !format || size > static_cast<std::size_t>(INT32_MAX)) {
-            throw std::runtime_error("secure wide CRT invalid-parameter dispatch is unsupported");
+            throw SecureFormatError{22};
         }
         if (locale || (options & ~(legacy_wide_specifiers | standard_rounding))) {
             throw std::runtime_error("unsupported secure wide CRT locale/options");
@@ -448,11 +455,18 @@ std::int32_t AMBROSIA_GUEST_ABI common_vswprintf_s(std::uint64_t options, char16
         const auto output = render_wide(guest::read_string(format), arguments, options);
         if (output.size() >= size) {
             buffer[0] = 0;
-            throw std::runtime_error("secure wide CRT range-error dispatch is unsupported");
+            throw SecureFormatError{34};
         }
         std::memcpy(buffer, output.data(), output.size() * sizeof(char16_t));
         buffer[output.size()] = 0;
         return static_cast<std::int32_t>(output.size());
+    } catch (const SecureFormatError &error) {
+        if (buffer && size && size <= static_cast<std::size_t>(INT32_MAX)) {
+            buffer[0] = 0;
+        }
+        crt_error() = error.code;
+        dispatch_invalid_parameter();
+        return -1;
     } catch (const std::exception &error) {
         diagnostics::stop_trace(error.what(), 78);
     }

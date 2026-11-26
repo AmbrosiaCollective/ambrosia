@@ -1261,3 +1261,25 @@ handler emulation or complete UCRT locale support is claimed. Limits retain128
 argument slots,32,768 format/field/string units and1Mi output units. Synthetic
 fixtures verify the measured GUID conversion shape and original PE six-argument
 calls; actual game startup is recorded separately.
+
+
+## CRT invalid-parameter handlers
+
+Global setter/getter APIs exchange an atomic per-runtime callback. Thread-local
+setter/getter APIs retain a separate pointer in each guest ThreadContext, with
+no inheritance on a new guest worker. Dispatch prefers the current guest-local
+handler, otherwise the runtime-global handler. The five-argument Windows callback
+receives original UTF-16 metadata pointers, unsigned32 line and uintptr reserved
+value under active guest TLS. No-info dispatch passes null/zero metadata. Native
+errno is restored around callbacks; guest errors remain the CRT caller's policy.
+
+A returning handler lets the CRT API report its failure. Invalid _set_new_mode
+invokes it then returns-1/EINVAL without changing mode. Secure wide formatter
+invalid/range/null-string/%n paths clear a valid nonempty destination's first unit,
+set EINVAL/ERANGE, invoke the handler and return-1. Unsupported format/locale/
+encoding features remain explicit capability stops rather than validation errors.
+Default no-handler Watson/fast-fail termination and the noinfo-noreturn fallback
+stop explicitly; guest SEH/Watson reporting is not emulated. Callback-providing
+modules must remain mapped for the process lifetime. Other CRT APIs still need
+individual validation-path integration; handler registration alone does not make
+every secure CRT operation complete or prove the menu is running.

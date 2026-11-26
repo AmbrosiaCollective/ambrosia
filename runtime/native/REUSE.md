@@ -250,3 +250,13 @@ stdio declaration independently records the six-argument common secure printf
 shape; inherited UCRT headers define legacy-wide option4 and modern-rounding32.
 Wide literals/fields use explicit16-bit units and the runtime's C-locale subset.
 No locale package, external code download or complete UCRT implementation is used.
+
+
+## Invalid-parameter callbacks
+
+Pinned public-domain Wine stdlib.h declarations and Wine errno.c at
+ff2631c6ed3d1721cd050d951671c307ade32b90 document the handler ABI, previous-pointer
+exchange and thread-local-before-global/no-info dispatch contracts. These are
+reference use only; no external handler/Watson implementation is copied or run.
+The native component uses runtime atomic state and guest context-owned local
+pointers; default fatal behavior stays an explicit unsupported Watson boundary.
