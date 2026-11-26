@@ -239,3 +239,14 @@ or external runtime. Installed Wine9.0 export metadata verifies public ordinals
 111/112/115/116; only metadata is read, no DLL is loaded, executed or copied.
 Reference hashes/package version are recorded locally. Native sparse PE export
 emission extends the existing project builder and retains its original license.
+
+
+## Secure wide formatting extension
+
+The UTF-16 secure buffer adapter reuses this project's Windows slot decoder and
+fmt9.1 numeric rendering. It introduces no host wchar_t/va_list reinterpretation
+or external formatter implementation. The existing pinned public-domain Wine
+stdio declaration independently records the six-argument common secure printf
+shape; inherited UCRT headers define legacy-wide option4 and modern-rounding32.
+Wide literals/fields use explicit16-bit units and the runtime's C-locale subset.
+No locale package, external code download or complete UCRT implementation is used.

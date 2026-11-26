@@ -265,6 +265,199 @@ std::string render(const std::string &format, Arguments &arguments, std::uint64_
     return result;
 }
 
+struct WideField {
+    std::string text;
+    std::string flags;
+    std::string length;
+    std::int64_t width = 0;
+    std::int64_t precision = -1;
+    bool width_argument = false;
+    bool precision_argument = false;
+    char conversion = 0;
+};
+
+WideField wide_field(const std::u16string &format, std::size_t &position) {
+    const auto start = position;
+    WideField field;
+    const auto ascii = [&] {
+        if (position >= format.size() || format[position] > 127) {
+            throw std::runtime_error("invalid wide CRT conversion syntax");
+        }
+        return static_cast<char>(format[position]);
+    };
+    while (position < format.size() && contains("-+ #0", ascii())) {
+        field.flags.push_back(ascii());
+        ++position;
+    }
+    const auto digits = [&] {
+        std::int64_t value = 0;
+        while (position < format.size() && format[position] >= u'0' && format[position] <= u'9') {
+            value = value * 10 + (format[position++] - u'0');
+            if (value > static_cast<std::int64_t>(field_limit)) {
+                throw std::runtime_error("wide CRT field exceeds the runtime budget");
+            }
+        }
+        return value;
+    };
+    if (position < format.size() && format[position] == u'*') {
+        field.width_argument = true;
+        ++position;
+    } else {
+        field.width = digits();
+    }
+    if (position < format.size() && format[position] == u'.') {
+        ++position;
+        if (position < format.size() && format[position] == u'*') {
+            field.precision_argument = true;
+            ++position;
+        } else {
+            field.precision = digits();
+        }
+    }
+    if (position < format.size() && contains("hljztLI", ascii())) {
+        field.length.push_back(ascii());
+        ++position;
+        if ((field.length == "h" || field.length == "l") && position < format.size() &&
+            format[position] == static_cast<char16_t>(field.length.front())) {
+            field.length.push_back(ascii());
+            ++position;
+        } else if (field.length == "I" && position + 1 < format.size() &&
+                   (format.compare(position, 2, u"32") == 0 || format.compare(position, 2, u"64") == 0)) {
+            field.length.push_back(ascii());
+            ++position;
+            field.length.push_back(ascii());
+            ++position;
+        }
+    }
+    field.conversion = ascii();
+    ++position;
+    for (auto index = start; index < position; ++index) {
+        field.text.push_back(static_cast<char>(format[index]));
+    }
+    return field;
+}
+
+std::u16string wide_argument(std::uint64_t address, bool wide, std::int64_t precision) {
+    if (!address) {
+        throw std::runtime_error("secure wide CRT null-string invalid-parameter dispatch is unsupported");
+    }
+    const auto limit = precision < 0 ? field_limit : static_cast<std::size_t>(precision);
+    std::u16string value;
+    for (std::size_t index = 0; index < limit; ++index) {
+        const auto character = wide ? reinterpret_cast<const char16_t *>(address)[index]
+                                    : reinterpret_cast<const unsigned char *>(address)[index];
+        if (!character) {
+            return value;
+        }
+        if (!wide && character > 127) {
+            throw std::runtime_error("wide CRT multibyte conversion outside the C-locale ASCII subset");
+        }
+        value.push_back(static_cast<char16_t>(character));
+    }
+    if (precision < 0) {
+        throw std::runtime_error("wide CRT string exceeds the runtime budget");
+    }
+    return value;
+}
+
+std::u16string render_wide(const std::u16string &format, Arguments &arguments, std::uint64_t options) {
+    std::u16string result;
+    for (std::size_t position = 0; position < format.size();) {
+        if (result.size() == output_limit) {
+            throw std::runtime_error("wide CRT formatting output exceeds the runtime budget");
+        }
+        if (format[position] != u'%') {
+            result.push_back(format[position++]);
+            continue;
+        }
+        ++position;
+        if (position < format.size() && format[position] == u'%') {
+            result.push_back(u'%');
+            ++position;
+            continue;
+        }
+        auto field = wide_field(format, position);
+        if (!contains("sScC", field.conversion)) {
+            // Numeric decoding/LLP64/rounding stays in one existing renderer.
+            const auto numeric = render('%' + field.text, arguments, options);
+            result.append(numeric.begin(), numeric.end());
+        } else {
+            if (!field.length.empty() && field.length != "h" && field.length != "l") {
+                throw std::runtime_error("unsupported wide CRT string/character length modifier");
+            }
+            if (field.width_argument) {
+                field.width = static_cast<std::int32_t>(arguments.next());
+                if (field.width < 0) {
+                    field.flags.push_back('-');
+                    field.width = -field.width;
+                }
+            }
+            if (field.precision_argument) {
+                field.precision = static_cast<std::int32_t>(arguments.next());
+            }
+            if (field.width > static_cast<std::int64_t>(field_limit) ||
+                field.precision > static_cast<std::int64_t>(field_limit)) {
+                throw std::runtime_error("wide CRT width/precision exceeds the runtime budget");
+            }
+            const auto lower_case = field.conversion == 's' || field.conversion == 'c';
+            const bool wide = field.length == "l" ||
+                              (field.length != "h" && lower_case == bool(options & legacy_wide_specifiers));
+            std::u16string value;
+            if (field.conversion == 's' || field.conversion == 'S') {
+                value = wide_argument(arguments.next(), wide, field.precision);
+            } else {
+                const auto character = arguments.next();
+                if (!wide && (character & 255) > 127) {
+                    throw std::runtime_error(
+                        "wide CRT narrow character encoding-error support is unavailable");
+                }
+                value.push_back(static_cast<char16_t>(character & (wide ? 65535 : 255)));
+            }
+            if (field.width > static_cast<std::int64_t>(value.size())) {
+                const auto padding = static_cast<std::size_t>(field.width) - value.size();
+                if (contains(field.flags, '-')) {
+                    value.append(padding, u' ');
+                } else {
+                    value.insert(0, padding, u' ');
+                }
+            }
+            result += value;
+        }
+        if (result.size() > output_limit) {
+            throw std::runtime_error("wide CRT formatting output exceeds the runtime budget");
+        }
+    }
+    return result;
+}
+
+std::int32_t AMBROSIA_GUEST_ABI common_vswprintf_s(std::uint64_t options, char16_t *buffer, std::size_t size,
+                                                   const char16_t *format, void *locale,
+                                                   const std::byte *slots) noexcept {
+    NativeErrorScope native_error;
+    try {
+        if (!current_runtime()) {
+            throw std::runtime_error("wide CRT formatting requires a scoped runtime");
+        }
+        if (!buffer || !size || !format || size > static_cast<std::size_t>(INT32_MAX)) {
+            throw std::runtime_error("secure wide CRT invalid-parameter dispatch is unsupported");
+        }
+        if (locale || (options & ~(legacy_wide_specifiers | standard_rounding))) {
+            throw std::runtime_error("unsupported secure wide CRT locale/options");
+        }
+        Arguments arguments(slots);
+        const auto output = render_wide(guest::read_string(format), arguments, options);
+        if (output.size() >= size) {
+            buffer[0] = 0;
+            throw std::runtime_error("secure wide CRT range-error dispatch is unsupported");
+        }
+        std::memcpy(buffer, output.data(), output.size() * sizeof(char16_t));
+        buffer[output.size()] = 0;
+        return static_cast<std::int32_t>(output.size());
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 std::int32_t AMBROSIA_GUEST_ABI common_vsprintf(std::uint64_t options, char *buffer, std::size_t size,
                                                 const char *format, void *locale,
                                                 const std::byte *slots) noexcept {
@@ -306,6 +499,8 @@ std::int32_t AMBROSIA_GUEST_ABI common_vsprintf(std::uint64_t options, char *buf
 void register_format_services(ImportRegistry &registry) {
     for (const auto *module : {"ucrtbase.dll", "api-ms-win-crt-stdio-l1-1-0.dll"}) {
         registry.add(module, "__stdio_common_vsprintf", reinterpret_cast<std::uintptr_t>(&common_vsprintf));
+        registry.add(module, "__stdio_common_vswprintf_s",
+                     reinterpret_cast<std::uintptr_t>(&common_vswprintf_s));
     }
 }
 } // namespace ambrosia::services

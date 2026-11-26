@@ -203,6 +203,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "command_line_tests.h"
 #include "string_tests.h"
 #include "format_tests.h"
+#include "wide_format_tests.h"
 #include "random_tests.h"
 // clang-format on
 
@@ -333,6 +334,48 @@ void host_checks() {
     check(missing_rejected, "missing executable rejected");
 }
 } // namespace
+
+extern "C" int ambrosia_native_wide_format_probe(unsigned mode) {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    Scope scope(runtime);
+    using Format = std::int32_t(AMBROSIA_GUEST_ABI *)(std::uint64_t, char16_t *, std::size_t,
+                                                      const char16_t *, void *, const std::byte *);
+    const auto format = reinterpret_cast<Format>(
+        runtime.resolve(service_symbol("__stdio_common_vswprintf_s", "ucrtbase.dll")));
+    std::array<char16_t, 8> output{};
+    std::array<std::uint64_t, 2> slots{0, 0};
+    const char16_t *pattern = u"abc";
+    const unsigned char non_ascii[] = {0xc3, 0xa9, 0};
+    std::size_t size = output.size();
+    std::uint64_t options = 36;
+    void *locale = nullptr;
+    switch (mode) {
+    case 0:
+        size = 3;
+        break;
+    case 1:
+        pattern = u"%s";
+        break;
+    case 2:
+        pattern = u"%n";
+        break;
+    case 3:
+        options = 38;
+        break;
+    case 4:
+        locale = reinterpret_cast<void *>(1);
+        break;
+    case 5:
+        pattern = u"%S";
+        slots[0] = reinterpret_cast<std::uintptr_t>(non_ascii);
+        break;
+    default:
+        return 99;
+    }
+    return format(options, output.data(), size, pattern, locale,
+                  reinterpret_cast<const std::byte *>(slots.data()));
+}
 
 extern "C" int ambrosia_native_thread_tests() {
     checks = failures = 0;
@@ -508,6 +551,7 @@ extern "C" int ambrosia_native_tests() {
         command_line_checks();
         string_service_checks();
         format_checks();
+        wide_format_checks();
         secure_random_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {

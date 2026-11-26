@@ -1239,3 +1239,25 @@ replace shared signal dispositions. Faults still stop instead of resuming throug
 unimplemented guest SEH. Synthetic tests cover real PE worker entry/arguments,
 TLS/errors/IDs/stacks, waits/results, close-without-cancel, repeated reaping and
 actual CLI teardown; these alone do not prove a running game menu.
+
+
+## Secure UTF-16 formatted buffers
+
+__stdio_common_vswprintf_s decodes Windows argument slots and writes bounded
+UTF-16 buffers. Integer/float conversions reuse the existing fmt numeric renderer,
+LLP64 decoding and modern rounding policy. Wide literals, explicit wide strings
+and wide characters retain UTF-16 code units, including embedded NULs; widths and
+string precision count those units. Legacy wide option4 selects wide lower-case
+s/c and narrow upper-case S/C; without it unqualified selection follows the
+standard option mode. Explicit h/l overrides apply. Narrow-to-wide conversion
+supports the invariant C-locale ASCII subset; other multibyte decoding stops.
+
+Supported secure options are4 and32. A nonempty destination must include room
+for the terminator; count excludes that NUL. A range failure clears the first
+unit and stops for unimplemented secure invalid-parameter dispatch. Null strings,
+%n, unsupported conversions/options, explicit locales and invalid parameters also
+stop before guessed success. No truncating secure behavior, invalid-parameter
+handler emulation or complete UCRT locale support is claimed. Limits retain128
+argument slots,32,768 format/field/string units and1Mi output units. Synthetic
+fixtures verify the measured GUID conversion shape and original PE six-argument
+calls; actual game startup is recorded separately.
