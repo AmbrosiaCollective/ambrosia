@@ -1426,3 +1426,23 @@ queue support; those slots stop explicitly. A null/default process queue also
 stops rather than claiming a registration without queue ownership. Invalid queues,
 missing callback/output and the128-entry bound return typed failures. Only the
 base interface is advertised; extension revisions remain unsupported.
+
+
+## Native GameInput empty-device provider
+
+GameInputCreate resolves by name and the public GameInput ordinal1. It returns
+one counted interface per runtime. In the CPU-only profile there is no host input
+backend and the actual device collection is empty. Timestamp queries return real
+monotonic microseconds; reading queries clear output and report no reading/device.
+No virtual controller, neutral reading, host device or window is invented.
+
+Reading/device/guide/layout callback registrations retain actual kind, filters,
+threshold, routine and context under128 bounded unique tokens. Enumerating the
+empty collection generates no callbacks in any enumeration mode. Stop disables
+the record; unregister completes immediately because none can be in flight.
+Invalid callbacks/buffers/devices/modes and exhaustion fail before publication.
+The default focus policy has no OS state in this profile; other policies stop.
+Dispatcher/device creation, historical reading and OEM support remain explicit
+boundaries. Native window/keyboard/controller integration and real event delivery
+must be implemented before interactive-menu verification; this CPU-only provider
+does not satisfy that goal. No additional device/display permission is consumed.

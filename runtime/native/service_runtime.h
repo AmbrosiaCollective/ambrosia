@@ -10,6 +10,7 @@
 #include "crt_streams.h"
 #include "exception_filter.h"
 #include "fls_slots.h"
+#include "game_input.h"
 #include "gdk_bootstrap.h"
 #include "gdk_networking.h"
 #include "gdk_threading.h"
@@ -85,6 +86,10 @@ class Runtime {
 
     TaskQueues &task_queues() {
         return task_queues_;
+    }
+
+    GameInput &game_input() {
+        return game_input_;
     }
 
     GdkUsers &gdk_users() {
@@ -193,6 +198,7 @@ class Runtime {
     GdkThreading gdk_threading_;
     GdkNetworking gdk_networking_;
     GdkUsers gdk_users_;
+    GameInput game_input_;
     TaskQueues task_queues_;
     AppLifecycle app_lifecycle_;
     WinsockLifecycle winsock_;

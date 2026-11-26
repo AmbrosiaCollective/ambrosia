@@ -296,3 +296,9 @@ interface lists for ABI facts (class identity and base slot order). Its owned
 interface, subscription directory and queue retention are original native code;
 no Windows shim implementation, fake account, XAsync provider or foreign code is
 compiled or copied. Broader user/async/event behavior remains separate.
+
+
+`game_input.{h,cpp}` uses inherited GameInput v0 declarations and a pinned public
+export definition for interface/ordinal ABI facts. Its native counted identity,
+empty-device collection and callback directory are original; SDL/Windows code is
+not copied or compiled. Native interactive input remains a separate backend.

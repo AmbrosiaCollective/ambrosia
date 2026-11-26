@@ -189,6 +189,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "app_lifecycle_tests.h"
 #include "gdk_networking_tests.h"
 #include "gdk_user_tests.h"
+#include "game_input_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
@@ -409,6 +410,19 @@ extern "C" int ambrosia_native_wide_format_probe(unsigned mode) {
                   reinterpret_cast<const std::byte *>(slots.data()));
 }
 
+extern "C" int ambrosia_native_input_focus_probe() {
+    ambrosia::services::Runtime runtime;
+    ambrosia::services::Scope scope(runtime);
+    void *object = nullptr;
+    if (runtime.game_input().create(&object) != 0) {
+        return 99;
+    }
+    const auto *table = *static_cast<const std::uintptr_t *const *>(object);
+    using Focus = void(AMBROSIA_GUEST_ABI *)(void *, std::uint32_t);
+    reinterpret_cast<Focus>(table[21])(object, 1);
+    return 99;
+}
+
 extern "C" int ambrosia_native_user_slot_probe() {
     using namespace ambrosia::services;
     Runtime runtime;
@@ -601,6 +615,7 @@ extern "C" int ambrosia_native_tests() {
         app_lifecycle_checks();
         gdk_networking_checks();
         gdk_user_subscription_checks();
+        game_input_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();
