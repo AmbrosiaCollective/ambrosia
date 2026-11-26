@@ -1,6 +1,8 @@
 #include "locale_services.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
+#include <cerrno>
+#include <cstring>
 #include <stdexcept>
 
 namespace ambrosia::services {
@@ -11,6 +13,27 @@ Runtime &required_runtime() {
         throw std::runtime_error("CRT locale lock requires a scoped runtime");
     }
     return *runtime;
+}
+
+std::int32_t AMBROSIA_GUEST_ABI user_geographic_name(void *output, std::int32_t capacity) noexcept {
+    const auto saved_error = errno;
+    // No user geography is exposed by the isolated runtime. UN M49 "001"
+    // represents the world, never an inferred country or machine location.
+    constexpr char16_t world[] = u"001";
+    constexpr std::int32_t required = sizeof(world) / sizeof(world[0]);
+    std::int32_t result = 0;
+    if (capacity < 0 || (!output && capacity)) {
+        set_last_error(error_invalid_parameter);
+    } else if (!capacity) {
+        result = required;
+    } else if (capacity < required) {
+        set_last_error(122);
+    } else {
+        std::memcpy(output, world, sizeof(world));
+        result = required;
+    }
+    errno = saved_error;
+    return result;
 }
 
 void AMBROSIA_GUEST_ABI lock_locales() noexcept {
@@ -87,6 +110,11 @@ char *AMBROSIA_GUEST_ABI select_locale(std::int32_t category, const char *reques
 } // namespace
 
 void register_locale_services(ImportRegistry &registry) {
+    for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-localization-l1-2-3.dll"}) {
+        registry.add(module, "GetUserDefaultGeoName",
+                     reinterpret_cast<std::uintptr_t>(&user_geographic_name));
+    }
+
     for (const auto *module : {"ucrtbase.dll", "api-ms-win-crt-locale-l1-1-0.dll"}) {
         registry.add(module, "_lock_locales", reinterpret_cast<std::uintptr_t>(&lock_locales));
         registry.add(module, "_unlock_locales", reinterpret_cast<std::uintptr_t>(&unlock_locales));

@@ -1402,3 +1402,12 @@ and waits indefinitely at INFINITE, including across spurious wakes. It preserve
 caller errors and guest TLS. Infinite sleeps need process termination to end;
 normal worker-joining shutdown cannot cancel them. Alertable SleepEx/APCs are
 not implied. Existing sandbox wall watchdogs continue to bound diagnostic runs.
+
+
+GetUserDefaultGeoName uses the isolated runtime's explicit neutral-world policy:
+UTF16 "001" (UN M49 world), including its terminator. This describes no user's
+country and reads no host location/profile/registry/network data. A zero-capacity
+query returns4; short buffers and invalid parameters fail without partial writes.
+Outputs may be unaligned and successful calls preserve error channels. User-
+configured territories, language preference and the wider Windows geography
+catalog are not implemented. This policy is distinct from the CRT's C locale.

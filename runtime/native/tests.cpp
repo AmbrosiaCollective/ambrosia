@@ -172,6 +172,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "crt_stream_tests.h"
 #include "crt_heap_tests.h"
 #include "locale_tests.h"
+#include "region_tests.h"
 #include "pointer_tests.h"
 #include "stream_buffer_tests.h"
 #include "c_locale_tests.h"
@@ -552,6 +553,7 @@ extern "C" int ambrosia_native_tests() {
         current_process_handle_checks();
         process_priority_boost_checks();
         precise_time_sleep_checks();
+        neutral_region_checks();
         crt_time_checks();
         uptime_checks();
         critical_section_checks();
