@@ -1446,3 +1446,14 @@ Dispatcher/device creation, historical reading and OEM support remain explicit
 boundaries. Native window/keyboard/controller integration and real event delivery
 must be implemented before interactive-menu verification; this CPU-only provider
 does not satisfy that goal. No additional device/display permission is consumed.
+
+
+strtok_s implements the Windows three-argument byte tokenizer with caller-owned
+continuation storage and no hidden per-process/thread state. Each call uses its
+current delimiter set, skips delimiter runs and terminates tokens in place.
+Exhaustion leaves a stable pointer to the terminating NUL; an empty delimiter set
+keeps the remaining string. Packed continuation storage is copied safely. Null
+delimiter/context or absent initial/continuation text sets guest EINVAL and invokes
+the real invalid-parameter handler before returning NULL if the handler returns.
+Input/continuation stay unchanged on that error; native errno is preserved. This
+is the Windows API, not the four-argument bounds-checking Annex K variant.

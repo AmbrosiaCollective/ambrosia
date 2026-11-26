@@ -1,6 +1,8 @@
 #include "string_services.h"
+#include "invalid_parameters.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
+#include <cerrno>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -118,6 +120,34 @@ std::int32_t AMBROSIA_GUEST_ABI wide_collate(const char16_t *left, const char16_
     return compare_units<char16_t, false>(left, right, std::numeric_limits<std::size_t>::max());
 }
 
+char *AMBROSIA_GUEST_ABI secure_token(char *text, const char *delimiters, char **context) noexcept {
+    const auto saved_error = errno;
+    char *cursor = text;
+    if (context && !cursor) {
+        // Pointer storage can originate in a packed guest structure.
+        std::memcpy(&cursor, context, sizeof(cursor));
+    }
+    if (!delimiters || !context || !cursor) {
+        crt_error() = 22;
+        dispatch_invalid_parameter();
+        errno = saved_error;
+        return nullptr;
+    }
+    cursor += std::strspn(cursor, delimiters);
+    char *token = nullptr;
+    if (*cursor) {
+        token = cursor;
+        cursor += std::strcspn(cursor, delimiters);
+        if (*cursor) {
+            *cursor = '\0';
+            ++cursor;
+        }
+    }
+    std::memcpy(context, &cursor, sizeof(cursor));
+    errno = saved_error;
+    return token;
+}
+
 void require_byte_or_eof(std::int32_t value) noexcept {
     if (value < -1 || value > 255) {
         diagnostics::stop_trace("C-locale classification requires an unsigned byte or EOF", 78);
@@ -171,6 +201,7 @@ void register_string_services(ImportRegistry &registry) {
         registry.add(module, "strncat", reinterpret_cast<std::uintptr_t>(&string_append_counted));
         registry.add(module, "strcspn", reinterpret_cast<std::uintptr_t>(&string_reject_span));
         registry.add(module, "strpbrk", reinterpret_cast<std::uintptr_t>(&string_find_set));
+        registry.add(module, "strtok_s", reinterpret_cast<std::uintptr_t>(&secure_token));
         registry.add(module, "isalnum", reinterpret_cast<std::uintptr_t>(&classify_byte<0x107>));
         registry.add(module, "isalpha", reinterpret_cast<std::uintptr_t>(&classify_byte<0x103>));
         registry.add(module, "isdigit", reinterpret_cast<std::uintptr_t>(&classify_byte<0x04>));

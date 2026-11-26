@@ -213,6 +213,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "math_tests.h"
 #include "command_line_tests.h"
 #include "string_tests.h"
+#include "tokenizer_tests.h"
 #include "format_tests.h"
 #include "wide_format_tests.h"
 #include "invalid_parameter_tests.h"
@@ -408,6 +409,20 @@ extern "C" int ambrosia_native_wide_format_probe(unsigned mode) {
     }
     return format(options, output.data(), size, pattern, locale,
                   reinterpret_cast<const std::byte *>(slots.data()));
+}
+
+extern "C" int ambrosia_native_tokenizer_invalid_probe() {
+    using namespace ambrosia;
+    using namespace services;
+    Runtime runtime;
+    Scope scope(runtime);
+    guest::ThreadContext thread;
+    auto activation = thread.activate();
+    using Tokenize = char *(AMBROSIA_GUEST_ABI *)(char *, const char *, char **);
+    const auto tokenize = reinterpret_cast<Tokenize>(runtime.resolve(service_symbol("strtok_s", "ucrtbase.dll")));
+    char *context = nullptr;
+    (void)tokenize(nullptr, ",", &context);
+    return 99;
 }
 
 extern "C" int ambrosia_native_input_focus_probe() {
@@ -635,6 +650,7 @@ extern "C" int ambrosia_native_tests() {
         math_family_checks();
         command_line_checks();
         string_service_checks();
+        secure_tokenizer_checks();
         format_checks();
         wide_format_checks();
         invalid_parameter_checks();
