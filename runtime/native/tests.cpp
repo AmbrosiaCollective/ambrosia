@@ -182,6 +182,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "task_queue_tests.h"
 #include "app_lifecycle_tests.h"
 #include "gdk_networking_tests.h"
+#include "winsock_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -428,6 +429,8 @@ extern "C" int ambrosia_native_tests() {
         task_queue_manual_checks();
         app_lifecycle_checks();
         gdk_networking_checks();
+        ordinal_service_checks();
+        winsock_lifecycle_checks();
         native_module_checks();
         event_checks();
         registry_checks();

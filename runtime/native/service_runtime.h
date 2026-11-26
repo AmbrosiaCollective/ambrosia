@@ -25,6 +25,7 @@
 #include "registry_keys.h"
 #include "slim_locks.h"
 #include "task_queues.h"
+#include "winsock_lifecycle.h"
 #include <mutex>
 #include <optional>
 
@@ -66,6 +67,10 @@ class Runtime {
     }
 
     unsigned notify_app_lifecycle(AppNotification kind, bool value);
+
+    WinsockLifecycle &winsock() {
+        return winsock_;
+    }
 
     AppLifecycle &app_lifecycle() {
         return app_lifecycle_;
@@ -173,6 +178,7 @@ class Runtime {
     GdkNetworking gdk_networking_;
     TaskQueues task_queues_;
     AppLifecycle app_lifecycle_;
+    WinsockLifecycle winsock_;
     std::mutex processor_mutex_;
     std::optional<ProcessorInformation> processor_information_;
     std::unique_ptr<NativeModules> native_modules_;

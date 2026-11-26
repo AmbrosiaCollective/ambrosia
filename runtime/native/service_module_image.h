@@ -9,6 +9,7 @@ struct ServiceExport {
     std::string name;
     std::uintptr_t target = 0;
     std::string forwarder;
+    std::uint16_t ordinal = 0; // Zero selects an unused private image ordinal.
 };
 
 // An original in-memory PE image describing this runtime's native adapters.

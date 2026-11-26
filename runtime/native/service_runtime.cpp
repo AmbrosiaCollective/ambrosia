@@ -133,6 +133,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     register_task_queues(registry_);
     register_app_lifecycle(registry_);
     register_networking_services(registry_);
+    register_winsock_lifecycle(registry_);
     // Alias list adapted from the inherited xmem.cpp title_memory table.
     constexpr std::array memory_modules = {"kernel32.dll",
                                            "kernelbase.dll",

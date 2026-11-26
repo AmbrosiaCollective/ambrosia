@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <set>
 #include <stdexcept>
 
 namespace ambrosia::services {
@@ -51,8 +52,28 @@ ServiceModuleImage::ServiceModuleImage(std::string module, std::vector<ServiceEx
     }
     std::sort(exports.begin(), exports.end(),
               [](const auto &left, const auto &right) { return left.name < right.name; });
+    std::set<std::uint16_t> occupied;
+    for (const auto &entry : exports) {
+        if (entry.ordinal && !occupied.insert(entry.ordinal).second) {
+            throw std::runtime_error("duplicate native module export ordinal");
+        }
+    }
+    unsigned candidate = 1;
+    for (auto &entry : exports) {
+        if (!entry.ordinal) {
+            while (occupied.contains(static_cast<std::uint16_t>(candidate))) {
+                ++candidate;
+            }
+            if (candidate > 65535) {
+                throw std::runtime_error("native module export ordinal space exhausted");
+            }
+            entry.ordinal = static_cast<std::uint16_t>(candidate);
+            occupied.insert(entry.ordinal);
+        }
+    }
+    const std::size_t function_count = *occupied.rbegin();
     std::size_t direct = 0;
-    std::size_t data_bytes = 40 + exports.size() * 10 + module.size() + 1;
+    std::size_t data_bytes = 40 + function_count * 4 + exports.size() * 6 + module.size() + 1;
     for (std::size_t index = 0; index < exports.size(); ++index) {
         const auto &entry = exports[index];
         require_text(entry.name);
@@ -117,12 +138,12 @@ ServiceModuleImage::ServiceModuleImage(std::string module, std::vector<ServiceEx
     section(image, section_offset, ".edata", data_rva, data_bytes, data_pages, 0x40000040);
 
     const auto functions = data_rva + 40;
-    const auto names = functions + exports.size() * 4;
+    const auto names = functions + function_count * 4;
     const auto ordinals = names + exports.size() * 4;
     auto cursor = ordinals + exports.size() * 2;
     write<std::uint32_t>(image, data_rva + 12, append_string(image, cursor, module));
     write<std::uint32_t>(image, data_rva + 16, 1);
-    write<std::uint32_t>(image, data_rva + 20, exports.size());
+    write<std::uint32_t>(image, data_rva + 20, function_count);
     write<std::uint32_t>(image, data_rva + 24, exports.size());
     write<std::uint32_t>(image, data_rva + 28, functions);
     write<std::uint32_t>(image, data_rva + 32, names);
@@ -142,9 +163,9 @@ ServiceModuleImage::ServiceModuleImage(std::string module, std::vector<ServiceEx
         } else {
             target = append_string(image, cursor, entry.forwarder);
         }
-        write(image, functions + index * 4, target);
+        write(image, functions + (entry.ordinal - 1) * 4, target);
         write<std::uint32_t>(image, names + index * 4, append_string(image, cursor, entry.name));
-        write<std::uint16_t>(image, ordinals + index * 2, index);
+        write<std::uint16_t>(image, ordinals + index * 2, entry.ordinal - 1);
     }
     if (cursor != data_rva + data_bytes) {
         throw std::runtime_error("native module export layout does not match its checked budget");

@@ -12,6 +12,7 @@ class NativeModules {
     std::uintptr_t handle(std::string name);
     std::uintptr_t entrypoint(std::uintptr_t native_target) const;
     std::optional<std::uintptr_t> export_address(std::uintptr_t handle, const std::string &name) const;
+    std::optional<std::uintptr_t> export_address(std::uintptr_t handle, std::uint16_t ordinal) const;
     std::uintptr_t module_base_for_address(std::uintptr_t address) const;
 
   private:
@@ -19,6 +20,8 @@ class NativeModules {
     std::map<std::uintptr_t, std::string> target_names_;
     std::map<std::uintptr_t, std::uintptr_t> entrypoints_;
     std::map<std::string, std::map<std::string, std::uintptr_t>> exports_;
+    std::map<std::pair<std::string, std::uint16_t>, std::uintptr_t> ordinal_targets_;
+    std::map<std::pair<std::string, std::string>, std::uint16_t> named_ordinals_;
     mutable std::mutex mutex_;
     std::map<std::string, std::unique_ptr<ServiceModuleImage>> facades_;
     std::size_t mapped_bytes_ = 0;

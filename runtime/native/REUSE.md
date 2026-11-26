@@ -228,3 +228,14 @@ interface prefix and fixed-width/unaligned-safe buffers, excluding Windows globa
 XAsync callbacks and certificate handling. Unsupported slots remain nonreturning
 rather than copying the inherited private E_NOTIMPL shortcuts. No host-interface
 query, fabricated internet/UDP availability or certificate bypass is imported.
+
+
+## Winsock lifecycle and public ordinal metadata
+
+The WSADATA x64 layout is cross-checked with the pinned archived console-host
+xbtp declaration and Xenora's408-byte compatibility layout. The local lifecycle
+implementation includes no host socket, loopback transport, Windows system call
+or external runtime. Installed Wine9.0 export metadata verifies public ordinals
+111/112/115/116; only metadata is read, no DLL is loaded, executed or copied.
+Reference hashes/package version are recorded locally. Native sparse PE export
+emission extends the existing project builder and retains its original license.

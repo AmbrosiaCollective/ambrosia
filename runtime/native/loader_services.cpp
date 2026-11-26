@@ -261,11 +261,9 @@ void *AMBROSIA_GUEST_ABI procedure_address(void *module, const char *function) n
         const auto identifier = reinterpret_cast<std::uintptr_t>(function);
         std::optional<std::uintptr_t> address;
         if (identifier <= 65535) {
-            if (runtime->native_modules().module_base_for_address(handle) == handle) {
-                diagnostics::stop_trace("native service public ordinal compatibility is unsupported", 78);
-            }
             symbol.by_ordinal = true;
             symbol.ordinal = static_cast<std::uint16_t>(identifier);
+            address = runtime->native_modules().export_address(handle, symbol.ordinal);
         } else {
             symbol.name = guest::read_string(function);
             address = runtime->native_modules().export_address(handle, symbol.name);

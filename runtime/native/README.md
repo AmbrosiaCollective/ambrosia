@@ -497,7 +497,7 @@ GetProcAddress returns named implemented facade exports or real loaded PE name/
 ordinal exports. Read-only forwarder lookup reaches loaded images or registered
 services without invoking the package provider or changing dependencies. Missing
 exports return procedure-not-found, invalid handles fail separately and native
-service public ordinal requests stop explicitly. This does not supply dynamic
+service public ordinals resolve only explicitly registered aliases; unknown public ordinals fail lookup. This does not supply dynamic
 DLL loading, unsupported APIs, Windows SEH or complete system-module behavior.
 
 ## Owned events and waits
@@ -1160,3 +1160,30 @@ This advances class provisioning and synchronous offline queries only. Queue
 completion/TLS support is still needed before change callbacks or async failures
 can be delivered faithfully. Network denial remains part of the execution profile.
 An interface/hint test alone proves neither menu startup nor online functionality.
+
+
+## Explicit native ordinals and Winsock initialization
+
+Named native services can declare a public ordinal alias. Static imports and
+GetProcAddress resolve those aliases to the same canonical pointer as the name.
+Facade PE export tables retain explicit sparse ordinal slots and forwarders;
+holes stay zero. Private automatic image ordinals avoid explicit slots. Facade
+ordinal lookups accept only declared public aliases, without guessing OS ordinals
+from alphabetic export order. Registry entries/aliases share the 4,096-entry budget;
+images retain their 512 KiB bound and at most 4,096 named exports. Zero public
+ordinal aliases and multiple public ordinals for one name are unsupported.
+
+The ws2_32 facade declares WSAStartup (115), WSACleanup (116), WSAGetLastError (111) and
+WSASetLastError (112). These bindings were checked against installed Wine export
+metadata, without loading/executing that DLL or using Wine to run the game.
+WSAStartup initializes an owned offline compatibility-library session and fills
+all 408 bytes of Windows x64 WSADATA, including zero vendor pointer/padding and
+explicit offline description/status. Winsock 2 versions negotiate up to 2.2;
+legacy 1.x requests are rejected. Initialization references cap at 4,096 and each
+successful startup needs cleanup. Extra cleanup reports SOCKET_ERROR and
+WSANOTINITIALISED. Winsock last error shares the active guest's Win32 error slot.
+
+No host socket or transport is initialized. Socket I/O and other Winsock calls
+remain explicit unsupported imports; successful library startup does not mean
+network access exists. Synthetic tests include real PE ordinal calls and dynamic
+lookup, not a claim of a working game menu or network connection.

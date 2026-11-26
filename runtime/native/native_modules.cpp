@@ -17,6 +17,11 @@ NativeModules::NativeModules(const ImportRegistry &registry) {
         exports_[identity.first].emplace(identity.second, target);
         target_names_.try_emplace(target);
     }
+    for (const auto &[identity, name] : registry.ordinals()) {
+        const auto target = exports_.at(identity.first).at(name);
+        ordinal_targets_.emplace(identity, target);
+        named_ordinals_.emplace(std::make_pair(identity.first, name), identity.second);
+    }
     if (exports_.contains(canonical_name) || exports_.size() + 1 > module_limit) {
         throw std::runtime_error("native service module catalog is reserved or exceeds its budget");
     }
@@ -60,7 +65,9 @@ std::uintptr_t NativeModules::handle(std::string name) {
     for (const auto &[symbol, target] : symbols->second) {
         // A single canonical stub per unique native target preserves pointer
         // identity across static imports, dynamic lookups and module aliases.
-        forwarded.push_back({symbol, 0, "ambrosia-native." + target_names_.at(target)});
+        const auto ordinal = named_ordinals_.find({key, symbol});
+        const auto value = ordinal == named_ordinals_.end() ? std::uint16_t{0} : ordinal->second;
+        forwarded.push_back({symbol, 0, "ambrosia-native." + target_names_.at(target), value});
     }
     auto image = std::make_unique<ServiceModuleImage>(key, std::move(forwarded));
     const auto bytes = image->bytes().size();
@@ -89,6 +96,22 @@ std::optional<std::uintptr_t> NativeModules::export_address(std::uintptr_t handl
             const auto &symbols = exports_.at(module);
             const auto found = symbols.find(name);
             return found == symbols.end() ? 0 : entrypoints_.at(found->second);
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::uintptr_t> NativeModules::export_address(std::uintptr_t handle,
+                                                            std::uint16_t ordinal) const {
+    if (handle == canonical_->base()) {
+        const auto found = canonical_->exports().ordinals.find(ordinal);
+        return found == canonical_->exports().ordinals.end() ? 0 : canonical_->base() + found->second.rva;
+    }
+    const std::lock_guard guard(mutex_);
+    for (const auto &[module, image] : facades_) {
+        if (image->base() == handle) {
+            const auto found = ordinal_targets_.find({module, ordinal});
+            return found == ordinal_targets_.end() ? 0 : entrypoints_.at(found->second);
         }
     }
     return std::nullopt;
