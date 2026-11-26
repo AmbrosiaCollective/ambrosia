@@ -1537,3 +1537,13 @@ ctime is never substituted for creation. An unavailable requested birth timestam
 fails explicitly. Optional packed outputs are staged until validation; invalid/
 closed/wrong-type handles and insufficient time-query rights cannot modify them.
 File data I/O and direct-read alignment remain separate capabilities.
+
+Synchronous ReadFile now copies real source bytes using native positional reads
+and a serialized per-object cursor. EOF/short/zero reads report actual counts;
+failed calls do not advance the cursor. Read operations retain their source and
+make file waits reflect busy/idle state. Each call is bounded64MiB. Direct reads
+require authoritative Linux statx alignment metadata and validate buffer, offset
+and length before O_DIRECT I/O; unavailable alignment fails without fallback.
+OVERLAPPED/event/async completion remains unsupported and returns an explicit
+error without publishing a completion. No streaming/rendering/menu claim follows
+from these individual file services.

@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -44,13 +45,22 @@ struct FileTimes {
     FileLookupError error = FileLookupError::none;
 };
 
+enum class FileReadError { none, invalid, denied, no_access, unsupported, exhausted, failure };
+
+struct FileRead {
+    std::uint32_t bytes = 0;
+    FileReadError error = FileReadError::none;
+};
+
 class ReadonlyFile {
   public:
+    static constexpr std::size_t read_limit = 64u * 1024 * 1024;
     ~ReadonlyFile();
     ReadonlyFile(const ReadonlyFile &) = delete;
     ReadonlyFile &operator=(const ReadonlyFile &) = delete;
     FileLookup inspect() const;
     FileTimes times() const;
+    FileRead read(std::uint64_t offset, std::span<std::byte> output) const noexcept;
 
   private:
     friend class ReadonlyDirectory;

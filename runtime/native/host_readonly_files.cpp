@@ -1,5 +1,6 @@
 #include "host_readonly_files.h"
 #include <cerrno>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -320,6 +321,65 @@ FileTimes ReadonlyFile::times() const {
     return result;
 #else
     return {{}, {}, {}, FileLookupError::unsupported};
+#endif
+}
+
+FileRead ReadonlyFile::read(std::uint64_t offset, std::span<std::byte> output) const noexcept {
+    NativeErrorScope restore;
+    if (output.size() > read_limit) {
+        return {0, FileReadError::exhausted};
+    }
+    if (offset > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
+        (!output.data() && !output.empty())) {
+        return {0, FileReadError::invalid};
+    }
+    if (output.empty()) {
+        return {};
+    }
+#ifdef __linux__
+    const auto flags = ::fcntl(state_->descriptor.get(), F_GETFL);
+    if (flags < 0) {
+        return {0, FileReadError::failure};
+    }
+    if (flags & O_DIRECT) {
+        struct statx alignment {};
+
+        if (::statx(state_->descriptor.get(), "", AT_EMPTY_PATH, STATX_DIOALIGN, &alignment) ||
+            !(alignment.stx_mask & STATX_DIOALIGN) || !alignment.stx_dio_mem_align ||
+            !alignment.stx_dio_offset_align) {
+            return {0, FileReadError::unsupported};
+        }
+        if (reinterpret_cast<std::uintptr_t>(output.data()) % alignment.stx_dio_mem_align ||
+            offset % alignment.stx_dio_offset_align || output.size() % alignment.stx_dio_offset_align) {
+            return {0, FileReadError::invalid};
+        }
+    }
+    ssize_t count;
+    do {
+        count = ::pread(state_->descriptor.get(), output.data(), output.size(), static_cast<off_t>(offset));
+    } while (count < 0 && errno == EINTR);
+    if (count >= 0) {
+        return {static_cast<std::uint32_t>(count), FileReadError::none};
+    }
+    switch (errno) {
+    case EINVAL:
+    case EOVERFLOW:
+        return {0, FileReadError::invalid};
+    case EACCES:
+    case EPERM:
+        return {0, FileReadError::denied};
+    case EFAULT:
+        return {0, FileReadError::no_access};
+    case ENOMEM:
+        return {0, FileReadError::exhausted};
+    case ENOSYS:
+    case EOPNOTSUPP:
+        return {0, FileReadError::unsupported};
+    default:
+        return {0, FileReadError::failure};
+    }
+#else
+    return {0, FileReadError::unsupported};
 #endif
 }
 

@@ -3,6 +3,7 @@
 #include "startup_trace.h"
 #include "text_conversion.h"
 #include <cerrno>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -253,12 +254,95 @@ std::int32_t AMBROSIA_GUEST_ABI get_file_size(void *handle, void *output) noexce
         diagnostics::stop_trace(error.what(), 78);
     }
 }
+
+std::uint32_t read_error(host::FileReadError error) {
+    switch (error) {
+    case host::FileReadError::none:
+        return 0;
+    case host::FileReadError::invalid:
+        return 87;
+    case host::FileReadError::denied:
+        return 5;
+    case host::FileReadError::no_access:
+        return 998;
+    case host::FileReadError::unsupported:
+        return 50;
+    case host::FileReadError::exhausted:
+        return 8;
+    case host::FileReadError::failure:
+        return 1117;
+    }
+    return 1117;
+}
+
+std::int32_t AMBROSIA_GUEST_ABI read_file(void *handle, void *buffer, std::uint32_t bytes, void *count_output,
+                                          void *overlapped) noexcept {
+    NativeErrorScope restore;
+    const std::uint32_t zero = 0;
+    if (count_output) {
+        std::memcpy(count_output, &zero, sizeof(zero));
+    }
+    if (overlapped) {
+        return boolean_failure(50);
+    }
+    if (!count_output || (!buffer && bytes)) {
+        return boolean_failure(87);
+    }
+    try {
+        const auto file = file_object(handle);
+        if (!file) {
+            return boolean_failure(6);
+        }
+        if (bytes > host::ReadonlyFile::read_limit) {
+            return boolean_failure(8);
+        }
+        const auto result = file->read({static_cast<std::byte *>(buffer), bytes});
+        if (result.error != host::FileReadError::none) {
+            return boolean_failure(read_error(result.error));
+        }
+        std::memcpy(count_output, &result.bytes, sizeof(result.bytes));
+        diagnostics::write_service_trace("TRACE native source bytes read\n");
+        return 1;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
 } // namespace
 
 WaitResult ReadonlyFileObject::wait(std::uint32_t milliseconds) {
-    (void)milliseconds;
-    // There are no pending I/O operations on these synchronous source handles.
+    std::unique_lock lock(io_mutex_);
+    const auto idle = [&] { return !busy_; };
+    if (!idle()) {
+        if (!milliseconds) {
+            return {wait_timeout, 0};
+        }
+        if (milliseconds == 0xffffffffu) {
+            io_completed_.wait(lock, idle);
+        } else if (!io_completed_.wait_for(lock, std::chrono::milliseconds(milliseconds), idle)) {
+            return {wait_timeout, 0};
+        }
+    }
     return {wait_object_0, 0};
+}
+
+host::FileRead ReadonlyFileObject::read(std::span<std::byte> output) {
+    if (!read_data_) {
+        return {0, host::FileReadError::denied};
+    }
+    std::unique_lock lock(io_mutex_);
+    io_completed_.wait(lock, [&] { return !busy_; });
+    busy_ = true;
+    const auto offset = position_;
+    lock.unlock();
+    const auto result = file_->read(offset, output);
+    lock.lock();
+    if (result.error == host::FileReadError::none) {
+        position_ += result.bytes;
+    }
+    busy_ = false;
+    lock.unlock();
+    io_completed_.notify_all();
+    return result;
 }
 
 host::FileLookup ReadonlyFileObject::inspect() const {
@@ -288,6 +372,7 @@ std::optional<std::uint64_t> windows_filetime(host::FileTimestamp timestamp) noe
 void register_file_services(ImportRegistry &registry) {
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-file-l1-1-0.dll",
                                "api-ms-win-core-file-l1-2-0.dll"}) {
+        registry.add(module, "ReadFile", reinterpret_cast<std::uintptr_t>(&read_file));
         registry.add(module, "GetFileTime", reinterpret_cast<std::uintptr_t>(&get_file_time));
         registry.add(module, "GetFileSizeEx", reinterpret_cast<std::uintptr_t>(&get_file_size));
         registry.add(module, "CreateFileW", reinterpret_cast<std::uintptr_t>(&create_file_wide));

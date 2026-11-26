@@ -338,3 +338,8 @@ Task109 follows pinned official GetFileTime/GetFileSizeEx contracts. Original
 checked FILETIME conversion and descriptor-backed statx metadata add no external
 implementation or dependencies. Linux timestamps stay behind the portable host
 file boundary; Windows ABI output/error policy stays in file services.
+
+Task110 follows the pinned official ReadFile contract for synchronous byte counts,
+cursor and error behavior. Original portable ownership/serialization code calls
+the narrow Linux pread/O_DIRECT adapter, with alignment reported by statx. No
+external read implementation, fake payload/completion or host handle is exposed.
