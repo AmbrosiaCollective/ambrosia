@@ -188,6 +188,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "gdk_bootstrap_tests.h"
 #include "gdk_threading_tests.h"
 #include "task_queue_tests.h"
+#include "delayed_queue_tests.h"
 #include "app_lifecycle_tests.h"
 #include "gdk_networking_tests.h"
 #include "gdk_user_tests.h"
@@ -597,6 +598,7 @@ extern "C" int ambrosia_native_queue_tests() {
         task_queue_manual_checks();
         worker_pool_checks();
         task_queue_thread_checks();
+        delayed_queue_checks();
     } catch (const std::exception &error) {
         std::cerr << "FAIL queue exception: " << error.what() << '\n';
         ++failures;

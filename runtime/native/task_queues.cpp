@@ -98,6 +98,21 @@ unsigned TaskQueues::workers() const {
     return pool_.workers();
 }
 
+NativeQueueScheduler TaskQueues::thread_pool_scheduler(std::uintptr_t handle) {
+    const auto queue = inspect(handle);
+    if (!queue || queue->work != QueueMode::thread_pool) {
+        return {};
+    }
+    // The closure retains the actual queue after its public handle closes. It
+    // belongs to this runtime; all users must stop before pool destruction ends.
+    return [this, queue](std::uint32_t delay, std::weak_ptr<void> owner, std::function<void()> job) {
+        if (queue->work != QueueMode::thread_pool) {
+            return false;
+        }
+        return pool_.submit_after(std::chrono::milliseconds(delay), std::move(owner), std::move(job));
+    };
+}
+
 std::int32_t AMBROSIA_GUEST_ABI task_queue_create(std::uint32_t work, std::uint32_t completion,
                                                   void *output) noexcept {
     RestoreNativeError restore;

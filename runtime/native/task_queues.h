@@ -13,6 +13,8 @@ struct QueueState {
     QueueMode completion;
 };
 
+using NativeQueueScheduler = std::function<bool(std::uint32_t, std::weak_ptr<void>, std::function<void()>)>;
+
 // Handles are runtime-owned opaque IDs, not host pointers or kernel handles.
 // Dispatch/submission/termination remain separate capabilities.
 class TaskQueues {
@@ -26,6 +28,8 @@ class TaskQueues {
     void close(std::uintptr_t handle);
     std::shared_ptr<const QueueState> inspect(std::uintptr_t handle) const;
     unsigned workers() const;
+    // Native adapters only. Other work modes need their own dispatch contract.
+    NativeQueueScheduler thread_pool_scheduler(std::uintptr_t handle);
 
   private:
     std::uintptr_t publish(std::shared_ptr<QueueState> queue, void *output);
