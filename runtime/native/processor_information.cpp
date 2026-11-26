@@ -17,6 +17,7 @@ ProcessorInformation::ProcessorInformation(const host::ProcessorTopology &topolo
         std::set<unsigned>(topology.processor_ids.begin(), topology.processor_ids.end()).size() != count) {
         throw std::runtime_error("invalid or unsupported native processor group");
     }
+    processor_ids_ = topology.processor_ids;
     const auto active = UINT64_MAX >> (64 - count);
     const auto add_groups = [&](const std::vector<host::ProcessorGroup> &groups, std::uint32_t relation) {
         std::uint64_t covered = 0;

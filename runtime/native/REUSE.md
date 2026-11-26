@@ -279,3 +279,13 @@ Pinned Wine kernelbase-thread.c supplies Windows get/set error/return contracts
 only. No scheduler/kernel/Wine implementation is copied or run. The local host
 adapter applies and verifies bounded nice requests; the portable layer records a
 guest level only on host success. This is explicitly not a real-time scheduler.
+
+
+## Native CPU affinity mapping
+
+Thread group/mask adapters reuse the existing processor topology's saved dense
+CPU identity table. Pinned Wine kernelbase-thread.c records GROUP_AFFINITY query/
+set contracts and installed Linux sched(7)/sched.h document thread affinity calls.
+No external scheduler, kernel or compatibility implementation is copied/run.
+Local portable mask conversion is separate from sched_getaffinity/setaffinity;
+set results and rollback are verified against the host rather than cached success.

@@ -1,6 +1,7 @@
 #pragma once
 #include "kernel_objects.h"
 #include "module_graph.h"
+#include "thread_affinity.h"
 #include <thread>
 #include <vector>
 
@@ -39,11 +40,17 @@ class NativeThreads {
     ThreadResume resume(std::uintptr_t handle);
     std::uint32_t set_priority(std::uintptr_t handle, std::int32_t priority);
     ThreadPriority priority(std::uintptr_t handle) const;
+    std::uint32_t group_affinity(std::uintptr_t handle, const ThreadAffinity &mapping,
+                                 GroupAffinity &output) const;
+    std::uint32_t set_group_affinity(std::uintptr_t handle, const ThreadAffinity &mapping,
+                                     const GroupAffinity &value, GroupAffinity &previous);
     void shutdown() noexcept;
 
   private:
     struct Job;
     void reap_finished();
+    std::uint32_t with_live_thread(std::uintptr_t handle,
+                                   const std::function<std::uint32_t(std::uint32_t)> &operation) const;
     KernelObjects &objects_;
     const std::thread::id owner_ = std::this_thread::get_id();
     std::mutex mutex_;

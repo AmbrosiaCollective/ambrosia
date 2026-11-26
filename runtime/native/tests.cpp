@@ -2,6 +2,7 @@
 #include "clock_services.h"
 #include "event_signal.h"
 #include "guest_thread.h"
+#include "host_affinity.h"
 #include "host_priority.h"
 #include "module_graph.h"
 #include "native_command.h"
@@ -188,6 +189,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
 #include "thread_priority_tests.h"
+#include "thread_affinity_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -408,6 +410,7 @@ extern "C" int ambrosia_native_thread_tests() {
         native_thread_launcher_checks();
         native_suspended_thread_checks();
         native_thread_priority_checks();
+        native_thread_affinity_checks();
     } catch (const std::exception &error) {
         std::cerr << "FAIL native thread exception: " << error.what() << '\n';
         ++failures;
@@ -574,6 +577,7 @@ extern "C" int ambrosia_native_tests() {
         semaphore_checks();
         mutex_checks();
         processor_topology_checks();
+        affinity_mapping_checks();
         exception_filter_checks();
         new_allocation_checks();
         tangent_checks();

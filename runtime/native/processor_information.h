@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 namespace ambrosia::services {
@@ -22,7 +23,12 @@ class ProcessorInformation {
     explicit ProcessorInformation(const host::ProcessorTopology &topology);
     std::uint32_t copy(void *buffer, std::uint32_t &bytes) const noexcept;
 
+    std::span<const unsigned> processor_ids() const noexcept {
+        return processor_ids_;
+    }
+
   private:
+    std::vector<unsigned> processor_ids_;
     std::vector<LogicalProcessorInformation> records_;
 };
 

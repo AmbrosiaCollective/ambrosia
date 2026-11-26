@@ -291,6 +291,36 @@ ThreadPriority NativeThreads::priority(std::uintptr_t handle) const {
     return {state->priority, 0};
 }
 
+std::uint32_t
+NativeThreads::with_live_thread(std::uintptr_t handle,
+                                const std::function<std::uint32_t(std::uint32_t)> &operation) const {
+    if (handle == static_cast<std::uintptr_t>(-2)) {
+        if (!guest::ThreadContext::current()) {
+            return 6;
+        }
+        return operation(host::current_thread_id());
+    }
+    const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
+    if (!state) {
+        return 6;
+    }
+    const std::lock_guard lock(state->mutex);
+    if (state->done) {
+        return 6;
+    }
+    return operation(state->id);
+}
+
+std::uint32_t NativeThreads::group_affinity(std::uintptr_t handle, const ThreadAffinity &mapping,
+                                            GroupAffinity &output) const {
+    return with_live_thread(handle, [&](auto id) { return mapping.read(id, output); });
+}
+
+std::uint32_t NativeThreads::set_group_affinity(std::uintptr_t handle, const ThreadAffinity &mapping,
+                                                const GroupAffinity &value, GroupAffinity &previous) {
+    return with_live_thread(handle, [&](auto id) { return mapping.write(id, value, previous); });
+}
+
 ThreadResume NativeThreads::resume(std::uintptr_t handle) {
     const auto state = std::dynamic_pointer_cast<ThreadCompletion>(objects_.waitable(handle));
     if (!state) {

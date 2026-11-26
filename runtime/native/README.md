@@ -487,7 +487,7 @@ only; code pages are RX. No copied system DLL or untrusted setup/runtime is used
 These are fixed mapped views with no entrypoint, imports or TLS, not disk-loadable
 replacement Windows DLLs. Public Windows ordinal compatibility is not invented.
 
-The catalog caps each image at 512 KiB/4,096 exports and the aggregate at 64
+The catalog caps each image at 512 KiB/4,096 exports and the aggregate at 128
 images/16 MiB. Facades appear lazily for registered modules; arbitrary requested
 names cannot create a library. Native address-to-image queries include the
 canonical stubs. The eight package modules reported by the startup trace remain
@@ -1321,3 +1321,36 @@ exited thread's scheduling; closed/non-thread handles fail. Worker creation chec
 SCHED_OTHER baseline availability before publishing a handle. Ordinary thread/
 stack/callback/teardown controls remain unchanged. Host nice changes on synthetic
 workers and truthful failure paths are verified separately from game/menu evidence.
+
+
+## Native thread CPU affinity
+
+GetThreadGroupAffinity, SetThreadGroupAffinity and SetThreadAffinityMask reuse the
+saved ProcessorInformation mapping: guest bitN corresponds to processor_ids[N].
+The supported topology remains one dense group of1..64 allowed CPUs. Native IDs
+may exceed63; they are translated through the table, never shifted/truncated into
+a guest mask. Queries copy the real owned thread's native CPU set into the16-byte
+Windows GROUP_AFFINITY layout. Group0 is supported; other groups, zero/outside
+masks and nonzero reserved fields fail without a scheduling change.
+
+Setters apply and verify the actual Linux CPU set and return the previous guest
+mask only on success. Verification/rollback use fixed stack masks after mutation;
+failed verification restores the old set, and unverified rollback stops. Guest
+input and previous-output buffers may alias. The narrow host adapter accepts only
+validated live owned IDs; the current-thread pseudo-handle additionally requires
+active guest TLS. Completion stays locked through another worker's syscall to
+prevent ID recycling. Completed/stale/non-thread targets fail before scheduling.
+
+This adds real native affinity without changing isolation profiles, touching
+unrelated host processes or pretending additional Windows processor groups exist.
+Topology/affinity hotplug and masks outside the saved catalog are unsupported.
+Synthetic tests query actual child CPU sets, restrict one mapped CPU, restore the
+original set, verify reversed dense ordering, guard/error behavior and an unchanged
+caller mask. Actual game progress is separate from CPU-affinity test success.
+
+
+The service contract metadata catalog now allows128 modules including its reserved
+canonical module. The original64-module cap was reached when affinity contract
+aliases were added. Facades remain lazy; the16MiB aggregate executable-mapping
+budget,512KiB image cap, registry entry budget and game module graph limits are
+unchanged. A larger catalog is not permission to allocate more executable memory.

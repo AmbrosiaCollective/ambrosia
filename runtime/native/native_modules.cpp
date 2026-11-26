@@ -4,7 +4,9 @@
 namespace ambrosia::services {
 namespace {
 constexpr const char *canonical_name = "ambrosia-native.dll";
-constexpr std::size_t module_limit = 64;
+// Catalog metadata can grow independently of the existing executable-mapping
+// budget. Each lazily built facade still reserves512KiB against16MiB total.
+constexpr std::size_t module_limit = 128;
 constexpr std::size_t mapping_limit = 16 * 1024 * 1024;
 
 bool contains(const ServiceModuleImage &image, std::uintptr_t address) {
