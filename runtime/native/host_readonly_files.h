@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -31,12 +32,25 @@ struct FileLookup {
     FileLookupError error = FileLookupError::none;
 };
 
+struct FileTimestamp {
+    std::int64_t seconds = 0;
+    std::uint32_t nanoseconds = 0;
+};
+
+struct FileTimes {
+    std::optional<FileTimestamp> creation;
+    FileTimestamp access;
+    FileTimestamp write;
+    FileLookupError error = FileLookupError::none;
+};
+
 class ReadonlyFile {
   public:
     ~ReadonlyFile();
     ReadonlyFile(const ReadonlyFile &) = delete;
     ReadonlyFile &operator=(const ReadonlyFile &) = delete;
     FileLookup inspect() const;
+    FileTimes times() const;
 
   private:
     friend class ReadonlyDirectory;

@@ -333,3 +333,8 @@ opens, symmetric read sharing and metadata-only access. Linux O_DIRECT is reques
 for the observed no-buffering flag and verified from descriptor status. Original
 shared source ownership and opaque handle integration reuse the existing portable
 object directory; no external implementation or host file handle is exposed.
+
+Task109 follows pinned official GetFileTime/GetFileSizeEx contracts. Original
+checked FILETIME conversion and descriptor-backed statx metadata add no external
+implementation or dependencies. Linux timestamps stay behind the portable host
+file boundary; Windows ABI output/error policy stays in file services.

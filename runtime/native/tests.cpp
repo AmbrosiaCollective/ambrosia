@@ -197,6 +197,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "nls_tests.h"
 #include "file_tests.h"
 #include "file_handle_tests.h"
+#include "file_metadata_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
@@ -670,6 +671,7 @@ extern "C" int ambrosia_native_tests() {
         native_text_conversion_checks();
         readonly_file_checks();
         native_file_handle_checks();
+        native_file_metadata_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();

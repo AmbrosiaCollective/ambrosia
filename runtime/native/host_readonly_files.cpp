@@ -299,6 +299,30 @@ FileLookup ReadonlyFile::inspect() const {
 #endif
 }
 
+FileTimes ReadonlyFile::times() const {
+    NativeErrorScope restore;
+#ifdef __linux__
+    struct statx value {};
+
+    constexpr auto requested = STATX_ATIME | STATX_MTIME | STATX_BTIME;
+    if (::statx(state_->descriptor.get(), "", AT_EMPTY_PATH, requested, &value)) {
+        return {{}, {}, {}, lookup_error(errno)};
+    }
+    if ((value.stx_mask & (STATX_ATIME | STATX_MTIME)) != (STATX_ATIME | STATX_MTIME)) {
+        return {{}, {}, {}, FileLookupError::unsupported};
+    }
+    FileTimes result;
+    result.access = {value.stx_atime.tv_sec, value.stx_atime.tv_nsec};
+    result.write = {value.stx_mtime.tv_sec, value.stx_mtime.tv_nsec};
+    if (value.stx_mask & STATX_BTIME) {
+        result.creation = FileTimestamp{value.stx_btime.tv_sec, value.stx_btime.tv_nsec};
+    }
+    return result;
+#else
+    return {{}, {}, {}, FileLookupError::unsupported};
+#endif
+}
+
 FileOpen ReadonlyDirectory::open(std::span<const std::string> components, bool unbuffered) const {
     NativeErrorScope restore;
 #ifdef __linux__

@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -171,6 +172,87 @@ void *AMBROSIA_GUEST_ABI create_file_bytes(const char *path, std::uint32_t acces
         diagnostics::stop_trace(error.what(), 78);
     }
 }
+
+std::shared_ptr<ReadonlyFileObject> file_object(void *handle) {
+    auto *runtime = current_runtime();
+    if (!runtime) {
+        diagnostics::stop_trace("file metadata requires a scoped native runtime", 78);
+    }
+    const auto reference = runtime->objects().reference(reinterpret_cast<std::uintptr_t>(handle));
+    return std::dynamic_pointer_cast<ReadonlyFileObject>(reference.object);
+}
+
+std::int32_t boolean_failure(std::uint32_t error) noexcept {
+    set_last_error(error);
+    return 0;
+}
+
+std::int32_t AMBROSIA_GUEST_ABI get_file_time(void *handle, void *creation_output, void *access_output,
+                                              void *write_output) noexcept {
+    NativeErrorScope restore;
+    try {
+        const auto file = file_object(handle);
+        if (!file) {
+            return boolean_failure(6);
+        }
+        if (!file->read_data()) {
+            return boolean_failure(5);
+        }
+        const auto times = file->times();
+        if (times.error != host::FileLookupError::none) {
+            return boolean_failure(times.error == host::FileLookupError::unsupported ? 50 : 31);
+        }
+        if (creation_output && !times.creation) {
+            return boolean_failure(50); // ctime is not creation time.
+        }
+        const auto access = windows_filetime(times.access);
+        const auto write = windows_filetime(times.write);
+        const auto creation =
+            times.creation ? windows_filetime(*times.creation) : std::optional<std::uint64_t>{};
+        if ((access_output && !access) || (write_output && !write) || (creation_output && !creation)) {
+            return boolean_failure(534);
+        }
+        if (creation_output) {
+            std::memcpy(creation_output, &*creation, sizeof(*creation));
+        }
+        if (access_output) {
+            std::memcpy(access_output, &*access, sizeof(*access));
+        }
+        if (write_output) {
+            std::memcpy(write_output, &*write, sizeof(*write));
+        }
+        diagnostics::write_service_trace("TRACE native file times retrieved\n");
+        return 1;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
+std::int32_t AMBROSIA_GUEST_ABI get_file_size(void *handle, void *output) noexcept {
+    NativeErrorScope restore;
+    if (!output) {
+        return boolean_failure(87);
+    }
+    try {
+        const auto file = file_object(handle);
+        if (!file) {
+            return boolean_failure(6);
+        }
+        const auto found = file->inspect();
+        if (found.error != host::FileLookupError::none) {
+            return boolean_failure(31);
+        }
+        if (found.metadata.bytes > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+            return boolean_failure(534);
+        }
+        const auto bytes = static_cast<std::int64_t>(found.metadata.bytes);
+        std::memcpy(output, &bytes, sizeof(bytes));
+        diagnostics::write_service_trace("TRACE native file size retrieved\n");
+        return 1;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
 } // namespace
 
 WaitResult ReadonlyFileObject::wait(std::uint32_t milliseconds) {
@@ -183,9 +265,31 @@ host::FileLookup ReadonlyFileObject::inspect() const {
     return file_->inspect();
 }
 
+host::FileTimes ReadonlyFileObject::times() const {
+    return file_->times();
+}
+
+std::optional<std::uint64_t> windows_filetime(host::FileTimestamp timestamp) noexcept {
+    constexpr std::int64_t epoch_seconds = 11644473600;
+    constexpr std::uint64_t ticks_per_second = 10000000;
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+    if (timestamp.nanoseconds >= 1000000000 || timestamp.seconds < -epoch_seconds ||
+        timestamp.seconds > static_cast<std::int64_t>(maximum / ticks_per_second) - epoch_seconds) {
+        return std::nullopt;
+    }
+    const auto seconds = static_cast<std::uint64_t>(timestamp.seconds + epoch_seconds);
+    const auto fraction = timestamp.nanoseconds / 100;
+    if (seconds > (maximum - fraction) / ticks_per_second) {
+        return std::nullopt;
+    }
+    return seconds * ticks_per_second + fraction;
+}
+
 void register_file_services(ImportRegistry &registry) {
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-file-l1-1-0.dll",
                                "api-ms-win-core-file-l1-2-0.dll"}) {
+        registry.add(module, "GetFileTime", reinterpret_cast<std::uintptr_t>(&get_file_time));
+        registry.add(module, "GetFileSizeEx", reinterpret_cast<std::uintptr_t>(&get_file_size));
         registry.add(module, "CreateFileW", reinterpret_cast<std::uintptr_t>(&create_file_wide));
         registry.add(module, "CreateFileA", reinterpret_cast<std::uintptr_t>(&create_file_bytes));
         registry.add(module, "GetFileAttributesW", reinterpret_cast<std::uintptr_t>(&attributes_wide));

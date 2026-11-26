@@ -1529,3 +1529,11 @@ spans both APIs. Handles use the existing opaque kernel-object directory and
 CloseHandle ownership; native owners can retain a source after handle close.
 Writes, creation, asynchronous/security/template semantics and other flags fail
 with explicit Windows errors. File data I/O remains a separate startup capability.
+
+GetFileTime and GetFileSizeEx query the owned source descriptor. Portable time
+values use signed Unix seconds plus nanoseconds, then checked1601-epoch/100ns
+conversion. Linux statx supplies real access/write and available birth timestamps;
+ctime is never substituted for creation. An unavailable requested birth timestamp
+fails explicitly. Optional packed outputs are staged until validation; invalid/
+closed/wrong-type handles and insufficient time-query rights cannot modify them.
+File data I/O and direct-read alignment remain separate capabilities.

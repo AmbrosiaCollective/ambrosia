@@ -11,6 +11,7 @@ class ReadonlyFileObject final : public WaitableObject {
 
     WaitResult wait(std::uint32_t milliseconds) override;
     host::FileLookup inspect() const;
+    host::FileTimes times() const;
 
     bool read_data() const noexcept {
         return read_data_;
@@ -20,6 +21,8 @@ class ReadonlyFileObject final : public WaitableObject {
     std::shared_ptr<host::ReadonlyFile> file_;
     bool read_data_;
 };
+
+std::optional<std::uint64_t> windows_filetime(host::FileTimestamp timestamp) noexcept;
 
 void register_file_services(ImportRegistry &registry);
 } // namespace ambrosia::services
