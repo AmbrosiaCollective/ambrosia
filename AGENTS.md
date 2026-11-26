@@ -184,6 +184,12 @@ Shard runs write `index.part*.json`; merge them into `index.json` with `--merge`
   Keep OS calls behind narrow host adapters; preserve Windows/macOS extension
   points without claiming those backends are tested. Resolve paths dynamically
   with `std::filesystem`/`pathlib` or `os.path`, never developer drive/home paths.
+- Native queue workers have no guest context. Capture guest adapters through
+  `Runtime::capture_callback` in an initialized guest scope. Retain callback
+  context through cancellation and in-flight use, and join through
+  `Runtime::shutdown_workers` before process execution detach or runtime service
+  destruction. See [native-callbacks.md](docs/native-callbacks.md). Do not invoke
+  raw guest pointers directly from native worker jobs.
 - In the pull request, say what you tested, the exact revision, platform and any GPU/driver used. Omit optional personal and authorship labels; do not make false authorship claims.
 
 

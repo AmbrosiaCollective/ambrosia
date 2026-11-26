@@ -71,6 +71,7 @@ never reused and limited to 128 live monitors per runtime. Pending timers share
 the existing 1,024-job bound and do not delay runtime shutdown.
 
 Selectors, progress callback registration/delivery, DLC, licensing, downloads and
-other package methods remain unsupported. No guest callback is run through this
-native scheduler. Absence of a trusted inventory returns an unsupported result
+other package methods remain unsupported. No package progress callback is
+dispatched until registration support is implemented. Absence of a trusted
+inventory returns an unsupported result
 when creating a monitor; identity metadata alone is insufficient.

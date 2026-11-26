@@ -28,6 +28,7 @@ class TaskQueues {
     void close(std::uintptr_t handle);
     std::shared_ptr<const QueueState> inspect(std::uintptr_t handle) const;
     unsigned workers() const;
+    void shutdown();
     // Native adapters only. Other work modes need their own dispatch contract.
     NativeQueueScheduler thread_pool_scheduler(std::uintptr_t handle);
 
@@ -36,6 +37,7 @@ class TaskQueues {
     std::shared_ptr<HandleIds> ids_;
     mutable std::mutex mutex_;
     std::map<std::uintptr_t, std::shared_ptr<QueueState>> handles_;
+    bool closing_ = false;
     host::WorkerPool pool_;
 };
 

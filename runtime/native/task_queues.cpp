@@ -54,7 +54,7 @@ std::int32_t TaskQueues::create(std::uint32_t work, std::uint32_t completion, vo
         return gdk_invalid_argument;
     }
     std::lock_guard lock(mutex_);
-    if (handles_.size() >= handle_limit) {
+    if (closing_ || handles_.size() >= handle_limit) {
         return gdk_out_of_memory;
     }
     auto queue =
@@ -76,7 +76,7 @@ std::int32_t TaskQueues::duplicate(std::uintptr_t handle, void *output) {
     if (found == handles_.end()) {
         return invalid_handle;
     }
-    if (handles_.size() >= handle_limit) {
+    if (closing_ || handles_.size() >= handle_limit) {
         return gdk_out_of_memory;
     }
     (void)publish(found->second, output);
@@ -96,6 +96,15 @@ std::shared_ptr<const QueueState> TaskQueues::inspect(std::uintptr_t handle) con
 
 unsigned TaskQueues::workers() const {
     return pool_.workers();
+}
+
+void TaskQueues::shutdown() {
+    {
+        const std::lock_guard lock(mutex_);
+        closing_ = true;
+    }
+    // Never hold the directory lock while joining a callback that may use it.
+    pool_.shutdown();
 }
 
 NativeQueueScheduler TaskQueues::thread_pool_scheduler(std::uintptr_t handle) {

@@ -14,6 +14,7 @@
 #include "random_services.h"
 #include "registry_services.h"
 #include "slist_services.h"
+#include "startup_trace.h"
 #include "string_services.h"
 #include "xmem_services.h"
 #include <array>
@@ -99,6 +100,34 @@ std::int32_t &crt_error() noexcept {
 
 Runtime::Runtime(std::size_t memory_budget)
     : Runtime(MemoryLimits{memory_budget, memory_budget, memory_budget}) {}
+
+Runtime::~Runtime() {
+    shutdown_workers();
+}
+
+void Runtime::shutdown_workers() {
+    // Queue callbacks can enter guest modules and access every runtime service.
+    // Join them while those services and the process execution still exist.
+    task_queues_.shutdown();
+    threads_.shutdown();
+}
+
+std::function<void()> Runtime::capture_callback(std::function<void()> callback) {
+    const auto *modules = current_modules();
+    if (!callback || current_runtime() != this || !modules || !guest::ThreadContext::current()) {
+        throw std::runtime_error("guest callback capture requires its scoped module execution");
+    }
+    auto graph = std::make_shared<pe::ModuleGraph>(*modules);
+    const auto snapshot = graph->thread_snapshot();
+    return [this, graph = std::move(graph), snapshot, callback = std::move(callback)] {
+        diagnostics::ThreadFaultStack fault_stack;
+        Scope scope(*this, graph.get());
+        (void)snapshot.run([&] {
+            callback();
+            return 0;
+        });
+    };
+}
 
 Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     : memory_(memory_limits), heap_(heap_budget), pointers_(host::random_pointer_secret()),

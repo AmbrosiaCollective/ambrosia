@@ -33,6 +33,7 @@
 #include "storage_factory.h"
 #include "task_queues.h"
 #include "winsock_lifecycle.h"
+#include <functional>
 #include <mutex>
 #include <optional>
 
@@ -46,6 +47,11 @@ class Runtime {
     explicit Runtime(std::size_t memory_budget = 64 * 1024 * 1024);
     explicit Runtime(MemoryLimits memory_limits, std::size_t heap_budget = 64 * 1024 * 1024);
     Runtime(MemoryLimits memory_limits, const host::ProcessorTopology &topology);
+    ~Runtime();
+    void shutdown_workers();
+    // Capture on an initialized guest thread. Invoke only on this runtime's
+    // joined native workers; each invocation owns fresh guest TLS/notifications.
+    std::function<void()> capture_callback(std::function<void()> callback);
     std::uintptr_t resolve(const pe::Import &symbol) const;
     const ProcessorInformation &processor_information();
 
