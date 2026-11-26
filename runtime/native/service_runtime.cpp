@@ -103,7 +103,8 @@ Runtime::Runtime(std::size_t memory_budget)
 Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     : memory_(memory_limits), heap_(heap_budget), pointers_(host::random_pointer_secret()),
       objects_(4096, handle_ids_), registry_keys_(handle_ids_), gdk_users_(handle_ids_),
-      game_input_(handle_ids_), task_queues_(handle_ids_), app_lifecycle_(handle_ids_), threads_(objects_) {
+      gdk_packages_(handle_ids_), game_input_(handle_ids_), task_queues_(handle_ids_),
+      app_lifecycle_(handle_ids_), threads_(objects_) {
     const auto locale_error = locale_sections_.initialize(locale_lock_.data(), 0, 0);
     if (locale_error) {
         throw std::runtime_error("CRT locale lock initialization failed");

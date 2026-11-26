@@ -203,6 +203,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "file_offset_tests.h"
 #include "package_context_tests.h"
 #include "package_installation_tests.h"
+#include "package_monitor_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
@@ -599,6 +600,7 @@ extern "C" int ambrosia_native_queue_tests() {
         worker_pool_checks();
         task_queue_thread_checks();
         delayed_queue_checks();
+        periodic_package_monitor_checks();
     } catch (const std::exception &error) {
         std::cerr << "FAIL queue exception: " << error.what() << '\n';
         ++failures;
@@ -683,6 +685,7 @@ extern "C" int ambrosia_native_tests() {
         package_identity_checks();
         native_package_context_checks();
         package_installation_checks();
+        package_monitor_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();

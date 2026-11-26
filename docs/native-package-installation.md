@@ -3,7 +3,9 @@
 The native runtime can bind an explicit expected file inventory to its validated
 process package identity. This supplies readiness evidence for the offline loose
 package. It does not authenticate payloads, install anything or enable downloads.
-The installation-monitor guest API is still unsupported.
+The native console interface supports whole-package monitor creation, close,
+cached progress and manual refresh. This is diagnostic startup work; an
+interactive game menu has not been verified.
 
 Generate private metadata from the public expected-size manifest and your local
 identity descriptor:
@@ -52,7 +54,23 @@ explicitly. Checks retain confined directory references, consume no guest asset
 leases and re-read metadata on every observation. They are sequential checks,
 not an atomic filesystem snapshot or a hash verification.
 
-Until chunk selection and launch-marker metadata are implemented, any consumer
-must conservatively require completion of the whole inventory for launch. No
-per-chunk availability, callbacks, installation-monitor scheduling, DLC or license
-state follows from these observations.
+Monitor progress conservatively requires completion of the whole inventory for
+launch. It reports the expected logical total, exact-size installed-file bytes,
+the total as the launch requirement and separate launchable/completed flags.
+Zero-byte required files still affect those flags. There is no per-chunk or
+launch-marker interpretation yet.
+
+A zero update interval creates a snapshot that changes only on manual refresh.
+A nonzero interval requires a valid task queue with thread-pool work mode. The
+native adapter retains that queue after its public handle closes and periodically
+rechecks the source using the existing two-worker pool. The interval is a minimum
+delay between refreshes; busy work queues can run them later. Closing a monitor
+cancels future updates. Failed inspection invalidates progress explicitly;
+stale cached completion is not returned after a known failure. Handles are opaque,
+never reused and limited to 128 live monitors per runtime. Pending timers share
+the existing 1,024-job bound and do not delay runtime shutdown.
+
+Selectors, progress callback registration/delivery, DLC, licensing, downloads and
+other package methods remain unsupported. No guest callback is run through this
+native scheduler. Absence of a trusted inventory returns an unsupported result
+when creating a monitor; identity metadata alone is insufficient.

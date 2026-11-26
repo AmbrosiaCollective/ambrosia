@@ -134,10 +134,16 @@ the CPU-only sandbox or execute the title through elevated tool permissions.
 GPU access shares the host driver and can still cause a driver reset.
 
 Use CPU fixtures first, then a synthetic Vulkan draw/readback and presentation,
-then game initialization. Native title execution, dependencies, host/device
-integration and large generated outputs need their concrete task approval.
+then game initialization. The standing native-menu authorization covers necessary
+local title execution, dependencies, reviewed host/device integration and large
+generated outputs without repeated size/resource permission prompts. Review and
+bound each concrete capability, validate its fail-closed checks and preserve
+older profiles. It does not authorize publication, online services or unrelated
+host access.
 Task 025 research ran no native build or game. Task 026's CPU-only compiler
 profile was explicitly approved, and its native shared-object checks still use
 the original strict Python launcher. Game execution and GPU initialization have
-not occurred. Work stays local without publication prompts until explicitly
-instructed otherwise.
+not occurred during those initial research tasks. Subsequent CPU-only native
+diagnostics have reached the actual executable entry and package APIs. Native
+graphics, a window and an interactive menu remain unverified. Work stays local
+without publication prompts until explicitly instructed otherwise.
