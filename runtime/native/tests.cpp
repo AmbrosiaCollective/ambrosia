@@ -232,6 +232,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "string_tests.h"
 #include "tokenizer_tests.h"
 #include "format_tests.h"
+#include "scan_tests.h"
 #include "wide_format_tests.h"
 #include "invalid_parameter_tests.h"
 #include "random_tests.h"
@@ -715,6 +716,7 @@ extern "C" int ambrosia_native_tests() {
         string_service_checks();
         secure_tokenizer_checks();
         format_checks();
+        scan_checks();
         wide_format_checks();
         invalid_parameter_checks();
         secure_random_checks();
