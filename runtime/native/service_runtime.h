@@ -26,6 +26,7 @@
 #include "new_allocations.h"
 #include "pointer_codec.h"
 #include "processor_information.h"
+#include "readonly_files.h"
 #include "registry_keys.h"
 #include "slim_locks.h"
 #include "storage_factory.h"
@@ -61,6 +62,10 @@ class Runtime {
 
     LibraryReferences &library_references() {
         return library_references_;
+    }
+
+    ReadonlyFiles &files() {
+        return files_;
     }
 
     RegistryKeys &registry_keys() {
@@ -197,6 +202,7 @@ class Runtime {
     KernelObjects objects_;
     LibraryReferences library_references_;
     RegistryKeys registry_keys_;
+    ReadonlyFiles files_;
     GraphicsMemoryPolicy graphics_memory_;
     ExceptionFilter exception_filter_;
     GdkBootstrap gdk_bootstrap_;

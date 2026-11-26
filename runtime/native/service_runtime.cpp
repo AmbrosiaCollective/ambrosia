@@ -1,6 +1,7 @@
 #include "service_runtime.h"
 #include "clock_services.h"
 #include "critical_services.h"
+#include "file_services.h"
 #include "fls_services.h"
 #include "format_services.h"
 #include "graphics_services.h"
@@ -131,6 +132,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     register_random_services(registry_);
     register_string_services(registry_);
     register_nls_services(registry_);
+    register_file_services(registry_);
     register_gdk_bootstrap(registry_);
     register_task_queues(registry_);
     register_app_lifecycle(registry_);

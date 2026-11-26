@@ -1492,3 +1492,23 @@ ICU UChar with guest UTF16 and avoids ICU convenience terminators changing a
 Windows explicit-count result. ICU74+ is a portable installed build dependency;
 no runtime setup, host locale profile or online service is used. The retained
 LICENSE.ICU describes that dependency; no ICU implementation is copied here.
+
+
+## Confined read-only file metadata
+
+GetFileAttributesA/W use dynamically configured package and executable roots.
+DOS-style volume hints and ordinary relative paths address one read-only asset
+namespace; native absolute origins must remain inside those configured roots.
+Separators, dot components,UTF8/UTF16 and ASCII case fallback are handled in shared
+C++ code. Exact Unicode spelling works; broader Windows Unicode case folding,
+per-drive working directories,network/URI namespaces and reparse behavior are
+not implemented. Ambiguous case matches,malformed names and root escapes fail.
+
+The narrow Linux adapter pins directory descriptors and resolves every component
+with openat2 BENEATH/NO_MAGICLINKS/NO_SYMLINKS/NO_XDEV. Symlinks and nested mounts
+are denied rather than following targets through a check/open race. Directory
+fallback scans are bounded4096 entries; ordinary exact lookups need no scan.
+Other host adapters remain explicit extension points. Returned flags describe the
+virtual read-only policy and real file/directory kind,not invented host archive/
+hidden/system attributes. No file writes,networking or data-read capability is
+introduced. File content and DirectStorage queue execution remain separate work.

@@ -315,3 +315,9 @@ is copied or compiled; future imports must retain their applicable licenses.
 public UTF conversion C API; Windows facades live in `nls_services.cpp`. The
 system dependency's MIT notice is retained as LICENSE.ICU. ABI/error facts come
 from pinned Microsoft SDK documentation. No external implementation is copied.
+
+
+`readonly_files` and `file_services` implement original shared path/Win32 metadata
+policy; `host_readonly_files` contains Linux descriptor confinement only. Public
+pinned Microsoft API contracts and installed Linux UAPI declarations are references.
+No external filesystem implementation is copied. No Windows/Wine runtime is used.

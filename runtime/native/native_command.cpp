@@ -158,6 +158,9 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         }
         services::Runtime service_runtime(memory_limits);
         service_runtime.startup().bind_image(paths.image);
+        if (options.run) {
+            service_runtime.files().bind(paths.package, paths.image);
+        }
         std::unique_ptr<diagnostics::ImportStops> stops;
         pe::Resolver diagnostic_stop;
         if (options.trace) {
