@@ -36,6 +36,7 @@ class ModuleGraph {
 
   public:
     class Execution;
+    class ThreadSnapshot;
     explicit ModuleGraph(Resolver external = {}, ModuleProvider provider = {}, ModuleLimits limits = {},
                          Resolver diagnostic_stop = {}, ModulePathProvider source_paths = {});
     void add(std::string name, std::span<const std::byte> source,
@@ -53,9 +54,28 @@ class ModuleGraph {
     std::optional<bool> thread_notifications_enabled(std::uintptr_t module) const;
     bool has_available_source(std::string name) const;
     Execution start() const;
+    ThreadSnapshot thread_snapshot() const;
 
   private:
     std::shared_ptr<State> state_;
+};
+
+// A generation-pinned view of the sealed catalog. It runs on a fresh host
+// worker and retains mappings through guest thread detach and TLS cleanup.
+class ModuleGraph::ThreadSnapshot {
+  public:
+    ThreadSnapshot(const ThreadSnapshot &) = default;
+    ThreadSnapshot &operator=(const ThreadSnapshot &) = default;
+    std::uint32_t run(const std::function<std::uint32_t()> &entry) const;
+
+  private:
+    friend class ModuleGraph;
+
+    ThreadSnapshot(std::shared_ptr<State> state, std::uint64_t generation)
+        : state_(std::move(state)), generation_(generation) {}
+
+    std::shared_ptr<State> state_;
+    std::uint64_t generation_;
 };
 
 class ModuleGraph::Execution {

@@ -3,6 +3,8 @@
 #include "module_graph.h"
 #include "image_state.h"
 #include <charconv>
+#include <limits>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -76,6 +78,22 @@ struct ModuleGraph::State {
     std::uint32_t next_slot = 0;
     bool active = false;
     bool failed = false;
+    mutable std::mutex thread_mutex;
+    std::recursive_mutex loader_mutex;
+    std::map<std::thread::id, std::uint64_t> workers;
+    std::uint64_t generation = 0;
+    bool accepting_threads = false;
+
+    void require_access() const {
+        if (owner == std::this_thread::get_id()) {
+            require_owner();
+            return;
+        }
+        const std::lock_guard lock(thread_mutex);
+        if (!workers.contains(std::this_thread::get_id()) || failed) {
+            throw std::runtime_error("module graph access requires its owner or a registered guest worker");
+        }
+    }
 
     void register_source(std::string name, std::span<const std::byte> source,
                          std::optional<std::filesystem::path> path = std::nullopt) {
@@ -270,12 +288,12 @@ std::uintptr_t ModuleGraph::export_address(std::string module, const Import &sym
 }
 
 std::vector<std::string> ModuleGraph::initialization_order() const {
-    state_->require_owner();
+    state_->require_access();
     return state_->order;
 }
 
 ModuleStatistics ModuleGraph::statistics() const {
-    state_->require_owner();
+    state_->require_access();
     ModuleStatistics result;
     result.inspection_only = state_->limits.image.mode == LoadMode::inspect;
     result.mapped_bytes = state_->mapped_bytes;
@@ -296,7 +314,7 @@ ModuleStatistics ModuleGraph::statistics() const {
 }
 
 std::vector<ModuleRange> ModuleGraph::diagnostic_ranges() const {
-    state_->require_owner();
+    state_->require_access();
     std::vector<ModuleRange> ranges;
     for (const auto &[name, node] : state_->modules) {
         if (node.image) {
@@ -308,7 +326,7 @@ std::vector<ModuleRange> ModuleGraph::diagnostic_ranges() const {
 }
 
 std::uintptr_t ModuleGraph::loaded_module(std::optional<std::string> name) const {
-    state_->require_owner();
+    state_->require_access();
     const auto key = name ? module_key(std::move(*name)) : state_->root;
     const auto found = state_->modules.find(key);
     if (found == state_->modules.end() || !found->second.image) {
@@ -318,13 +336,13 @@ std::uintptr_t ModuleGraph::loaded_module(std::optional<std::string> name) const
 }
 
 bool ModuleGraph::has_available_source(std::string name) const {
-    state_->require_owner();
+    state_->require_access();
     const auto key = module_key(std::move(name));
     return state_->modules.contains(key) || (state_->source_paths && state_->source_paths(key).has_value());
 }
 
 std::optional<std::filesystem::path> ModuleGraph::loaded_module_path(std::uintptr_t module) const {
-    state_->require_owner();
+    state_->require_access();
     if (!module) {
         module = loaded_module();
     }
@@ -341,7 +359,7 @@ std::optional<std::filesystem::path> ModuleGraph::loaded_module_path(std::uintpt
 }
 
 std::optional<std::uintptr_t> ModuleGraph::loaded_export(std::uintptr_t module, const Import &symbol) const {
-    state_->require_owner();
+    state_->require_access();
     for (const auto &[name, node] : state_->modules) {
         if (node.image && reinterpret_cast<std::uintptr_t>(node.image->base()) == module) {
             std::set<std::pair<std::string, std::string>> visited;
@@ -352,7 +370,7 @@ std::optional<std::uintptr_t> ModuleGraph::loaded_export(std::uintptr_t module, 
 }
 
 std::uintptr_t ModuleGraph::module_base_for_address(std::uintptr_t address) const {
-    state_->require_owner();
+    state_->require_access();
     for (const auto &[name, node] : state_->modules) {
         (void)name;
         if (node.image) {
@@ -368,7 +386,8 @@ std::uintptr_t ModuleGraph::module_base_for_address(std::uintptr_t address) cons
 }
 
 bool ModuleGraph::disable_thread_notifications(std::uintptr_t module) {
-    state_->require_owner();
+    state_->require_access();
+    const std::lock_guard loader(state_->loader_mutex);
     for (auto &[name, node] : state_->modules) {
         (void)name;
         if (node.image && reinterpret_cast<std::uintptr_t>(node.image->base()) == module) {
@@ -384,11 +403,11 @@ bool ModuleGraph::disable_thread_notifications(std::uintptr_t module) {
 }
 
 std::optional<bool> ModuleGraph::thread_notifications_enabled(std::uintptr_t module) const {
-    state_->require_owner();
+    state_->require_access();
     for (const auto &[name, node] : state_->modules) {
         (void)name;
         if (node.image && reinterpret_cast<std::uintptr_t>(node.image->base()) == module) {
-            return node.image->state_->thread_notifications;
+            return node.image->state_->thread_notifications.load();
         }
     }
     return std::nullopt;
@@ -405,10 +424,86 @@ ModuleGraph::Execution ModuleGraph::start() const {
     return Execution(state_);
 }
 
+ModuleGraph::ThreadSnapshot ModuleGraph::thread_snapshot() const {
+    state_->require_access();
+    const std::lock_guard lock(state_->thread_mutex);
+    if (!state_->accepting_threads) {
+        throw std::runtime_error(
+            "guest workers require completed process initialization and an open session");
+    }
+    return ThreadSnapshot(state_, state_->generation);
+}
+
+std::uint32_t ModuleGraph::ThreadSnapshot::run(const std::function<std::uint32_t()> &entry) const {
+    const auto caller = std::this_thread::get_id();
+    if (!entry || caller == state_->owner || guest::ThreadContext::current()) {
+        throw std::runtime_error("guest thread execution requires a fresh host worker and an entry callback");
+    }
+    host::reset_worker_guest_segment();
+    {
+        const std::lock_guard lock(state_->thread_mutex);
+        if (!state_->accepting_threads || generation_ != state_->generation || state_->workers.size() >= 64 ||
+            !state_->workers.emplace(caller, generation_).second) {
+            throw std::runtime_error("guest thread snapshot is closed, stale or over its worker budget");
+        }
+    }
+
+    struct WorkerAccess {
+        State &state;
+        std::thread::id caller;
+
+        ~WorkerAccess() {
+            const std::lock_guard lock(state.thread_mutex);
+            state.workers.erase(caller);
+        }
+    } access{*state_, caller};
+
+    guest::ThreadContext context;
+    for (const auto &name : state_->order) {
+        const auto &image = *state_->modules.at(name).image->state_;
+        if (image.has_tls) {
+            context.install(image.tls_slot, image.tls);
+        }
+    }
+    auto activation = context.activate();
+    std::size_t attached = 0;
+    const auto detach = [&] {
+        const std::lock_guard lock(state_->loader_mutex);
+        while (attached) {
+            const auto &name = state_->order[--attached];
+            (void)state_->modules.at(name).image->state_->notify_guest(3);
+        }
+    };
+    std::uint32_t result;
+    try {
+        {
+            const std::lock_guard lock(state_->loader_mutex);
+            for (const auto &name : state_->order) {
+                (void)state_->modules.at(name).image->state_->notify_guest(2);
+                ++attached;
+            }
+        }
+        result = entry();
+    } catch (...) {
+        detach();
+        throw;
+    }
+    detach();
+    return result;
+}
+
 ModuleGraph::Execution::Execution(std::shared_ptr<State> state)
     : state_(std::move(state)), thread_(std::make_shared<guest::ThreadContext>()) {
+    const std::lock_guard loader(state_->loader_mutex);
     if (state_->active) {
         throw std::runtime_error("module graph already has an active session");
+    }
+    {
+        const std::lock_guard lock(state_->thread_mutex);
+        if (state_->generation == std::numeric_limits<std::uint64_t>::max()) {
+            throw std::runtime_error("module execution generation exhausted");
+        }
+        ++state_->generation;
     }
     state_->active = true;
     closed_ = false;
@@ -422,6 +517,8 @@ ModuleGraph::Execution::Execution(std::shared_ptr<State> state)
         for (const auto &name : state_->order) {
             sessions_.push_back(state_->modules.at(name).image->start_in(thread_));
         }
+        const std::lock_guard lock(state_->thread_mutex);
+        state_->accepting_threads = true;
     } catch (...) {
         close();
         throw;
@@ -458,6 +555,14 @@ void ModuleGraph::Execution::close() {
         return;
     }
     state_->require_owner();
+    {
+        const std::lock_guard lock(state_->thread_mutex);
+        state_->accepting_threads = false;
+        if (!state_->workers.empty()) {
+            throw std::runtime_error("guest workers must finish before process detach");
+        }
+    }
+    const std::lock_guard loader(state_->loader_mutex);
     for (auto session = sessions_.rbegin(); session != sessions_.rend(); ++session) {
         (*session)->close();
     }

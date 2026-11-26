@@ -116,31 +116,28 @@ void Image::Execution::require_open() const {
     }
 }
 
-bool Image::Execution::notify(std::uint32_t reason) {
-    // Process notifications remain mandatory. A future worker-thread path must
-    // use this same policy when dispatching thread attach/detach (2/3).
-    if ((reason == 2 || reason == 3) && !state_->thread_notifications) {
+bool Image::State::notify_guest(std::uint32_t reason) {
+    if ((reason == 2 || reason == 3) && !thread_notifications.load()) {
         return true;
     }
-    auto dispatch = [&] {
-        auto *base = state_->memory.data();
-        for (const auto callback_rva : state_->callbacks) {
-            auto callback = reinterpret_cast<TlsCallback>(base + callback_rva);
-            callback(base, reason, nullptr);
-        }
-        if (state_->dll && state_->entry) {
-            auto entry = reinterpret_cast<DllEntry>(base + state_->entry);
-            // Dynamic-load semantics only. Static process initialization needs
-            // a real guest startup context rather than a fabricated pointer.
-            return entry(base, reason, nullptr) != 0;
-        }
-        return true;
-    };
+    auto *base = memory.data();
+    for (const auto callback_rva : callbacks) {
+        auto callback = reinterpret_cast<TlsCallback>(base + callback_rva);
+        callback(base, reason, nullptr);
+    }
+    if (dll && entry) {
+        auto callback = reinterpret_cast<DllEntry>(base + entry);
+        return callback(base, reason, nullptr) != 0;
+    }
+    return true;
+}
+
+bool Image::Execution::notify(std::uint32_t reason) {
     if (needs_context_) {
         auto scope = thread_->activate();
-        return dispatch();
+        return state_->notify_guest(reason);
     }
-    return dispatch();
+    return state_->notify_guest(reason);
 }
 
 std::uint64_t Image::Execution::run_bootstrap() {

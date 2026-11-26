@@ -183,6 +183,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "app_lifecycle_tests.h"
 #include "gdk_networking_tests.h"
 #include "winsock_tests.h"
+#include "worker_module_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -330,6 +331,18 @@ void host_checks() {
     check(missing_rejected, "missing executable rejected");
 }
 } // namespace
+
+extern "C" int ambrosia_native_worker_module_tests() {
+    checks = failures = 0;
+    try {
+        worker_module_checks();
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL worker module exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << checks << " worker module checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
+}
 
 extern "C" int ambrosia_native_networking_probe() {
     using namespace ambrosia::services;

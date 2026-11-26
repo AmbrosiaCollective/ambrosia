@@ -1187,3 +1187,28 @@ No host socket or transport is initialized. Socket I/O and other Winsock calls
 remain explicit unsupported imports; successful library startup does not mean
 network access exists. Synthetic tests include real PE ordinal calls and dynamic
 lookup, not a claim of a working game menu or network connection.
+
+
+## Guest worker module sessions
+
+ModuleGraph::thread_snapshot captures the generation of a fully initialized
+process session. Its run method requires a fresh host worker, clears inherited
+GS, installs independent static TLS blocks from every loaded module template,
+and grants that worker access to the sealed catalog. TLS/DLL thread-attach
+notifications run in dependency order under a recursive loader lock. Entry runs
+outside that lock; detach runs in reverse order, followed by thread-context exit
+cleanup while mappings and catalog access remain valid. DLL notification policy
+is atomic and disabling it shares the loader lock. Loading/activation remains
+owner-only; read access is rejected outside the registered worker scope.
+
+Snapshots retain mappings and reject closed/restarted generations. Process close
+stops accepting new workers and refuses detach while any worker remains active;
+the launcher must join its workers before closing the process session. At most64
+worker scopes can be registered, independently of stricter OS task limits.
+Thread creation during process initialization, guest exception unwinding and
+Windows guard-page stack growth remain unsupported. The host launcher must bound
+native stacks and retain its runtime service scope around the complete worker.
+
+This supplies guest thread initialization/lifetime for a native launcher, not the
+CreateThread handle/OS-thread implementation. Synthetic real-worker PE tests do
+not prove an actual game worker or interactive menu has started.

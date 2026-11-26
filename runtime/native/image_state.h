@@ -12,7 +12,8 @@ struct Image::State {
     std::uint32_t entry = 0;
     bool dll = false;
     bool has_tls = false;
-    bool thread_notifications = true;
+    std::atomic<bool> thread_notifications{true};
+    bool notify_guest(std::uint32_t reason);
     bool inspection_only = false;
     std::uint32_t unsupported_directories = 0;
     std::size_t unresolved_imports = 0;
