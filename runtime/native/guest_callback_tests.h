@@ -98,3 +98,59 @@ void guest_callback_scope_checks() {
           "a queued callback attaches and detaches original PE TLS before process teardown");
     runtime.shutdown_workers();
 }
+
+struct CallbackChildCatalog {
+    std::mutex mutex;
+    std::condition_variable changed;
+    bool released = false;
+    bool valid = false;
+    std::uintptr_t creator = 0;
+    std::uintptr_t module = 0;
+};
+
+std::uint32_t AMBROSIA_GUEST_ABI callback_child_catalog(void *argument) {
+    using namespace ambrosia;
+    auto &record = *static_cast<CallbackChildCatalog *>(argument);
+    {
+        std::unique_lock lock(record.mutex);
+        record.changed.wait(lock, [&] { return record.released; });
+    }
+    const auto *graph = services::current_modules();
+    // Check the address before accessing metadata, keeping the old borrowed-
+    // facade control safe after its creator's facade has been destroyed.
+    record.valid = graph && reinterpret_cast<std::uintptr_t>(graph) != record.creator &&
+                   graph->loaded_module() == record.module && guest::ThreadContext::current();
+    return 0x3344;
+}
+
+void callback_child_catalog_checks() {
+    using namespace ambrosia;
+    using namespace services;
+    Runtime runtime;
+    auto bytes = tls_fixture();
+    put<std::uint32_t>(bytes, 0x98 + 120, 0);
+    put<std::uint32_t>(bytes, 0x98 + 124, 0);
+    jump_to_host(bytes, 0x300, reinterpret_cast<std::uintptr_t>(&worker_module_callback));
+    pe::ModuleGraph graph;
+    graph.add("catalog.exe", bytes);
+    graph.load("catalog.exe");
+    Scope scope(runtime, &graph);
+    auto process = graph.start();
+    auto creator = std::make_unique<pe::ModuleGraph>(graph);
+    CallbackChildCatalog record;
+    record.creator = reinterpret_cast<std::uintptr_t>(creator.get());
+    record.module = graph.loaded_module();
+    const auto child = runtime.threads().create(runtime, *creator, &callback_child_catalog, &record, 0);
+    creator.reset();
+    {
+        const std::lock_guard lock(record.mutex);
+        record.released = true;
+        record.changed.notify_all();
+    }
+    runtime.shutdown_workers();
+    std::uint32_t code = 0;
+    check(!child.error && child.handle && record.valid &&
+              runtime.threads().exit_code(child.handle, &code) == 0 && code == 0x3344,
+          "a native child owns its catalog facade after the callback creator's facade is destroyed");
+    process.close();
+}

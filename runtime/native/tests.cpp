@@ -513,6 +513,7 @@ extern "C" int ambrosia_native_thread_tests() {
         native_thread_affinity_checks();
         open_thread_checks();
         thread_priority_boost_checks();
+        callback_child_catalog_checks();
     } catch (const std::exception &error) {
         std::cerr << "FAIL native thread exception: " << error.what() << '\n';
         ++failures;

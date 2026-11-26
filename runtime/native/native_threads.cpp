@@ -137,7 +137,9 @@ ThreadCreation NativeThreads::create(Runtime &runtime, pe::ModuleGraph &graph, T
     if (stack_bytes > stack_limit) {
         return {0, 0, 8};
     }
-    const auto snapshot = graph.thread_snapshot();
+    // A callback can create a child that outlives its temporary catalog facade.
+    auto catalog = std::make_shared<pe::ModuleGraph>(graph);
+    const auto snapshot = catalog->thread_snapshot();
     std::unique_lock lock(mutex_);
     if (closing_) {
         return {0, 0, 995};
@@ -156,7 +158,7 @@ ThreadCreation NativeThreads::create(Runtime &runtime, pe::ModuleGraph &graph, T
             jobs_.pop_back();
             return {0, 0, object.error};
         }
-        job->thread = std::thread([job, snapshot, &runtime, &graph, entry, argument, stack_bytes] {
+        job->thread = std::thread([job, snapshot, catalog, &runtime, entry, argument, stack_bytes] {
             try {
                 host::reset_worker_guest_segment();
                 diagnostics::ThreadFaultStack fault_stack;
@@ -181,7 +183,7 @@ ThreadCreation NativeThreads::create(Runtime &runtime, pe::ModuleGraph &graph, T
                     }
                     std::uint32_t code;
                     {
-                        Scope scope(runtime, &graph);
+                        Scope scope(runtime, catalog.get());
                         code = snapshot.run([&] {
                             diagnostics::write_service_trace("TRACE native guest thread entry\n");
                             return entry(argument);

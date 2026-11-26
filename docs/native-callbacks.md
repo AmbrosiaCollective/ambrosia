@@ -17,8 +17,10 @@ must retain its adapter and context until queued/in-flight use ends. Invoke it
 only on this runtime's workers, and call `Runtime::shutdown_workers` before
 closing the process execution or destroying service objects. Native command's
 scope guard enforces this ordering, including exceptional exits. Runtime's
-destructor also joins workers before member destruction. Queue shutdown cancels
-pending timers, joins active callbacks and refuses new queues/work; it is terminal.
+destructor also joins workers before member destruction. Native children retain
+their own catalog facade, so a child can outlive the callback that created it.
+Queue shutdown cancels pending timers, joins active callbacks and refuses new
+queues/work; it is terminal.
 
 This is native Linux callback infrastructure. It does not register package,
 user or input notifications by itself. Each service must implement bounded
