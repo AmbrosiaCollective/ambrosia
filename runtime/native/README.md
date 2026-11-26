@@ -1411,3 +1411,18 @@ query returns4; short buffers and invalid parameters fail without partial writes
 Outputs may be unaligned and successful calls preserve error channels. User-
 configured territories, language preference and the wider Windows geography
 catalog are not implemented. This policy is distinct from the CRT's C locale.
+
+
+## Native XUser identity and subscriptions
+
+The base XUserImpl exposes a counted runtime-owned IUnknown identity, one-user
+capacity and bounded change-event registrations. Each unique64-bit token retains
+its actual guest callback/context and shared queue state after the queue handle
+closes. Removing an inactive registration completes immediately, including when
+wait=false; repeated removal is complete. No initial event or signed-in account
+is fabricated. The provider currently has no user-state transitions or event
+submission path. Adding users and dispatching notifications require guest async
+queue support; those slots stop explicitly. A null/default process queue also
+stops rather than claiming a registration without queue ownership. Invalid queues,
+missing callback/output and the128-entry bound return typed failures. Only the
+base interface is advertised; extension revisions remain unsupported.

@@ -289,3 +289,10 @@ set contracts and installed Linux sched(7)/sched.h document thread affinity call
 No external scheduler, kernel or compatibility implementation is copied/run.
 Local portable mask conversion is separate from sched_getaffinity/setaffinity;
 set results and rollback are verified against the host rather than cached success.
+
+
+`gdk_users.{h,cpp}` uses the inherited Windows user shim and pinned public GDK
+interface lists for ABI facts (class identity and base slot order). Its owned
+interface, subscription directory and queue retention are original native code;
+no Windows shim implementation, fake account, XAsync provider or foreign code is
+compiled or copied. Broader user/async/event behavior remains separate.

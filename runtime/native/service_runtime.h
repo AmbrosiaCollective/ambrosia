@@ -13,6 +13,7 @@
 #include "gdk_bootstrap.h"
 #include "gdk_networking.h"
 #include "gdk_threading.h"
+#include "gdk_users.h"
 #include "graphics_memory_policy.h"
 #include "import_registry.h"
 #include "invalid_parameters.h"
@@ -84,6 +85,10 @@ class Runtime {
 
     TaskQueues &task_queues() {
         return task_queues_;
+    }
+
+    GdkUsers &gdk_users() {
+        return gdk_users_;
     }
 
     GdkNetworking &gdk_networking() {
@@ -187,6 +192,7 @@ class Runtime {
     GdkBootstrap gdk_bootstrap_;
     GdkThreading gdk_threading_;
     GdkNetworking gdk_networking_;
+    GdkUsers gdk_users_;
     TaskQueues task_queues_;
     AppLifecycle app_lifecycle_;
     WinsockLifecycle winsock_;

@@ -188,6 +188,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "task_queue_tests.h"
 #include "app_lifecycle_tests.h"
 #include "gdk_networking_tests.h"
+#include "gdk_user_tests.h"
 #include "winsock_tests.h"
 #include "worker_module_tests.h"
 #include "native_thread_tests.h"
@@ -408,6 +409,21 @@ extern "C" int ambrosia_native_wide_format_probe(unsigned mode) {
                   reinterpret_cast<const std::byte *>(slots.data()));
 }
 
+extern "C" int ambrosia_native_user_slot_probe() {
+    using namespace ambrosia::services;
+    Runtime runtime;
+    Scope scope(runtime);
+    (void)runtime.gdk_bootstrap().initialize(1, 2);
+    void *object = nullptr;
+    if (runtime.gdk_users().query(user_class_id, &object) != 0) {
+        return 99;
+    }
+    const auto *table = *static_cast<const std::uintptr_t *const *>(object);
+    using Unsupported = void(AMBROSIA_GUEST_ABI *)(void *);
+    reinterpret_cast<Unsupported>(table[7])(object);
+    return 99;
+}
+
 extern "C" int ambrosia_native_infinite_sleep_probe() {
     ambrosia::services::Runtime runtime;
     using Sleep = void(AMBROSIA_GUEST_ABI *)(std::uint32_t);
@@ -584,6 +600,7 @@ extern "C" int ambrosia_native_tests() {
         task_queue_manual_checks();
         app_lifecycle_checks();
         gdk_networking_checks();
+        gdk_user_subscription_checks();
         ordinal_service_checks();
         winsock_lifecycle_checks();
         native_module_checks();
