@@ -203,3 +203,17 @@ and Windows callbacks are not compiled or copied into the native runtime.
 worker_pool.* and task_queues.* are portable C++ implementations of the bounded
 scheduler and owned-handle subset. No claim is made to port the entire Microsoft
 queue or XAsync implementation. Guest callback dispatch remains unsupported.
+
+
+## Application lifecycle registry adaptation
+
+app_lifecycle.* adapts OpenScarlett's MIT plm_notifications.h registry pattern at
+022a8b25148cc08412df8ac7e752b9efed4cd819. LICENSE.OpenScarlett retains its notice
+and permission. The separate-kind callback/context storage, registration handles
+and snapshot delivery are retained conceptually, with Ambrosia's explicit guest
+ABI, runtime ownership/shared ID allocator, unaligned output support and bounded
+resources. Removal marks entries disabled, skips canceled snapshot entries and
+waits for other-thread callbacks; delivery requires a reviewed guest execution
+scope. Windows global registries, telemetry, watchers and system integration are
+not imported. No external source is executed. Existing archived Victory/TomBox
+code was inspected for ABI comparison only; none is copied into this component.

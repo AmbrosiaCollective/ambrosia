@@ -1120,3 +1120,24 @@ concurrency, pending-job bounds, drain/join and all mode pairs under the reviewe
 32-task thread profile. ambrosia_native_queue_denied_probe verifies transactional
 failure under the original thread-denying sandbox. No interactive menu claim is
 made from queue creation or synthetic scheduling checks.
+
+
+## Application lifecycle subscriptions
+
+The app-notify contract, minappmodelx, kernelx and xgameruntime exports share a
+per-runtime registry for state and constrained-change subscriptions. Registration
+stores the Windows byte-BOOLEAN callback and context, returns a nonreused opaque
+ID and does not fabricate an initial event. Null callbacks/output fail87; the
+shared128-registration budget reports8 on exhaustion. Unregister is kind-specific,
+prevents future delivery and waits for an active callback on another thread. A
+callback can unregister itself; the delivery snapshot retains its entry until it
+returns. Entries removed before their turn are skipped. New registrations wait
+until the next batch. Callback delivery is serialized with at most8 nested batches.
+
+The explicit host entry Runtime::notify_app_lifecycle requires this runtime's
+active guest scope/TLS; its execution owner must keep callback modules mapped.
+Synthetic tests verify state/constrained values, contexts, cancellation during a
+batch and cross-thread draining under the reviewed thread profile. This component
+adapts OpenScarlett's MIT registry pattern; its license is retained separately.
+Linux suspend/window-event wiring is pending. Registration success does not claim
+host suspend/resume integration, game callbacks delivered, or an interactive menu.

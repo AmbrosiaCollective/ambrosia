@@ -1,4 +1,5 @@
 #pragma once
+#include "app_lifecycle.h"
 #include "critical_sections.h"
 #include "crt_exit.h"
 #include "crt_heap.h"
@@ -61,6 +62,12 @@ class Runtime {
 
     GraphicsMemoryPolicy &graphics_memory() {
         return graphics_memory_;
+    }
+
+    unsigned notify_app_lifecycle(AppNotification kind, bool value);
+
+    AppLifecycle &app_lifecycle() {
+        return app_lifecycle_;
     }
 
     TaskQueues &task_queues() {
@@ -159,6 +166,7 @@ class Runtime {
     GdkBootstrap gdk_bootstrap_;
     GdkThreading gdk_threading_;
     TaskQueues task_queues_;
+    AppLifecycle app_lifecycle_;
     std::mutex processor_mutex_;
     std::optional<ProcessorInformation> processor_information_;
     std::unique_ptr<NativeModules> native_modules_;

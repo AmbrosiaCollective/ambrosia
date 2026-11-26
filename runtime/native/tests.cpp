@@ -180,6 +180,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "gdk_bootstrap_tests.h"
 #include "gdk_threading_tests.h"
 #include "task_queue_tests.h"
+#include "app_lifecycle_tests.h"
 #include "native_module_tests.h"
 #include "event_tests.h"
 #include "registry_tests.h"
@@ -328,6 +329,18 @@ void host_checks() {
 }
 } // namespace
 
+extern "C" int ambrosia_native_lifecycle_thread_tests() {
+    checks = failures = 0;
+    try {
+        app_lifecycle_thread_checks();
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL lifecycle thread exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << checks << " lifecycle thread checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
+}
+
 extern "C" int ambrosia_native_queue_tests() {
     checks = failures = 0;
     try {
@@ -399,6 +412,7 @@ extern "C" int ambrosia_native_tests() {
         runtime_interface_checks();
         gdk_threading_checks();
         task_queue_manual_checks();
+        app_lifecycle_checks();
         native_module_checks();
         event_checks();
         registry_checks();
