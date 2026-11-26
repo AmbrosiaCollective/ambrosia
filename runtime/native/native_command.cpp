@@ -24,6 +24,7 @@ struct Options {
     std::filesystem::path package;
     std::filesystem::path work;
     std::filesystem::path inventory;
+    std::filesystem::path storage;
     bool run = false;
     bool trace = false;
     bool sparse_windows = false;
@@ -37,6 +38,7 @@ constexpr const char *usage =
     "              --trace-startup IMAGE [--package DIR] [--work DIR] [--sparse-windows | --boot-memory]\n"
     "                                   [--private-memory-mib N]\n"
     "              Run modes also accept --package-inventory FILE (trusted expected file metadata).\n"
+    "              --storage-root DIR selects an existing separate writable state directory.\n"
     "Inspect maps supported PE dependencies without running callbacks.\n"
     "Run-bootstrap supports synthetic PE startup only.\n"
     "Trace-startup is diagnostic: unsupported calls/faults terminate the process.\n"
@@ -79,7 +81,8 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
             continue;
         }
         if (flag != "--inspect" && flag != "--run-bootstrap" && flag != "--trace-startup" &&
-            flag != "--package" && flag != "--work" && flag != "--package-inventory") {
+            flag != "--package" && flag != "--work" && flag != "--package-inventory" &&
+            flag != "--storage-root") {
             throw std::invalid_argument("unknown bootstrap option");
         }
         if (++index == arguments.size() || arguments[index].empty() ||
@@ -99,6 +102,11 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
                 throw std::invalid_argument("duplicate package option");
             }
             options.package = value;
+        } else if (flag == "--storage-root") {
+            if (!options.storage.empty()) {
+                throw std::invalid_argument("duplicate storage root option");
+            }
+            options.storage = value;
         } else if (flag == "--package-inventory") {
             if (!options.inventory.empty()) {
                 throw std::invalid_argument("duplicate package inventory option");
@@ -113,6 +121,9 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
     }
     if (options.image.empty()) {
         throw std::invalid_argument("choose an image and bootstrap mode");
+    }
+    if (!options.storage.empty() && !options.run) {
+        throw std::invalid_argument("storage root requires a run mode");
     }
     if (!options.inventory.empty() && !options.run) {
         throw std::invalid_argument("package inventory requires a run mode");
@@ -170,6 +181,11 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         service_runtime.startup().bind_image(paths.image);
         if (options.run) {
             service_runtime.files().bind(paths.package, paths.image);
+            if (!options.storage.empty()) {
+                // Validate separation before the host's writable-directory probe.
+                service_runtime.files().bind_additional_native_root(options.storage);
+                service_runtime.persistent_storage().bind(options.storage);
+            }
             service_runtime.gdk_packages().bind(service_runtime.files());
             if (!options.inventory.empty()) {
                 const auto inventory =

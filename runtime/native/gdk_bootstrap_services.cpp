@@ -107,6 +107,9 @@ std::int32_t AMBROSIA_GUEST_ABI query_api(const void *class_id, const void *inte
         if (requested_class == user_class_id) {
             return current_runtime()->gdk_users().query(requested_interface, output);
         }
+        if (requested_class == persistent_storage_class_id) {
+            return current_runtime()->persistent_storage().query(requested_interface, output);
+        }
         if (requested_class == package_class_id) {
             return current_runtime()->gdk_packages().query(requested_interface, output);
         }

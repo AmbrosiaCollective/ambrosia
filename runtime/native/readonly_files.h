@@ -25,10 +25,12 @@ struct ReadonlyFileOpen {
 };
 
 // One read-only asset namespace. Native origins are confined to the configured
-// package/image roots; DOS-style volume hints are aliases of the asset root.
+// package/image roots and explicit additional native roots. DOS-style volume
+// hints remain aliases of the asset root; additional roots grant no writes.
 class ReadonlyFiles {
   public:
     void bind(const std::filesystem::path &package, const std::filesystem::path &image);
+    void bind_additional_native_root(const std::filesystem::path &root);
     ResolvedFilePath resolve(std::string_view path) const;
     FileAttributes attributes(std::string_view path) const;
     ReadonlyFileOpen open(std::string_view path, bool read_data = true, std::uint32_t share = 1,

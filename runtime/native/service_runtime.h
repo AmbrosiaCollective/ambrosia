@@ -25,6 +25,7 @@
 #include "native_modules.h"
 #include "native_threads.h"
 #include "new_allocations.h"
+#include "persistent_storage.h"
 #include "pointer_codec.h"
 #include "processor_information.h"
 #include "readonly_files.h"
@@ -73,6 +74,10 @@ class Runtime {
 
     GdkPackages &gdk_packages() {
         return gdk_packages_;
+    }
+
+    PersistentStorage &persistent_storage() {
+        return persistent_storage_;
     }
 
     ReadonlyFiles &files() {
@@ -214,6 +219,7 @@ class Runtime {
     LibraryReferences library_references_;
     RegistryKeys registry_keys_;
     ReadonlyFiles files_;
+    PersistentStorage persistent_storage_;
     GraphicsMemoryPolicy graphics_memory_;
     ExceptionFilter exception_filter_;
     GdkBootstrap gdk_bootstrap_;

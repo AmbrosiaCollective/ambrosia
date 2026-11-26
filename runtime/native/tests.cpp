@@ -197,6 +197,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "storage_file_tests.h"
 #include "nls_tests.h"
 #include "file_tests.h"
+#include "persistent_storage_tests.h"
 #include "file_handle_tests.h"
 #include "file_metadata_tests.h"
 #include "file_read_tests.h"
@@ -686,6 +687,7 @@ extern "C" int ambrosia_native_tests() {
         storage_file_checks();
         native_text_conversion_checks();
         readonly_file_checks();
+        persistent_storage_checks();
         native_file_handle_checks();
         native_file_metadata_checks();
         native_file_read_checks();
@@ -748,7 +750,7 @@ extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
 }
 
 int trace_native_image(const char *image, const char *package, unsigned memory_profile,
-                       const char *inventory = nullptr) {
+                       const char *inventory = nullptr, const char *storage = nullptr) {
     if (!image || !package) {
         return 2;
     }
@@ -759,6 +761,10 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
         if (inventory) {
             arguments.emplace_back("--package-inventory");
             arguments.emplace_back(std::u8string(reinterpret_cast<const char8_t *>(inventory)));
+        }
+        if (storage) {
+            arguments.emplace_back("--storage-root");
+            arguments.emplace_back(std::u8string(reinterpret_cast<const char8_t *>(storage)));
         }
         if (memory_profile == 1) {
             arguments.emplace_back("--sparse-windows");
@@ -898,6 +904,14 @@ extern "C" int ambrosia_native_trace_inventory_8g(const char *image, const char 
         return 2;
     }
     return trace_native_image(image, package, 3, inventory);
+}
+
+extern "C" int ambrosia_native_trace_storage_8g(const char *image, const char *package, const char *inventory,
+                                                const char *storage) {
+    if (!inventory || !storage) {
+        return 2;
+    }
+    return trace_native_image(image, package, 3, inventory, storage);
 }
 
 extern "C" int ambrosia_native_trace_fixture(unsigned scenario) {

@@ -119,6 +119,28 @@ void ReadonlyFiles::bind(const std::filesystem::path &package, const std::filesy
     roots_ = std::move(roots);
 }
 
+void ReadonlyFiles::bind_additional_native_root(const std::filesystem::path &path) {
+    const auto canonical = std::filesystem::canonical(path);
+    auto directory = std::make_shared<const host::ReadonlyDirectory>(canonical);
+    const std::lock_guard lock(mutex_);
+    if (!roots_ || roots_->entries.size() >= 8) {
+        throw std::runtime_error("additional native read root requires bound assets and available capacity");
+    }
+    for (const auto &entry : roots_->entries) {
+        const auto nested = [](const auto &child, const auto &parent) {
+            const auto relative = child.lexically_relative(parent);
+            return !relative.empty() && !relative.is_absolute() &&
+                   *relative.begin() != std::filesystem::path("..");
+        };
+        if (nested(canonical, entry.path) || nested(entry.path, canonical)) {
+            throw std::runtime_error("additional native read root must be separate from existing roots");
+        }
+    }
+    auto roots = std::make_shared<Roots>(*roots_);
+    roots->entries.push_back({canonical, std::move(directory)});
+    roots_ = std::move(roots);
+}
+
 ResolvedFilePath ReadonlyFiles::resolve(std::string_view requested) const {
     std::shared_ptr<const Roots> roots;
     {
