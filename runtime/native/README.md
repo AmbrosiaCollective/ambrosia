@@ -1373,3 +1373,9 @@ finishes. An owner exit without a recorded result stops explicitly. A worker can
 reopen that registered owner; first registration from another host thread is
 unsupported. One Runtime models one owner guest lifetime. Worker ID lookup stays
 available throughout shutdown joins so draining callbacks can reopen themselves.
+
+
+GetCurrentProcess returns the exact full-width Windows guest pseudo-handle -1
+across the process/thread API contracts. It owns no kernel handle or host file
+descriptor. Each consuming API must validate this guest identity explicitly;
+this facade does not enable arbitrary host-process access or missing process APIs.

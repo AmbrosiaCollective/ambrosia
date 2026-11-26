@@ -160,6 +160,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "unwind_walk_tests.h"
 #include "trace_tests.h"
 #include "clock_tests.h"
+#include "process_handle_tests.h"
 #include "critical_tests.h"
 #include "slim_lock_tests.h"
 #include "fls_tests.h"
@@ -537,6 +538,7 @@ extern "C" int ambrosia_native_tests() {
         unwind_walk_checks();
         trace_configuration_checks();
         clock_service_checks();
+        current_process_handle_checks();
         crt_time_checks();
         uptime_checks();
         critical_section_checks();

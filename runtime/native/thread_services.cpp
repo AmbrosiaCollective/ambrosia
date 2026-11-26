@@ -24,6 +24,11 @@ Runtime &runtime() {
     return *value;
 }
 
+std::uintptr_t AMBROSIA_GUEST_ABI current_process() noexcept {
+    // Guest ABI pseudo-handle, never a native descriptor or an owned object.
+    return static_cast<std::uintptr_t>(-1);
+}
+
 std::uintptr_t AMBROSIA_GUEST_ABI create_thread(void *attributes, std::size_t stack_bytes, ThreadEntry entry,
                                                 void *argument, std::uint32_t flags,
                                                 void *id_output) noexcept {
@@ -151,6 +156,7 @@ std::uint32_t AMBROSIA_GUEST_ABI thread_id(std::uintptr_t handle) noexcept {
 void register_thread_services(ImportRegistry &registry) {
     for (const auto *module : {"kernel32.dll", "kernelbase.dll", "api-ms-win-core-processthreads-l1-1-0.dll",
                                "api-ms-win-core-processthreads-l1-1-1.dll"}) {
+        registry.add(module, "GetCurrentProcess", reinterpret_cast<std::uintptr_t>(&current_process));
         registry.add(module, "CreateThread", reinterpret_cast<std::uintptr_t>(&create_thread));
         registry.add(module, "OpenThread", reinterpret_cast<std::uintptr_t>(&open_thread));
         registry.add(module, "GetExitCodeThread", reinterpret_cast<std::uintptr_t>(&exit_code));
