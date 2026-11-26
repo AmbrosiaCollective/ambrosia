@@ -13,7 +13,7 @@ class ReadonlyFileObject final : public WaitableObject {
     WaitResult wait(std::uint32_t milliseconds) override;
     host::FileLookup inspect() const;
     host::FileTimes times() const;
-    host::FileRead read(std::span<std::byte> output);
+    host::FileRead read(std::span<std::byte> output, std::optional<std::uint64_t> offset = std::nullopt);
 
     bool read_data() const noexcept {
         return read_data_;

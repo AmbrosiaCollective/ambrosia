@@ -80,11 +80,11 @@ void native_file_read_checks() {
     const auto access_error = get_last_error();
     const auto event = runtime.objects().create_event(true, false);
     const auto wrong_type = read(reinterpret_cast<void *>(event.handle), buffer.data(), 1, &count, nullptr);
-    check(
-        async == 0 && async_error == 50 && overlapped[0] == std::byte{0xcc} && no_access == 0 &&
-            access_error == 5 && wrong_type == 0 && get_last_error() == 6 && count == 0 &&
-            buffer[0] == std::byte{0xcc},
-        "unsupported OVERLAPPED, metadata-only and wrong-type handles cannot read bytes or fake completion");
+    check(async == 0 && async_error == 50 && overlapped[0] == std::byte{0xcc} && no_access == 0 &&
+              access_error == 5 && wrong_type == 0 && get_last_error() == 6 && count == 0 &&
+              buffer[0] == std::byte{0xcc},
+          "unsupported event-backed OVERLAPPED, metadata-only and wrong-type handles cannot read bytes or "
+          "fake completion");
     const auto independent_read = read(independent, buffer.data(), 3, &count, nullptr);
     const auto wait = runtime.objects().wait(reinterpret_cast<std::uintptr_t>(independent), 0);
     check(independent_read == 1 && count == 3 && std::memcmp(buffer.data(), "abc", 3) == 0 &&

@@ -275,6 +275,29 @@ std::uint32_t read_error(host::FileReadError error) {
     return 1117;
 }
 
+std::uint64_t read_nt_status(host::FileReadError error, bool end_of_file) {
+    if (end_of_file) {
+        return 0xc0000011u;
+    }
+    switch (error) {
+    case host::FileReadError::none:
+        return 0;
+    case host::FileReadError::invalid:
+        return 0xc000000du;
+    case host::FileReadError::denied:
+        return 0xc0000022u;
+    case host::FileReadError::no_access:
+        return 0xc0000005u;
+    case host::FileReadError::unsupported:
+        return 0xc00000bbu;
+    case host::FileReadError::exhausted:
+        return 0xc0000017u;
+    case host::FileReadError::failure:
+        return 0xc0000185u;
+    }
+    return 0xc0000185u;
+}
+
 std::int32_t AMBROSIA_GUEST_ABI read_file(void *handle, void *buffer, std::uint32_t bytes, void *count_output,
                                           void *overlapped) noexcept {
     NativeErrorScope restore;
@@ -282,13 +305,23 @@ std::int32_t AMBROSIA_GUEST_ABI read_file(void *handle, void *buffer, std::uint3
     if (count_output) {
         std::memcpy(count_output, &zero, sizeof(zero));
     }
-    if (overlapped) {
-        return boolean_failure(50);
-    }
-    if (!count_output || (!buffer && bytes)) {
+    if ((!count_output && !overlapped) || (!buffer && bytes)) {
         return boolean_failure(87);
     }
     try {
+        std::optional<std::uint64_t> offset;
+        auto *fields = static_cast<std::byte *>(overlapped);
+        if (fields) {
+            // Windows x64 OVERLAPPED: Internal, InternalHigh, Offset pair, hEvent.
+            std::uint64_t value;
+            std::uintptr_t event;
+            std::memcpy(&value, fields + 16, sizeof(value));
+            std::memcpy(&event, fields + 24, sizeof(event));
+            if (event) {
+                return boolean_failure(50);
+            }
+            offset = value;
+        }
         const auto file = file_object(handle);
         if (!file) {
             return boolean_failure(6);
@@ -296,11 +329,34 @@ std::int32_t AMBROSIA_GUEST_ABI read_file(void *handle, void *buffer, std::uint3
         if (bytes > host::ReadonlyFile::read_limit) {
             return boolean_failure(8);
         }
-        const auto result = file->read({static_cast<std::byte *>(buffer), bytes});
+        if (fields) {
+            const std::uint64_t pending = 0x103;
+            const std::uint64_t transferred = 0;
+            std::memcpy(fields, &pending, sizeof(pending));
+            std::memcpy(fields + 8, &transferred, sizeof(transferred));
+        }
+        const auto result = file->read({static_cast<std::byte *>(buffer), bytes}, offset);
+        const bool end_of_file =
+            fields && bytes && !result.bytes && result.error == host::FileReadError::none;
+        if (fields) {
+            const auto status = read_nt_status(result.error, end_of_file);
+            const std::uint64_t transferred = result.bytes;
+            std::memcpy(fields, &status, sizeof(status));
+            std::memcpy(fields + 8, &transferred, sizeof(transferred));
+            if (result.error == host::FileReadError::none) {
+                const auto next = *offset + result.bytes;
+                std::memcpy(fields + 16, &next, sizeof(next));
+            }
+        }
         if (result.error != host::FileReadError::none) {
             return boolean_failure(read_error(result.error));
         }
-        std::memcpy(count_output, &result.bytes, sizeof(result.bytes));
+        if (end_of_file) {
+            return boolean_failure(38);
+        }
+        if (count_output) {
+            std::memcpy(count_output, &result.bytes, sizeof(result.bytes));
+        }
         diagnostics::write_service_trace("TRACE native source bytes read\n");
         return 1;
     } catch (const std::exception &error) {
@@ -325,19 +381,20 @@ WaitResult ReadonlyFileObject::wait(std::uint32_t milliseconds) {
     return {wait_object_0, 0};
 }
 
-host::FileRead ReadonlyFileObject::read(std::span<std::byte> output) {
+host::FileRead ReadonlyFileObject::read(std::span<std::byte> output,
+                                        std::optional<std::uint64_t> requested_offset) {
     if (!read_data_) {
         return {0, host::FileReadError::denied};
     }
     std::unique_lock lock(io_mutex_);
     io_completed_.wait(lock, [&] { return !busy_; });
     busy_ = true;
-    const auto offset = position_;
+    const auto offset = requested_offset.value_or(position_);
     lock.unlock();
     const auto result = file_->read(offset, output);
     lock.lock();
-    if (result.error == host::FileReadError::none) {
-        position_ += result.bytes;
+    if (result.error == host::FileReadError::none && (result.bytes || output.empty())) {
+        position_ = offset + result.bytes;
     }
     busy_ = false;
     lock.unlock();

@@ -1544,6 +1544,8 @@ failed calls do not advance the cursor. Read operations retain their source and
 make file waits reflect busy/idle state. Each call is bounded64MiB. Direct reads
 require authoritative Linux statx alignment metadata and validate buffer, offset
 and length before O_DIRECT I/O; unavailable alignment fails without fallback.
-OVERLAPPED/event/async completion remains unsupported and returns an explicit
-error without publishing a completion. No streaming/rendering/menu claim follows
+Synchronous OVERLAPPED offsets with a null event are supported, including
+completed status/count/next-offset fields and file-cursor updates. Explicit-offset
+EOF reports ERROR_HANDLE_EOF. Event-backed and asynchronous completion remain
+unsupported and return an explicit error without publishing a completion. No streaming/rendering/menu claim follows
 from these individual file services.

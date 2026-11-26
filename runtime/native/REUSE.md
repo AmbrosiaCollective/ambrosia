@@ -343,3 +343,9 @@ Task110 follows the pinned official ReadFile contract for synchronous byte count
 cursor and error behavior. Original portable ownership/serialization code calls
 the narrow Linux pread/O_DIRECT adapter, with alignment reported by statx. No
 external read implementation, fake payload/completion or host handle is exposed.
+
+Task111 follows the pinned ReadFile synchronous OVERLAPPED contract for explicit
+offsets, output status/count, EOF and cursor updates. A private bounded observer
+and hash-verified local analysis identify the actual retry condition without
+copying game code into source or changing a guest condition flag. Native reads
+remain real; event/async behavior is not fabricated.
