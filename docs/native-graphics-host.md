@@ -6,9 +6,10 @@ stay in their reviewed sandbox under the default outer tool sandbox.
 
 Current boot frontier: both GCC and Clang create and close 581 CPU command lists,
 record 10 cache barriers, configure the frame timer and schedule two events, then
-stop at descriptor-increment query slot 15. The menu and GPU submission remain
-unverified. The sections below retain the staged investigation; later sections
-describe the current implementations.
+pass the first descriptor-increment query, then stall after an unsupported XMem
+request. The bounded probe stops after 10 seconds. The menu and GPU submission
+remain unverified. The sections below retain the staged investigation; later
+sections describe the current implementations.
 
 The first service, `scripts/query_native_graphics_host.py`, reports Vulkan API
 version, device class, queue availability and selected Vulkan 1.2/1.3 features.
@@ -427,3 +428,25 @@ access. Offline CMake and all source/header/guard/ELF gates pass. Both actual ga
 configure one interval and two events, then reach device slot 15 without fault,
 timeout or watchdog failure. Actual game wait calls are not reached yet. No frame
 or interactive menu is verified. Profiles and dependencies are unchanged.
+
+## Guest descriptor record increments
+
+Device slot 15 reports guest record strides independently of Vulkan descriptors:
+32 bytes for views, 16 for samplers, and the inherited 32-byte RTV/DSV record policy.
+Console kind 4 follows the extra-view alias published in XCL's
+[real.rs](https://github.com/ZigZagBoi1/ScarlettPort/blob/48ba23a91a83121f8d0625a633e88fa463d5a0ca/runtime/xcl/crates/xcl/src/hle/d3d12x/real.rs),
+with view/sampler widths from its console_heap.rs at the same revision. These are
+API/layout facts; no GPL2 implementation is copied. Kind 4 shadows the public PC
+NUM_TYPES marker; older FiveStar startup notes return zero for it. This adapter
+accepts the published console alias for query metadata. Heap creation and descriptor
+encoding remain unimplemented and must use a coherent record layout when added.
+Unknown kinds stop explicitly. Ownership and native/guest error state are preserved.
+
+Both compilers pass 1,545 strict checks and five live query checks. Foreign/released
+device and unknown-kind controls stop at the intended boundaries. Both actual game
+launches pass their first query, then a new unsupported XMem request returns error
+50. No further trace progress occurs before the 10-second timeout kills the probe.
+Observed RSS stays near 487 MB; no RSS/monitor failure or fault trace is observed.
+Other descriptor kinds have synthetic ABI coverage, not actual-game coverage yet.
+Investigate that memory profile next; extending the timeout alone does not resolve
+the measured error. No GPU work, frame or interactive menu is verified.

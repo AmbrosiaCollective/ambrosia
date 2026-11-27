@@ -1246,6 +1246,21 @@ struct GraphicsDevices::State {
         }
     }
 
+    static std::uint32_t AMBROSIA_GUEST_ABI descriptor_increment(Device *pointer,
+                                                                 std::uint32_t type) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned(pointer);
+            if (type < guest_descriptor_increments.size()) {
+                diagnostics::write_service_trace("TRACE native guest descriptor increment queried\n");
+                return guest_descriptor_increments[type];
+            }
+            diagnostics::stop_trace("unsupported native descriptor increment type", 78);
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
     static std::uint64_t frame_now_us() {
         const auto counter = host::performance_counter();
         if (counter < 0) {
@@ -1346,6 +1361,7 @@ struct GraphicsDevices::State {
             result[7] = reinterpret_cast<std::uintptr_t>(&node_count);
             result[8] = reinterpret_cast<std::uintptr_t>(&create_queue);
             result[9] = reinterpret_cast<std::uintptr_t>(&create_allocator);
+            result[15] = reinterpret_cast<std::uintptr_t>(&descriptor_increment);
             result[26] = reinterpret_cast<std::uintptr_t>(&heap_properties);
             result[36] = reinterpret_cast<std::uintptr_t>(&create_fence);
             // The Xbox ABI shadows PC OpenExistingHeapFromAddress here.

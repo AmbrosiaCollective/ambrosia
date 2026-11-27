@@ -395,3 +395,13 @@ inputs, bounded configuration and immutable wait plans. Existing host adapters
 supply the monotonic clock and sleep. No Windows timer, C# runtime or upstream
 executable is imported or run. Timer tokens do not certify GPU completion, and
 presented-token/GPU throttling remains separate from this timer implementation.
+
+The guest descriptor increment query uses published layout facts: 32-byte view
+and 16-byte sampler records in the pinned XCL console_heap.rs reference. No GPL2
+implementation is ported. RTV/DSV use the inherited portable renderer's 32-byte
+record policy (`descriptor_size` in d3d12_com.h). These guest strides are independent
+of Vulkan driver descriptor representation. The console-only
+extra view kind 4 follows XCL's published alias to ordinary view records; this
+shadows the public PC SDK's NUM_TYPES marker. Earlier FiveStar startup notes return
+zero for 4; this adapter instead accepts the later published console alias at the
+query boundary. Heap ownership and record encoding remain separate work.
