@@ -1,5 +1,7 @@
 // Original tiny PE byte fixtures only. No SDK, game, driver or network needed.
 #include "clock_services.h"
+#include "command_list.h"
+#include "graphics_recording.h"
 #include "event_signal.h"
 #include "file_services.h"
 #include "guest_thread.h"
@@ -233,6 +235,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "graphics_creation_tests.h"
 #include "graphics_device_tests.h"
 #include "graphics_allocator_tests.h"
+#include "graphics_list_tests.h"
 #include "xmem_tests.h"
 #include "memory_budget_tests.h"
 #include "xmem_committed_tests.h"
@@ -732,6 +735,7 @@ extern "C" int ambrosia_native_tests() {
         graphics_memory_checks();
         graphics_creation_checks();
         graphics_option_checks();
+        graphics_recording_checks();
         graphics_transport_rejection_checks();
         xmem_checks();
         memory_budget_checks();
@@ -1075,10 +1079,25 @@ extern "C" int ambrosia_native_presentation_tests() {
     return failures ? 1 : 0;
 }
 
+extern "C" int ambrosia_native_graphics_list_tests(const char *root, unsigned probe) {
+    checks = failures = 0;
+    try {
+        if (!root || probe > 5) {
+            return 2;
+        }
+        graphics_list_live_checks(root, probe);
+    } catch (const std::exception &error) {
+        std::cerr << "native graphics list: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "graphics list: " << checks << " checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
+}
+
 extern "C" int ambrosia_native_graphics_allocator_tests(const char *root, unsigned probe) {
     checks = failures = 0;
     try {
-        if (!root || probe > 4) {
+        if (!root || probe > 3) {
             return 2;
         }
         graphics_allocator_live_checks(root, probe);

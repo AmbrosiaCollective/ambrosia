@@ -323,3 +323,29 @@ object,so a console-shaped wrapper must precede the existing portable command IR
 The next implementation must validate its buffer bounds and recording lifetime.
 This is contract evidence,not a command list,GPU work or an interactive menu.
 Raw descriptor/identity data remains private. Existing profiles are unchanged.
+
+## Owned console CPU command lists
+
+Xbox slot 73 now creates a console-shaped guest object around the existing
+portable CommandList IR. Guest caches live in a separate owned mapping. Equal
+write/end bounds force inline writers into virtual-method fallback; Close and
+Reset reject changed bounds before altering the IR. Uninterpreted descriptor
+words are retained. This is CPU recording support; GPU commands and submission
+remain unsupported and stop explicitly.
+
+Identity, references, GetDevice, GetType, Close and Reset are implemented. Each
+open recording retains one matching allocator and marks it busy. Close or final
+release drops that lease; Reset of a closed list acquires an idle allocator.
+Lists independently retain the real device. Unknown table entries stop, including
+the extended console range. Public identity/layout references are in REUSE.md.
+
+Both GCC and Clang pass 1,523 strict checks, 29 real-device list lifecycle checks
+and 24 allocator checks. Five negative controls stop unsupported commands,
+foreign/released objects and changed bounds at the intended boundary. The
+standalone offline CMake targets build and pass source/header/guard/ELF hash
+verification; those standalone executables were not run outside isolation.
+
+Both actual read-only game launches create their first direct CPU command list
+and stop at console list slot 132, without fault, timeout or watchdog failure.
+No GPU command, game-rendered frame or interactive menu is verified. Existing
+guest/host profiles are unchanged; compiler source access adds only the new unit.

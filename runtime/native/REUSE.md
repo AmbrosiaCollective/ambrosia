@@ -362,3 +362,18 @@ Microsoft DirectX-Headers commit61c7718954ec73dbdd43c723240fe1a0452a3724 (MIT).
 See LICENSE.DirectX-Headers. No SDK executable or game-derived declarations are
 embedded. The initial frontend supports only explicit implemented methods and
 stops on unsupported slots; it is not complete D3D12 conformance.
+
+The console command-list identity is a public ABI fact from
+[FiveStar's XboxDevice test support](https://github.com/ThatRecompDev/five-star-recomp/blob/323ea3000b9e6a49dbfda5c36ed0c1022fde90ae/tests/FiveStar.Loader.Tests/Support/XboxDevice.cs)
+and its d3d12x-shim documentation at the same revision. Its source snapshot and
+GPL-3.0-or-later notices remain pristine; no implementation is imported.
+
+`graphics_recording` uses published object-size, buffer-bound offsets and table
+capacity facts from
+[XCL's title_list.rs](https://github.com/ZigZagBoi1/ScarlettPort/blob/48ba23a91a83121f8d0625a633e88fa463d5a0ca/runtime/xcl/crates/xcl/src/hle/d3d12x/title_list.rs).
+That GPL-2.0-only source is a layout reference, not incorporated implementation.
+The original native wrapper separates writable guest caches from C++ ownership
+and uses this project's unchanged canonical `runtime/src/command_list.h` IR.
+Equal owned write/end bounds select virtual-method fallback; changed bounds
+terminate before Close/Reset instead of silently discarding unknown commands.
+CPU recording lifetime does not imply GPU submission support.

@@ -1,4 +1,5 @@
 #include "graphics_devices.h"
+#include "graphics_recording.h"
 #include "guest_thread.h"
 #include "host_graphics.h"
 #include "service_runtime.h"
@@ -62,6 +63,14 @@ bool supports_queue(const void *interface_id) {
     return requested == unknown_interface_id || requested == supported_interfaces.front() ||
            requested == device_child_interface || requested == pageable_interface ||
            requested == command_queue_interface;
+}
+
+bool supports_list(const void *interface_id) {
+    Guid requested;
+    std::memcpy(&requested, interface_id, sizeof(requested));
+    return requested == unknown_interface_id || requested == supported_interfaces.front() ||
+           requested == device_child_interface || requested == command_list_interface ||
+           requested == graphics_command_list_interface || requested == console_command_list_interface;
 }
 
 bool supports_allocator(const void *interface_id) {
@@ -149,17 +158,51 @@ struct GraphicsDevices::State {
 
     static_assert(offsetof(Allocator, table) == 0);
 
+    struct List {
+        std::uint32_t references = 1;
+        std::uint32_t type = 0;
+        Device *parent = nullptr;
+        Allocator *active_allocator = nullptr;
+        // Preserve uninterpreted creation hints; do not reinterpret them as PC flags.
+        std::array<std::uint32_t, 4> description{};
+        GraphicsRecording recording;
+
+        explicit List(const std::uintptr_t *table) : recording(table) {}
+    };
+
     std::mutex mutex;
     std::unique_ptr<host::Graphics> backend;
     std::unique_ptr<Device> device;
     std::map<Fence *, std::unique_ptr<Fence>> fences;
     std::map<Queue *, std::unique_ptr<Queue>> queues;
     std::map<Allocator *, std::unique_ptr<Allocator>> allocators;
+    std::map<void *, std::unique_ptr<List>> lists;
 
     struct Access {
         State &state;
         std::unique_lock<std::mutex> lock;
     };
+
+    struct ListAccess {
+        State &state;
+        std::unique_lock<std::mutex> lock;
+        List &list;
+    };
+
+    static ListAccess owned_list(void *pointer) {
+        auto *runtime = current_runtime();
+        if (!runtime || !guest::ThreadContext::current()) {
+            diagnostics::stop_trace("native command list requires an active guest runtime", 78);
+        }
+        auto &state = *runtime->graphics_devices().state_;
+        std::unique_lock lock(state.mutex);
+        const auto found = state.lists.find(pointer);
+        if (found == state.lists.end() || !state.backend || !state.device ||
+            found->second->parent != state.device.get()) {
+            diagnostics::stop_trace("native command list is not owned by this runtime", 78);
+        }
+        return {state, std::move(lock), *found->second};
+    }
 
     static Access owned(Device *pointer) {
         auto *runtime = current_runtime();
@@ -268,22 +311,28 @@ struct GraphicsDevices::State {
         }
     }
 
+    // Internal callers already hold the State lock, including a list dropping
+    // its recording lease. Keep the guest entrypoint from recursively locking.
+    static std::uint32_t release_allocator(State &state, Allocator &pointer) {
+        const auto remaining = pointer.references - 1;
+        if (remaining) {
+            pointer.references = remaining;
+        } else {
+            if (pointer.recording) {
+                diagnostics::stop_trace("native command allocator lost its recording lease", 78);
+            }
+            auto *parent = pointer.parent;
+            state.allocators.erase(&pointer);
+            release_device(state, *parent);
+        }
+        return remaining;
+    }
+
     static std::uint32_t AMBROSIA_GUEST_ABI allocator_release(Allocator *pointer) noexcept {
         const PreserveErrno preserve;
         try {
             auto access = owned_allocator(pointer);
-            const auto remaining = pointer->references - 1;
-            if (remaining) {
-                pointer->references = remaining;
-            } else {
-                if (pointer->recording) {
-                    diagnostics::stop_trace("native command allocator lost its recording lease", 78);
-                }
-                auto *parent = pointer->parent;
-                access.state.allocators.erase(pointer);
-                release_device(access.state, *parent);
-            }
-            return remaining;
+            return release_allocator(access.state, *pointer);
         } catch (const std::exception &error) {
             diagnostics::stop_trace(error.what(), 78);
         }
@@ -329,7 +378,7 @@ struct GraphicsDevices::State {
 
     static const auto &allocator_table() {
         static const auto entries = [] {
-            auto result = make_allocator_table(std::make_index_sequence<9>{});
+            auto result = make_allocator_table(std::make_index_sequence<64>{});
             result[0] = reinterpret_cast<std::uintptr_t>(&allocator_query);
             result[1] = reinterpret_cast<std::uintptr_t>(&allocator_add);
             result[2] = reinterpret_cast<std::uintptr_t>(&allocator_release);
@@ -514,7 +563,7 @@ struct GraphicsDevices::State {
 
     static const auto &queue_table() {
         static const auto entries = [] {
-            auto result = make_queue_table(std::make_index_sequence<19>{});
+            auto result = make_queue_table(std::make_index_sequence<128>{});
             result[0] = reinterpret_cast<std::uintptr_t>(&queue_query);
             result[1] = reinterpret_cast<std::uintptr_t>(&queue_add);
             result[2] = reinterpret_cast<std::uintptr_t>(&queue_release);
@@ -744,7 +793,7 @@ struct GraphicsDevices::State {
 
     static const auto &fence_table() {
         static const auto entries = [] {
-            auto result = make_fence_table(std::make_index_sequence<11>{});
+            auto result = make_fence_table(std::make_index_sequence<64>{});
             result[0] = reinterpret_cast<std::uintptr_t>(&fence_query);
             result[1] = reinterpret_cast<std::uintptr_t>(&fence_add);
             result[2] = reinterpret_cast<std::uintptr_t>(&fence_release);
@@ -810,46 +859,239 @@ struct GraphicsDevices::State {
         }
     }
 
-    static std::int32_t AMBROSIA_GUEST_ABI capture_command_list_x(Device *pointer, const void *description,
-                                                                  Allocator *allocator,
-                                                                  const void *initial_state,
-                                                                  const void *interface_id,
-                                                                  void **output) noexcept {
+    static void increment_list(List &list) {
+        if (list.references == UINT32_MAX) {
+            diagnostics::stop_trace("native command-list reference count exhausted", 78);
+        }
+        ++list.references;
+    }
+
+    static void stop_list_recording(State &state, List &list) {
+        auto *allocator = list.active_allocator;
+        if (!allocator) {
+            return;
+        }
+        if (allocator->recording != list.recording.guest_object()) {
+            diagnostics::stop_trace("native command list lost its allocator recording owner", 78);
+        }
+        allocator->recording = nullptr;
+        list.active_allocator = nullptr;
+        release_allocator(state, *allocator);
+    }
+
+    template <std::size_t Slot> static std::uintptr_t AMBROSIA_GUEST_ABI unsupported_list(void *) noexcept {
+        diagnostics::stop_trace("unsupported native console command-list slot " + std::to_string(Slot), 78);
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI list_query(void *pointer, const void *interface_id,
+                                                      void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_list(pointer);
+            if (!supports_list(interface_id)) {
+                return no_interface;
+            }
+            increment_list(access.list);
+            *output = pointer;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI list_add(void *pointer) noexcept {
         const PreserveErrno preserve;
         try {
-            auto access = owned(pointer);
+            auto access = owned_list(pointer);
+            increment_list(access.list);
+            return access.list.references;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI list_release(void *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_list(pointer);
+            const auto remaining = access.list.references - 1;
+            if (remaining) {
+                access.list.references = remaining;
+            } else {
+                stop_list_recording(access.state, access.list);
+                auto *parent = access.list.parent;
+                access.state.lists.erase(pointer);
+                release_device(access.state, *parent);
+            }
+            return remaining;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI list_device(void *pointer, const void *interface_id,
+                                                       void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_list(pointer);
+            if (!supports(interface_id)) {
+                return no_interface;
+            }
+            increment(*access.list.parent);
+            *output = access.list.parent;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI list_type(void *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_list(pointer);
+            return access.list.type;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI list_close(void *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_list(pointer);
+            if (!access.list.recording.close()) {
+                return static_cast<std::int32_t>(0x80004005u);
+            }
+            stop_list_recording(access.state, access.list);
+            diagnostics::write_service_trace("TRACE native console CPU command list closed\n");
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI list_reset(void *pointer, Allocator *allocator,
+                                                      const void *initial_state) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_list(pointer);
+            if (!access.list.recording.closed()) {
+                return static_cast<std::int32_t>(0x80004005u);
+            }
+            if (initial_state) {
+                return static_cast<std::int32_t>(0x80004001u);
+            }
             const auto found = access.state.allocators.find(allocator);
-            if (!description || !interface_id || !output || found == access.state.allocators.end() ||
-                found->second->parent != pointer) {
-                diagnostics::stop_trace("native Xbox command-list capture requires owned complete inputs",
-                                        78);
+            if (found == access.state.allocators.end() || allocator->parent != access.list.parent ||
+                allocator->type != access.list.type || allocator->recording) {
+                return static_cast<std::int32_t>(0x80070057u);
             }
-            // Only the bounded observed prefix is diagnostic evidence. Its
-            // unknown fields and requested identity stay in private trace logs.
-            std::array<std::uint32_t, 4> words{};
-            std::array<unsigned char, 16> identity{};
+            if (allocator->references == UINT32_MAX) {
+                diagnostics::stop_trace("native command allocator reference count exhausted", 78);
+            }
+            if (!access.list.recording.reset()) {
+                return static_cast<std::int32_t>(0x80004005u);
+            }
+            ++allocator->references;
+            allocator->recording = pointer;
+            access.list.active_allocator = allocator;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    template <std::size_t... Slots>
+    static std::array<std::uintptr_t, sizeof...(Slots)> make_list_table(std::index_sequence<Slots...>) {
+        return {reinterpret_cast<std::uintptr_t>(&unsupported_list<Slots>)...};
+    }
+
+    static const auto &list_table() {
+        static const auto entries = [] {
+            // Published console numbering extends well beyond the PC interface.
+            // Unknown entries terminate; they never acknowledge a GPU command.
+            auto result = make_list_table(std::make_index_sequence<600>{});
+            result[0] = reinterpret_cast<std::uintptr_t>(&list_query);
+            result[1] = reinterpret_cast<std::uintptr_t>(&list_add);
+            result[2] = reinterpret_cast<std::uintptr_t>(&list_release);
+            result[7] = reinterpret_cast<std::uintptr_t>(&list_device);
+            result[8] = reinterpret_cast<std::uintptr_t>(&list_type);
+            result[9] = reinterpret_cast<std::uintptr_t>(&list_close);
+            result[10] = reinterpret_cast<std::uintptr_t>(&list_reset);
+            return result;
+        }();
+        return entries;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI create_command_list_x(Device *pointer, const void *description,
+                                                                 Allocator *allocator,
+                                                                 const void *initial_state,
+                                                                 const void *interface_id,
+                                                                 void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!description || !interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned(pointer);
+            if (!supports_list(interface_id)) {
+                return no_interface;
+            }
+            std::array<std::uint32_t, 4> words;
             std::memcpy(words.data(), description, sizeof(words));
-            std::memcpy(identity.data(), interface_id, identity.size());
-            char message[256];
-            const auto count = std::snprintf(
-                message, sizeof(message),
-                "TRACE native Xbox command-list request allocator_type=%u busy=%u initial=%u output=1 "
-                "prefix16=%08x %08x %08x %08x interface=",
-                allocator->type, allocator->recording ? 1u : 0u, initial_state ? 1u : 0u, words[0], words[1],
-                words[2], words[3]);
-            if (count <= 0 || static_cast<std::size_t>(count) >= sizeof(message)) {
-                diagnostics::stop_trace("native Xbox command-list capture exceeded its text bound", 78);
+            const auto found = access.state.allocators.find(allocator);
+            if (found == access.state.allocators.end() || allocator->parent != pointer || words[0] > 3 ||
+                allocator->type != words[0] || allocator->recording) {
+                return static_cast<std::int32_t>(0x80070057u);
             }
-            std::string trace(message, static_cast<std::size_t>(count));
-            constexpr char digits[] = "0123456789abcdef";
-            for (const auto byte : identity) {
-                trace += digits[byte >> 4];
-                trace += digits[byte & 15];
+            if (initial_state) {
+                return static_cast<std::int32_t>(0x80004001u);
             }
-            trace += '\n';
-            diagnostics::write_service_trace(trace);
-            diagnostics::stop_trace("native Xbox command-list contract captured; recording not implemented",
-                                    78);
+            if (access.state.lists.size() >= 1024 || allocator->references == UINT32_MAX ||
+                pointer->references == UINT32_MAX) {
+                diagnostics::stop_trace("native command-list ownership capacity exhausted", 78);
+            }
+            (void)access.state.backend->query_device(pointer->real.id);
+            auto list = std::make_unique<List>(list_table().data());
+            list->parent = pointer;
+            list->type = words[0];
+            list->description = words;
+            auto *object = list->recording.guest_object();
+            auto [position, inserted] = access.state.lists.emplace(object, std::move(list));
+            if (!inserted) {
+                throw std::runtime_error("native command-list object ownership collision");
+            }
+            ++pointer->references;
+            ++allocator->references;
+            allocator->recording = object;
+            position->second->active_allocator = allocator;
+            *output = object;
+            char message[96];
+            const auto count =
+                std::snprintf(message, sizeof(message),
+                              "TRACE native console CPU command list created type=%u\n", words[0]);
+            if (count > 0 && static_cast<std::size_t>(count) < sizeof(message)) {
+                diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
+            }
+            return 0;
         } catch (const std::exception &error) {
             diagnostics::stop_trace(error.what(), 78);
         }
@@ -990,7 +1232,7 @@ struct GraphicsDevices::State {
 
     static const auto &table() {
         static const auto entries = [] {
-            auto result = make_table(std::make_index_sequence<80>{});
+            auto result = make_table(std::make_index_sequence<192>{});
             result[0] = reinterpret_cast<std::uintptr_t>(&query_interface);
             result[1] = reinterpret_cast<std::uintptr_t>(&add_reference);
             result[2] = reinterpret_cast<std::uintptr_t>(&release);
@@ -1002,7 +1244,7 @@ struct GraphicsDevices::State {
             // The Xbox ABI shadows PC OpenExistingHeapFromAddress here.
             // See d3d12_xs_device.h and docs/retail_boot_chain.md section 3.2.
             result[48] = reinterpret_cast<std::uintptr_t>(&create_queue_x);
-            result[73] = reinterpret_cast<std::uintptr_t>(&capture_command_list_x);
+            result[73] = reinterpret_cast<std::uintptr_t>(&create_command_list_x);
             return result;
         }();
         return entries;
