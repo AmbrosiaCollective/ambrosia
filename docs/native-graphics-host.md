@@ -86,3 +86,20 @@ foreign ownership rejection and recreation, without direct GPU access. This is
 transport/device ownership coverage, not game COM coverage, GPU work or a menu.
 Using graphics and presentation together still requires a reviewed combined
 endpoint profile. Never send host pointers, CPU payloads or arbitrary commands.
+
+## Native client seam
+
+`host::Graphics` in `runtime/native/host_graphics.h` owns one explicit service
+session. Its Linux file adapter is private to `host_graphics.cpp`; other hosts
+can supply an adapter without changing guest ABI code. The public seam carries
+only `GraphicsDevice` numeric ownership and API version. It opens no driver,
+network socket or display and derives paths from the caller's endpoint root.
+
+The adapter validates exact packet sizes, regular single-link endpoints, fresh
+zeroed response state, exclusive client ownership, matching sequence/operation,
+zero unused fields, ownership IDs and API version. Exchanges have a two-second
+deadline and a 1024-request budget. Duplicate creation and foreign/released IDs
+are rejected locally. Device release is acknowledged before local ownership is
+cleared. Session destruction requests service shutdown, which closes any device
+left live. If the service has died, destruction remains bounded and its host
+lifetime watchdog owns cleanup. Never infer a game frame from device ownership.

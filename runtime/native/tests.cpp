@@ -4,6 +4,7 @@
 #include "file_services.h"
 #include "guest_thread.h"
 #include "host_affinity.h"
+#include "host_graphics.h"
 #include "host_presentation.h"
 #include "host_priority.h"
 #include "host_shared_backing.h"
@@ -257,6 +258,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "window_class_tests.h"
 #include "presentation_tests.h"
 #include "window_creation_tests.h"
+#include "graphics_transport_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -727,6 +729,7 @@ extern "C" int ambrosia_native_tests() {
         registry_checks();
         graphics_memory_checks();
         graphics_creation_checks();
+        graphics_transport_rejection_checks();
         xmem_checks();
         memory_budget_checks();
         xmem_committed_checks();
@@ -1061,6 +1064,21 @@ extern "C" int ambrosia_native_presentation_tests() {
         ++failures;
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_graphics_transport_tests(const char *root) {
+    checks = failures = 0;
+    try {
+        if (!root) {
+            return 2;
+        }
+        graphics_transport_live_checks(root);
+    } catch (const std::exception &error) {
+        std::cerr << "native graphics transport: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "graphics transport: " << checks << " checks, " << failures << " failures\n";
     return failures ? 1 : 0;
 }
 
