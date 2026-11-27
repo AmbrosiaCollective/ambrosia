@@ -6,9 +6,9 @@ stay in their reviewed sandbox under the default outer tool sandbox.
 
 Current boot frontier: both GCC and Clang create and close 581 CPU command lists,
 record 10 cache barriers, configure the frame timer and schedule two events, then
-pass the first descriptor-increment query and reserve the next placeholder,
-then stall on an unsupported VirtualFree placeholder split. The bounded probe
-stops after 10 seconds. The menu and GPU submission
+pass the first descriptor-increment query, split the placeholder and replace its
+five windows, then stop at XMemMapPhysicalPages after allocating physical tokens.
+The menu and GPU submission
 remain unverified. The sections below retain the staged investigation; later
 sections describe the current implementations.
 
@@ -474,3 +474,23 @@ probe is killed at its deadline. A bounded private failure trace identifies the
 flags without exposing pointers; static read-only inspection agrees with the
 published split contract. Splitting is the next implementation step. Actual child
 replacement, physical-page mapping, GPU work and the interactive menu are unverified.
+
+## Explicit placeholder split boundaries
+
+MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER now partitions an owned no-access reservation
+into two aligned placeholder segments. Only bounded prefix/suffix splits of an
+unconverted segment are supported; middle three-way, empty, whole, overlapping or
+unaligned requests fail before mutation. A transactional metadata copy keeps the
+single underlying Mapping and its reservation charge unchanged. At most 128
+segments exist per parent. Replacement windows must exactly match a segment.
+Coalescing, partial release and conversion back from populated windows remain
+explicitly unsupported.
+
+The five attribute-0x27 reserve-only replacement policies already documented in
+xmem_exe_calls.md are accepted with their original protection words. Their GPU
+permission bits grant no CPU execution; all windows remain inaccessible until
+actual physical mapping is implemented. Both compilers pass 1,573 strict checks
+and a three-check duplicate-replacement race. Both actual games now complete the
+split sequence and five replacements, allocate 2,960 page tokens and stop at
+xmem.dll!XMemMapPhysicalPages without timeout, fault or watchdog failure. Tokens
+are owned allocations, not yet mapped game memory or GPU-visible backing.

@@ -111,9 +111,14 @@ void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std:
     const bool placeholder_replace = allocation_type == 0x20406000u &&
                                      (known_attributes || attributes == 7) &&
                                      (known_protection || protection == 1);
+    // These five reserve-only replacement profiles are recorded in the inherited
+    // xmem_exe_calls.md. Retain GPU policy words without granting CPU execution.
+    const bool documented_replace = allocation_type == 0x20406000u && attributes == 0x27 &&
+                                    (protection == 0x1004 || protection == 0x1404 || protection == 0x8404 ||
+                                     protection == 0x2404 || protection == 0x2004);
     if (!address && placeholder_reserve) {
         result = runtime->memory().reserve_placeholder(bytes, attributes);
-    } else if (placeholder_replace) {
+    } else if (placeholder_replace || documented_replace) {
         result = runtime->memory().replace_placeholder_window(address, bytes, attributes, protection);
     } else if (address) {
         result.error = error_not_supported;

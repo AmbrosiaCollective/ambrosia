@@ -79,6 +79,7 @@ class MemoryServices {
         std::optional<XmemRegionInfo> xmem;
         // Child metadata never owns the underlying mapping or adds to its budget.
         std::map<std::uintptr_t, XmemRegionInfo> placeholder_windows;
+        std::map<std::uintptr_t, std::size_t> placeholder_segments;
 
         explicit Region(std::size_t size, std::size_t alignment)
             : memory(size, host::Access::none, alignment), protection(size / host::Mapping::page_size(), 0) {}

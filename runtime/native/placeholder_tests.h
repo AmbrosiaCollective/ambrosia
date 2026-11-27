@@ -22,6 +22,9 @@ void placeholder_checks() {
     check(ordinary.address && memory.reserved_bytes() == page * 5 &&
               memory.reserve_placeholder(1, 7).error == error_not_enough_memory,
           "placeholders use the sparse budget while private allocations retain their own limit");
+    check(memory.free(base, page, 0x8002).success && memory.free(base + page, page, 0x8002).success &&
+              memory.free(base + page * 2, page, 0x8002).success && memory.reserved_bytes() == page * 5,
+          "explicit placeholder splits retain a single mapping and unchanged reservation charge");
     const auto first = memory.replace_placeholder_window(base + page, 1, 3, 0x801);
     const auto last = memory.replace_placeholder_window(base + page * 3, page, 0x23, 0x2404);
     const auto child = memory.window(base + page);
@@ -63,10 +66,9 @@ void placeholder_checks() {
     const auto large = capacity.reserve_placeholder(page * 65, 7);
     bool accepted = large.address;
     for (std::size_t index = 0; accepted && index < 64; ++index) {
-        accepted = capacity
-                       .replace_placeholder_window(static_cast<std::byte *>(large.address) + index * page,
-                                                   page, 3, 4)
-                       .error == 0;
+        auto *address = static_cast<std::byte *>(large.address) + index * page;
+        accepted = capacity.free(address, page, 0x8002).success &&
+                   capacity.replace_placeholder_window(address, page, 3, 4).error == 0;
     }
     check(accepted &&
               capacity.replace_placeholder_window(static_cast<std::byte *>(large.address) + page * 64, page,
@@ -91,6 +93,9 @@ void placeholder_checks() {
               get_last_error() == 89 && errno == E2BIG && crt_error() == 37,
           "the five-argument XMem ABI preserves no-access reservation metadata and error channels");
     if (reserved) {
+        check(runtime.memory().free(reserved, page, 0x8002).success &&
+                  runtime.memory().free(reserved + page, page, 0x8002).success,
+              "ABI replacement uses explicit prior split boundaries");
         const auto replacement = allocate(reserved + page, page, 0x20406000, 0x23, 0x2404);
         const auto replacement_info = runtime.memory().window(reserved + page);
         check(replacement == reserved + page && replacement_info && replacement_info->protection == 0x2404 &&
@@ -113,6 +118,78 @@ void placeholder_checks() {
     errno = saved_errno;
 }
 
+void placeholder_split_checks() {
+    using namespace ambrosia::services;
+    constexpr std::size_t page = 65536;
+    MemoryServices memory(page * 8);
+    const auto parent = memory.reserve_placeholder(page * 4, 7);
+    check(parent.address, "placeholder split fixture owns its parent");
+    if (!parent.address) {
+        return;
+    }
+    auto *base = static_cast<std::byte *>(parent.address);
+    check(memory.replace_placeholder_window(base + page, page, 0x27, 0x1004).error == error_invalid_address,
+          "a subrange cannot replace a placeholder before explicit split boundaries exist");
+    check(memory.free(base + page, page, 0x8002).error == error_invalid_address &&
+              memory.free(base, page + 1, 0x8002).error == error_invalid_parameter &&
+              memory.free(base + 1, page, 0x8002).error == error_invalid_parameter &&
+              memory.free(base, 0, 0x8002).error == error_invalid_parameter &&
+              memory.reserved_bytes() == page * 4,
+          "unaligned, empty and interior three-way split requests leave ownership intact");
+    check(memory.free(base + page * 3, page, 0x8002).success && memory.free(base, page, 0x8002).success &&
+              memory.replace_placeholder_window(base, page, 0x27, 0x1004).address == base &&
+              memory.replace_placeholder_window(base + page * 3, page, 0x27, 0x8404).address ==
+                  base + page * 3,
+          "prefix and suffix splits produce exact replaceable segments without changing the mapping");
+    check(memory.free(base, page, 0x8002).error == error_invalid_address &&
+              memory.replace_placeholder_window(base + page, page, 0x27, 0x2404).error ==
+                  error_invalid_address &&
+              memory.free(base, 0, 0x8000).error == error_not_supported &&
+              inspection_page_permissions(base).starts_with("---") && memory.reserved_bytes() == page * 4,
+          "replaced and still-unsplit segments reject unsupported changes and remain inaccessible");
+    Runtime runtime(page * 8);
+    Scope scope(runtime);
+    using Allocate =
+        void *(AMBROSIA_GUEST_ABI *)(void *, std::size_t, std::uint32_t, std::uint64_t, std::uint32_t);
+    using Free = std::int32_t(AMBROSIA_GUEST_ABI *)(void *, std::size_t, std::uint32_t);
+    const auto allocate =
+        reinterpret_cast<Allocate>(runtime.resolve(service_symbol("XMemVirtualAlloc", "xmem.dll")));
+    const auto release =
+        reinterpret_cast<Free>(runtime.resolve(service_symbol("VirtualFree", "kernel32.dll")));
+    auto *reserved = static_cast<std::byte *>(allocate(nullptr, page * 6, 0x42000, 7, 1));
+    check(reserved, "split ABI fixture owns one no-access reservation");
+    if (reserved) {
+        const std::array<std::uint32_t, 5> protections{0x1004, 0x1404, 0x8404, 0x2404, 0x2004};
+        bool valid = true;
+        set_last_error(89);
+        crt_error() = 37;
+        const auto saved_errno = errno;
+        errno = E2BIG;
+        for (std::size_t index = 0; index < protections.size(); ++index) {
+            auto *address = reserved + index * page;
+            valid = release(address, page, 0x8002) == 1 && valid;
+            valid = allocate(address, page, 0x20406000, 0x27, protections[index]) == address && valid;
+            const auto window = runtime.memory().window(address);
+            valid = window && window->protection == protections[index] && window->attributes == 0x27 && valid;
+        }
+        check(valid && runtime.memory().reserved_bytes() == page * 6 && get_last_error() == 89 &&
+                  crt_error() == 37 && errno == E2BIG,
+              "all documented reserve-only replacement profiles retain exact policy through the ABI");
+        errno = saved_errno;
+    }
+    MemoryServices capacity(page * 129);
+    const auto many = capacity.reserve_placeholder(page * 129, 7);
+    bool complete = many.address;
+    for (std::size_t index = 0; complete && index < 127; ++index) {
+        complete = capacity.free(static_cast<std::byte *>(many.address) + index * page, page, 0x8002).success;
+    }
+    check(complete &&
+              capacity.free(static_cast<std::byte *>(many.address) + page * 127, page, 0x8002).error ==
+                  error_not_enough_memory &&
+              capacity.reserved_bytes() == page * 129,
+          "placeholder segment count is bounded independently from reservation bytes and child count");
+}
+
 void placeholder_thread_checks() {
     using namespace ambrosia::services;
     constexpr std::size_t page = 65536;
@@ -123,6 +200,8 @@ void placeholder_thread_checks() {
         return;
     }
     auto *child = static_cast<std::byte *>(parent.address) + page;
+    check(memory.free(parent.address, page, 0x8002).success && memory.free(child, page, 0x8002).success,
+          "the racing replacement range has exact explicit placeholder boundaries");
     std::array<AllocationResult, 2> results{};
     std::barrier gate(3);
     auto work = [&](std::size_t index) {

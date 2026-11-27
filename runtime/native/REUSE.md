@@ -414,3 +414,10 @@ keeps one host Mapping with checked nonoverlapping child metadata; Windows
 VirtualAlloc2/VirtualFree splitting code is not ported. Children retain raw policy
 but acquire no physical backing. Populated-parent/partial release remains explicitly
 unsupported. Parent budgets and metadata are serialized under one owner mutex.
+
+Preserve-placeholder splits follow the already pinned Microsoft VirtualFree
+contract at revision 656e9656bfaef34dd29cd7ee9e1146aec17e924c. The original native
+partition keeps one Mapping; bounded prefix/suffix metadata updates are atomic.
+The inherited xmem_exe_calls.md documents all five attribute-0x27 reserve-only
+replacement protection words. No Windows split/VirtualAlloc2 implementation is
+copied, and physical mapping remains a separate component.

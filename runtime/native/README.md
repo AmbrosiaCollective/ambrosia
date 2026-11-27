@@ -1579,3 +1579,10 @@ inaccessible until physical mapping is actually implemented. Owner metadata and
 accounting are serialized; the Windows VirtualAlloc2 splitting implementation is
 not used. See [native graphics host](../../docs/native-graphics-host.md) and task reports
 for measured boot coverage.
+
+Preserve-placeholder prefix/suffix splitting now records explicit aligned segments
+under the same Mapping. Window replacements require an exact segment. Split
+metadata is bounded and transactional; no additional address reservation or budget
+charge is created. Coalescing, middle three-way splits, populated-window conversion
+and partial release remain unsupported. Actual startup completes five replacements
+and reaches XMemMapPhysicalPages; that import is still unimplemented.

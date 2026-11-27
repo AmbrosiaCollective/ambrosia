@@ -10,6 +10,7 @@ constexpr std::uint32_t commit = 0x1000;
 constexpr std::uint32_t reserve = 0x2000;
 constexpr std::uint32_t decommit = 0x4000;
 constexpr std::uint32_t release = 0x8000;
+constexpr std::uint32_t preserve_placeholder = 2;
 
 // Adapted from the inherited xmem.cpp::round_up_size at fca8458.
 bool round_up(std::size_t value, std::size_t alignment, std::size_t &rounded) {
@@ -93,7 +94,7 @@ AllocationResult MemoryServices::allocate(void *address, std::size_t bytes, std:
 }
 
 FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t flags) noexcept {
-    if (flags != release && flags != decommit) {
+    if (flags != release && flags != decommit && flags != (release | preserve_placeholder)) {
         return {false, error_not_supported};
     }
     if (!address || (flags == release && bytes)) {
@@ -108,11 +109,47 @@ FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t 
         }
         --found;
         auto &memory = found->second->memory;
+        if (flags == (release | preserve_placeholder)) {
+            auto &region = *found->second;
+            constexpr std::size_t granularity = 65536;
+            if (pointer % granularity || !bytes || bytes % granularity) {
+                return {false, error_invalid_parameter};
+            }
+            if (!region.xmem || region.xmem->backing != XmemBacking::placeholder) {
+                return {false, error_not_supported};
+            }
+            auto segment = region.placeholder_segments.upper_bound(pointer);
+            if (segment == region.placeholder_segments.begin()) {
+                return {false, error_invalid_address};
+            }
+            --segment;
+            const auto offset = pointer - segment->first;
+            if (offset >= segment->second || bytes >= segment->second || bytes > segment->second - offset ||
+                (offset && bytes != segment->second - offset) ||
+                region.placeholder_windows.contains(segment->first)) {
+                return {false, error_invalid_address};
+            }
+            if (region.placeholder_segments.size() >= 128) {
+                return {false, error_not_enough_memory};
+            }
+            // Prepare both halves before changing ownership metadata. The host
+            // mapping and reservation charge stay intact; no physical pages move.
+            auto replacement = region.placeholder_segments;
+            const auto start = segment->first;
+            const auto size = segment->second;
+            replacement.erase(start);
+            const auto left_bytes = offset ? offset : bytes;
+            replacement.emplace(start, left_bytes);
+            replacement.emplace(start + left_bytes, size - left_bytes);
+            region.placeholder_segments.swap(replacement);
+            return {true, 0};
+        }
         if (flags == release) {
             if (pointer != found->first) {
                 return {false, error_invalid_address};
             }
-            if (!found->second->placeholder_windows.empty()) {
+            if (!found->second->placeholder_windows.empty() ||
+                found->second->placeholder_segments.size() > 1) {
                 return {false, error_not_supported};
             }
             reserved_ -= memory.size();
@@ -205,6 +242,10 @@ AllocationResult MemoryServices::replace_placeholder_window(void *address, std::
         if (offset >= region.memory.size() || rounded > region.memory.size() - offset) {
             return {nullptr, error_invalid_address};
         }
+        const auto segment = region.placeholder_segments.find(pointer);
+        if (segment == region.placeholder_segments.end() || segment->second != rounded) {
+            return {nullptr, error_invalid_address};
+        }
         auto next = region.placeholder_windows.lower_bound(pointer);
         if (next != region.placeholder_windows.end() && rounded > next->first - pointer) {
             return {nullptr, error_invalid_address};
@@ -242,6 +283,9 @@ AllocationResult MemoryServices::reserve_region(std::size_t bytes, std::uint32_t
     if (xmem) {
         xmem->base = base;
         region->xmem = xmem;
+        if (xmem->backing == XmemBacking::placeholder) {
+            region->placeholder_segments.emplace(reinterpret_cast<std::uintptr_t>(base), bytes);
+        }
     }
     if (flags & commit) {
         region->memory.commit(0, bytes, access_for(protection));

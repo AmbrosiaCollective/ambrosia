@@ -746,6 +746,7 @@ extern "C" int ambrosia_native_tests() {
         graphics_transport_rejection_checks();
         xmem_checks();
         placeholder_checks();
+        placeholder_split_checks();
         memory_budget_checks();
         xmem_committed_checks();
         semaphore_checks();
