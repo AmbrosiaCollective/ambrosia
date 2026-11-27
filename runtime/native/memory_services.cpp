@@ -40,6 +40,24 @@ host::Access access_for(std::uint32_t protection) {
 }
 } // namespace
 
+std::optional<XmemRegionInfo> MemoryServices::Region::window_at(std::uintptr_t pointer) const {
+    std::optional<XmemRegionInfo> result;
+    if (xmem && xmem->backing == XmemBacking::physical_window) {
+        result = xmem;
+    } else {
+        auto child = placeholder_windows.upper_bound(pointer);
+        if (child != placeholder_windows.begin()) {
+            --child;
+            result = child->second;
+        }
+    }
+    if (!result) {
+        return std::nullopt;
+    }
+    const auto start = reinterpret_cast<std::uintptr_t>(result->base);
+    return pointer >= start && pointer - start < result->bytes ? result : std::nullopt;
+}
+
 AllocationResult MemoryServices::allocate(void *address, std::size_t bytes, std::uint32_t flags,
                                           std::uint32_t protection) noexcept {
     if (!bytes) {
@@ -370,16 +388,7 @@ MemoryServices::map_physical(void *address,
         }
         --owner;
         auto &region = *owner->second;
-        std::optional<XmemRegionInfo> window;
-        if (region.xmem && region.xmem->backing == XmemBacking::physical_window) {
-            window = region.xmem;
-        } else {
-            auto child = region.placeholder_windows.upper_bound(pointer);
-            if (child != region.placeholder_windows.begin()) {
-                --child;
-                window = child->second;
-            }
-        }
+        const auto window = region.window_at(pointer);
         if (!window) {
             return error_not_supported;
         }
@@ -446,6 +455,46 @@ MemoryServices::map_physical(void *address,
         return 0;
     } catch (...) {
         return error_not_enough_memory;
+    }
+}
+
+PhysicalSpanResult MemoryServices::physical_span(const void *address, std::size_t bytes) const noexcept {
+    const auto pointer = reinterpret_cast<std::uintptr_t>(address);
+    const auto prefix = pointer % physical_page_bytes;
+    constexpr std::size_t maximum_bytes = 16384 * physical_page_bytes;
+    if (!address || !bytes || bytes > maximum_bytes - prefix || bytes > UINTPTR_MAX - pointer) {
+        return {std::nullopt, error_invalid_parameter};
+    }
+    try {
+        const std::lock_guard lock(mutex_);
+        PhysicalSpan span;
+        span.bytes_ = bytes;
+        span.first_page_offset_ = prefix;
+        const auto count = (prefix + bytes - 1) / physical_page_bytes + 1;
+        span.pages_.reserve(count);
+        const auto first_page = pointer - prefix;
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto at = first_page + index * physical_page_bytes;
+            auto owner = regions_.upper_bound(at);
+            if (owner == regions_.begin()) {
+                return {std::nullopt, error_invalid_address};
+            }
+            --owner;
+            const auto &region = *owner->second;
+            const auto offset = at - owner->first;
+            if (offset >= region.memory.size() || physical_page_bytes > region.memory.size() - offset) {
+                return {std::nullopt, error_invalid_address};
+            }
+            const auto window = region.window_at(at);
+            const auto page = region.physical_views.find(offset);
+            if (!window || page == region.physical_views.end() || !page->second) {
+                return {std::nullopt, error_invalid_address};
+            }
+            span.pages_.push_back({page->second, window->attributes, window->protection});
+        }
+        return {std::move(span), 0};
+    } catch (...) {
+        return {std::nullopt, error_not_enough_memory};
     }
 }
 } // namespace ambrosia::services

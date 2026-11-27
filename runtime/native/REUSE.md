@@ -436,3 +436,10 @@ seven-argument shape follows inherited retail_boot_chain.md and FiveStar's pinne
 XboxDeviceMethods.CreatePlacedResource declaration. The diagnostic copies only
 that bounded shape and stops without creating or returning a stand-in resource;
 actual observations remain private. No external resource implementation is ported.
+
+`physical_span` is an original native extension of the existing physical-page
+lease model. It snapshots checked mapped pages across adjacent window ranges,
+retains each page's policy, and optionally creates a read-only CPU alias using
+the existing host SharedBacking adapter. It imports no external implementation.
+Retained physical identity survives changes to original virtual mappings; this
+does not add a GPU buffer, coherency protocol or direct guest GPU access.

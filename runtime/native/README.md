@@ -1590,3 +1590,10 @@ partial unmap/remap and checked rollback through the existing sealed backing.
 Both compiler builds complete five actual mapping calls, then reach Xbox device
 slot133 resource creation. CPU alias coherence does not prove GPU visibility or
 a rendered frame; native GPU resource integration remains the next boundary.
+
+PhysicalSpan snapshots validate a full resource range across mapped child windows,
+retaining every page lease and its raw policy. An optional read-only CPU view uses
+the same backing and outlives original-window unmap/remap or token retirement.
+Spans are bounded to 16,384 pages including an unaligned first-page prefix. Gaps,
+private pages, missing mappings and wrapping extents are rejected. These snapshots
+provide stable input to GPU resource integration; they do not create a GPU resource.

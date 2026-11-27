@@ -534,11 +534,32 @@ Both compiler fixtures verify all scalar/descriptor fields and stack argument
 positions with synthetic values. Both actual requests match: a row-major buffer,
 unit height/depth/mips, unknown format, one sample, no clear value, resource IID
 and initial layout 0xffffffff. The address starts in an owned window, but the
-requested width exceeds that child window. Whole-range mapped coverage is not yet
-proved. The next resource implementation must resolve all constituent ranges and
-their physical leases, and make those bytes visible to a real GPU buffer. A
+requested width exceeds that child window. Task 165 now proves complete mapped
+coverage across adjacent windows in both actual builds. The next resource
+implementation must make those retained bytes visible to a real GPU buffer. A
 disconnected committed buffer would not satisfy this contract.
 
 Both builds pass 1,573 strict regressions; actual diagnostics stop at the intended
 integration boundary without fault, timeout or watchdog failure. No GPU resource,
 game frame or interactive menu is verified by this diagnostic.
+
+## Retained physical spans
+
+MemoryServices can atomically snapshot every mapped 64 KiB page in a bounded
+range, including ranges crossing adjacent child windows. Each entry retains its
+physical lease and original attributes/protection. Null, empty, overflowing,
+private, unmapped and out-of-owner ranges fail as a whole. A span is limited to
+the existing 16,384-page physical pool, including its first-page prefix.
+
+An optional read-only CPU view maps those same leases through the existing host
+adapter. Original unmaps, remaps, token retirement, ID reuse and memory-owner
+destruction do not invalidate retained bytes. View mappings are destroyed before
+leases. No GPU resource or GPU visibility is implied by this CPU view.
+
+Both compilers pass 15 span checks, 20 existing mapping checks, five forced
+rollback checks and 1,573 strict regressions. CMake wiring builds both standalone
+ELFs. Both actual buffer requests have complete mapped coverage across 2,784
+pages, despite exceeding the first child window. Both still stop explicitly at
+the GPU-backed resource boundary. No menu, GPU resource or frame is verified.
+The compiler unit allowlist adds physical_span.cpp; sandbox capabilities and
+resource limits are unchanged.

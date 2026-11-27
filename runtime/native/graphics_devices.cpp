@@ -1293,17 +1293,25 @@ struct GraphicsDevices::State {
             const auto offset = window ? address - reinterpret_cast<std::uintptr_t>(window->base) : 0;
             const auto width = u64(16);
             const bool in_window = window && offset < window->bytes && width <= window->bytes - offset;
+            const auto physical =
+                std::in_range<std::size_t>(width)
+                    ? runtime->memory().physical_span(reinterpret_cast<const void *>(address),
+                                                      static_cast<std::size_t>(width))
+                    : PhysicalSpanResult{std::nullopt, error_invalid_parameter};
             char message[512];
             const auto count = std::snprintf(
                 message, sizeof(message),
                 "TRACE native placed-resource request address_present=%u owned_window=%u width_fits=%u "
                 "dimension=%u alignment=%llu width=%llu height=%u depth=%u mips=%u format=%u "
-                "samples=%u quality=%u layout=%u flags=%x initial=%x clear=%u resource_iid=%u output=1\n",
+                "samples=%u quality=%u layout=%u flags=%x initial=%x clear=%u resource_iid=%u output=1 "
+                "span_complete=%u span_pages=%llu span_error=%u\n",
                 address ? 1u : 0u, window ? 1u : 0u, in_window ? 1u : 0u, u32(0),
                 static_cast<unsigned long long>(u64(8)), static_cast<unsigned long long>(width), u32(24),
                 static_cast<unsigned>(depth_mips[0]), static_cast<unsigned>(depth_mips[1]), u32(32), u32(36),
                 u32(40), u32(44), u32(48), initial_layout, clear ? 1u : 0u,
-                identity == resource_interface ? 1u : 0u);
+                identity == resource_interface ? 1u : 0u, physical.span ? 1u : 0u,
+                static_cast<unsigned long long>(physical.span ? physical.span->pages().size() : 0),
+                physical.error);
             if (count <= 0 || static_cast<std::size_t>(count) >= sizeof(message)) {
                 diagnostics::stop_trace("native placed-resource capture exceeded its text bound", 78);
             }

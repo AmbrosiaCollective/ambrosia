@@ -1,5 +1,6 @@
 #pragma once
 #include "host.h"
+#include "physical_span.h"
 #include <map>
 #include <memory>
 #include <mutex>
@@ -22,6 +23,11 @@ struct AllocationResult {
 
 struct FreeResult {
     bool success = false;
+    std::uint32_t error = 0;
+};
+
+struct PhysicalSpanResult {
+    std::optional<PhysicalSpan> span;
     std::uint32_t error = 0;
 };
 
@@ -67,6 +73,7 @@ class MemoryServices {
     std::optional<XmemRegionInfo> window(const void *address) const;
     std::uint32_t map_physical(void *address,
                                std::span<const std::shared_ptr<const PhysicalPage>> pages) noexcept;
+    PhysicalSpanResult physical_span(const void *address, std::size_t bytes) const noexcept;
 
     std::size_t reserved_bytes() const {
         const std::lock_guard lock(mutex_);
@@ -93,6 +100,8 @@ class MemoryServices {
         bool is_sparse_reservation() const {
             return xmem && xmem->backing != XmemBacking::private_pages;
         }
+
+        std::optional<XmemRegionInfo> window_at(std::uintptr_t pointer) const;
     };
 
     std::map<std::uintptr_t, std::unique_ptr<Region>> regions_;

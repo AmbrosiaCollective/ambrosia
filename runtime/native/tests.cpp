@@ -267,6 +267,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "physical_page_tests.h"
 #include "physical_api_tests.h"
 #include "physical_window_tests.h"
+#include "physical_span_tests.h"
 #include "window_class_tests.h"
 #include "presentation_tests.h"
 #include "window_creation_tests.h"
@@ -1026,6 +1027,18 @@ extern "C" int ambrosia_native_physical_page_tests(int descriptor, bool workers)
         ++failures;
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_physical_span_tests(int descriptor) {
+    checks = failures = 0;
+    try {
+        physical_span_checks(descriptor);
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL physical span exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "physical spans: " << checks << " checks, " << failures << " failures\n";
     return failures ? 1 : 0;
 }
 
