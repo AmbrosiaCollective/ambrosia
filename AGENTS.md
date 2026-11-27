@@ -290,3 +290,12 @@ reuse the original57-check presentation profile with an unused empty frame.
 No guest profile changes or host handle transfers. See native-graphics-host.md
 for protocol/ownership/resource bounds; game integration still needs a reviewed
 combined endpoint profile and typed native frontend.
+
+Task140 validates scripts/run_menu_graphics_isolated.py with its combined
+bootstrap and unchanged reviewed presentation controls.65 guest checks retain
+all57 original controls and add only two pinned regular-file graphics endpoints:
+request RW, response RO in an immutable separate directory. All existing resource,
+RO game, credential, network/process/WX and direct GPU/display restrictions remain.
+A response-RW omission fails before entry. Both native compiler builds pass31
+window and7 real graphics checks with both service mounts. Never escalate this
+launcher, tests or game. Host-only services keep their separate reviewed scope.

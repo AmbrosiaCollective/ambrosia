@@ -103,3 +103,22 @@ are rejected locally. Device release is acknowledged before local ownership is
 cleared. Session destruction requests service shutdown, which closes any device
 left live. If the service has died, destruction remains bounded and its host
 lifetime watchdog owns cleanup. Never infer a game frame from device ownership.
+
+## Combined guest profile
+
+`scripts/run_menu_graphics_isolated.py` accepts explicit `--presentation-root`
+and `--graphics-root` alongside the reviewed source, review and evidence paths.
+The roots must be private and separate from one another and read-only inputs.
+The guest sees only presentation's three files and graphics request RW/response
+RO, each pinned by device/inode, exact bounded size and regular single-link type.
+Directories and metadata stay read-only. The original presentation controls are
+imported from a fixed read-only module without changing its restrictions.
+
+All 65 checks precede entry. The response-writable omission is rejected before
+client execution. GCC and Clang native clients pass their 31 window and seven
+real device transport checks with both service mounts. The guest still sees no
+GPU/display socket or credential. Source/game files stay read-only; network,
+process/exec, WX, arbitrary shared mapping and resource controls are retained.
+This launcher and every guest/test payload run only in the default outer tool
+sandbox. Only the separately reviewed fixed host services use host integration.
+The profile is ready for frontend/game probes; fixtures establish no game frame.
