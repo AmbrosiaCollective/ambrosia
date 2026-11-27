@@ -234,6 +234,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "math_tests.h"
 #include "command_line_tests.h"
 #include "string_tests.h"
+#include "decimal_conversion_tests.h"
 #include "tokenizer_tests.h"
 #include "format_tests.h"
 #include "scan_tests.h"
@@ -723,6 +724,7 @@ extern "C" int ambrosia_native_tests() {
         math_family_checks();
         command_line_checks();
         string_service_checks();
+        decimal_conversion_checks();
         secure_tokenizer_checks();
         format_checks();
         scan_checks();
@@ -924,6 +926,10 @@ extern "C" int ambrosia_native_trace_storage_8g(const char *image, const char *p
 
 extern "C" int ambrosia_native_display_rejection(unsigned mode) {
     return display_rejection_probe(mode);
+}
+
+extern "C" int ambrosia_native_decimal_rejection(unsigned mode) {
+    return decimal_rejection_probe(mode);
 }
 
 extern "C" int ambrosia_native_locale_rejection(unsigned mode) {

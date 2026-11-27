@@ -3,8 +3,10 @@
 #include "service_runtime.h"
 #include "startup_trace.h"
 #include <cerrno>
+#include <charconv>
 #include <cstring>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 
@@ -148,6 +150,62 @@ char *AMBROSIA_GUEST_ABI secure_token(char *text, const char *delimiters, char *
     return token;
 }
 
+std::int32_t AMBROSIA_GUEST_ABI decimal_integer(const char *text) noexcept {
+    const auto saved_error = errno;
+    try {
+        if (!current_runtime()) {
+            throw std::runtime_error("CRT decimal conversion requires a scoped runtime");
+        }
+        if (!text) {
+            dispatch_invalid_parameter();
+            crt_error() = 22;
+            errno = saved_error;
+            return 0;
+        }
+        std::size_t position = 0;
+        const auto read = [&] {
+            if (position == 32768) {
+                throw std::runtime_error("CRT decimal input exceeds the runtime string budget");
+            }
+            return text[position];
+        };
+        auto character = read();
+        // Only the guest C locale is supported: space, tab, LF, VT, FF and CR.
+        while (character == ' ' || (character >= '\t' && character <= '\r')) {
+            ++position;
+            character = read();
+        }
+        const bool negative = character == '-';
+        if (negative || character == '+') {
+            ++position;
+            character = read();
+        }
+        const auto first_digit = position;
+        while (character >= '0' && character <= '9') {
+            ++position;
+            character = read();
+        }
+        std::uint32_t magnitude = 0;
+        const auto conversion = std::from_chars(text + first_digit, text + position, magnitude, 10);
+        std::int32_t result = 0;
+        if (first_digit != position) {
+            const auto maximum = std::uint32_t{INT32_MAX} + static_cast<std::uint32_t>(negative);
+            if (conversion.ec == std::errc::result_out_of_range || magnitude > maximum) {
+                crt_error() = 34;
+                result = negative ? INT32_MIN : INT32_MAX;
+            } else {
+                const auto signed_value = static_cast<std::int64_t>(magnitude);
+                result = static_cast<std::int32_t>(negative ? -signed_value : signed_value);
+            }
+        }
+        diagnostics::write_service_trace("TRACE native CRT decimal converted\n");
+        errno = saved_error;
+        return result;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
+
 void require_byte_or_eof(std::int32_t value) noexcept {
     if (value < -1 || value > 255) {
         diagnostics::stop_trace("C-locale classification requires an unsigned byte or EOF", 78);
@@ -210,6 +268,9 @@ void register_string_services(ImportRegistry &registry) {
         registry.add(module, "isxdigit", reinterpret_cast<std::uintptr_t>(&classify_byte<0x80>));
         registry.add(module, "tolower", reinterpret_cast<std::uintptr_t>(&lowercase_byte));
         registry.add(module, "toupper", reinterpret_cast<std::uintptr_t>(&uppercase_byte));
+    }
+    for (const auto *module : {"ucrtbase.dll", "msvcrt.dll", "api-ms-win-crt-convert-l1-1-0.dll"}) {
+        registry.add(module, "atoi", reinterpret_cast<std::uintptr_t>(&decimal_integer));
     }
 }
 } // namespace ambrosia::services
