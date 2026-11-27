@@ -581,3 +581,32 @@ must still pass vkGetMemoryHostPointerPropertiesEXT, compatible memory-type and
 buffer-binding checks before use. No logical device, allocation, import, buffer,
 queue work or menu is verified by the metadata query. All 43 existing host
 controls and resource bounds remain unchanged.
+
+## Measured host-import backing restriction
+
+The separate fixed `probe_native_memory_host.py` service runs only two synthetic
+host-side probes, with no caller-supplied CPU entrypoint, shaders or game inputs.
+Each creates one 256 KiB buffer and can perform one nonoverlapping 128 KiB copy.
+Its unchanged 43 isolation guards precede Vulkan. Scratch, anonymous allocation
+and imported extent stay bounded; the original zero-lock budget remains.
+
+On the current driver, both backing types pass the pointer/type compatibility
+query. Private anonymous memory then imports, binds, submits and completes a real
+GPU copy with exact CPU byte verification. Shared regular-file memory fails
+allocation with VK_ERROR_OUT_OF_DEVICE_MEMORY. Materializing every imported page
+and a separate bounded 1 MiB lock-budget control do not change the shared-file
+failure. That resource-budget control is preserved as evidence and removed from
+the candidate. The actual probes retain zero locked memory.
+
+The result rules out directly importing the game's current shared physical pool
+on this driver. A buffer bridge must synchronize explicit uploads/downloads
+between retained physical pages and an actual GPU allocation. CPU aliases must
+continue to share physical identity; a disconnected GPU buffer is insufficient.
+The anonymous result proves one synthetic transfer only. It does not implement
+game resources, command replay, shader execution, a frame or the menu.
+
+The separate service retains hidden home/credentials/game data, read-only source,
+allowlisted GPU nodes, network/exec/process/WX denial, exact 32-task pthread
+controls, 64 GiB AS, 8 GiB data and sampled RSS, 8 MiB file/stack, 64 FDs, 40/45 CPU
+seconds and a 30-second parent wall watchdog. No hard RSS or VRAM cap is claimed.
+Original host services and all guest/compiler profiles remain unchanged.

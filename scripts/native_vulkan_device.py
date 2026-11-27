@@ -127,7 +127,8 @@ class NativeDevice:
                                    **dict.fromkeys(required12, 1))
         priority = ctypes.c_float(1.0)
         queue_info = DeviceQueueCreateInfo(2, None, 0, family, 1, ctypes.pointer(priority))
-        if extensions not in ((), ('VK_KHR_external_semaphore_fd',)):
+        if extensions not in ((), ('VK_KHR_external_semaphore_fd',),
+                              ('VK_EXT_external_memory_host',)):
             raise ValueError('unsupported fixed native device extension selection')
         extension_names = (ctypes.c_char_p * len(extensions))(
             *(name.encode('ascii') for name in extensions))
