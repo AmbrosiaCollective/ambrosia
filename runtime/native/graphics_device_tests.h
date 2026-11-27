@@ -255,12 +255,39 @@ void graphics_queue_live_checks(const std::filesystem::path &root, unsigned prob
     set_last_error(79);
     crt_error() = 21;
     for (std::size_t index = 0; index < queues.size(); ++index) {
-        std::array<std::uint32_t, 4> selected{types[index], probe == 2 ? 100u : 0u, 0, 1};
+        std::uint32_t flags = 0;
+        if (probe == 4) {
+            flags = 2;
+        } else if (index == queues.size() - 1) {
+            flags = 1;
+        }
+        std::array<std::uint32_t, 4> selected{types[index], probe == 2 ? 100u : 0u, flags, 1};
         const auto create_selected = index == queues.size() - 1 ? create_queue_x : create_queue;
         check(create_selected(device, selected.data(), &command_queue_interface, &queues[index]) == 0 &&
                   queues[index],
               "supported queue kinds acquire a frontend retaining the real backend queue owner");
     }
+    struct QueueFields {
+        std::array<std::uint32_t, 4> fields;
+    };
+    static_assert(sizeof(QueueFields) == 16);
+    using GetDescription = void *(AMBROSIA_GUEST_ABI *)(void *, void *);
+    using AggregateDescription = QueueFields(AMBROSIA_GUEST_ABI *)(void *);
+    auto *console_table = *static_cast<const std::uintptr_t **>(queues.back());
+    const auto get_description = reinterpret_cast<GetDescription>(console_table[18]);
+    struct GuardedDescription {
+        std::uint64_t before = 0x1234567812345678ull;
+        QueueFields value{};
+        std::uint64_t after = 0x8765432187654321ull;
+    } description_output;
+    check(get_description(queues.back(), &description_output.value) == &description_output.value &&
+              description_output.value.fields == std::array<std::uint32_t, 4>{2, 0, 1, 1} &&
+              description_output.before == 0x1234567812345678ull &&
+              description_output.after == 0x8765432187654321ull,
+          "GetDesc returns the exact retained Xbox queue flags through the SDK C-style ABI");
+    const auto aggregate_description = reinterpret_cast<AggregateDescription>(console_table[18]);
+    check(aggregate_description(queues.back()).fields == std::array<std::uint32_t, 4>{2, 0, 1, 1},
+          "compiled Microsoft aggregate-return ABI receives all four queue fields");
     auto *table = *static_cast<const std::uintptr_t **>(queues[0]);
     const auto query = reinterpret_cast<Query>(table[0]);
     const auto add = reinterpret_cast<Reference>(table[1]);

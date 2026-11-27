@@ -94,10 +94,15 @@ struct GraphicsDevices::State {
     struct QueueDescription {
         std::uint32_t type = 0;
         std::int32_t priority = 0;
+        // DISABLE_GPU_TIMEOUT is retained as queue policy metadata. It does
+        // not remove sandbox deadlines or change the host driver's reset policy.
         std::uint32_t flags = 0, node_mask = 0;
     };
 
     static_assert(sizeof(QueueDescription) == 16);
+    static_assert(offsetof(QueueDescription, priority) == 4);
+    static_assert(offsetof(QueueDescription, flags) == 8);
+    static_assert(offsetof(QueueDescription, node_mask) == 12);
 
     struct Queue {
         const std::uintptr_t *table;
@@ -258,6 +263,35 @@ struct GraphicsDevices::State {
         }
     }
 
+    // A compiled ms_abi aggregate return passes its hidden result first;
+    // the SDK's explicit C-style form passes This first. Resolve only exact
+    // owned identities before writing the caller's 16-byte result.
+    static QueueDescription *AMBROSIA_GUEST_ABI queue_description(void *first, void *second) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto *runtime = current_runtime();
+            if (!runtime || !guest::ThreadContext::current()) {
+                diagnostics::stop_trace("native queue description requires an active guest runtime", 78);
+            }
+            auto &state = *runtime->graphics_devices().state_;
+            std::unique_lock lock(state.mutex);
+            const bool first_receiver = state.queues.contains(static_cast<Queue *>(first));
+            const bool second_receiver = state.queues.contains(static_cast<Queue *>(second));
+            if (first_receiver == second_receiver || !state.backend || !state.device) {
+                diagnostics::stop_trace("native queue description receiver layout is not owned", 78);
+            }
+            auto *pointer = static_cast<Queue *>(first_receiver ? first : second);
+            auto *output = static_cast<QueueDescription *>(first_receiver ? second : first);
+            if (!output) {
+                diagnostics::stop_trace("native queue description requires an output buffer", 78);
+            }
+            std::memcpy(output, &pointer->description, sizeof(*output));
+            return output;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
     template <std::size_t... Slots>
     static std::array<std::uintptr_t, sizeof...(Slots)> make_queue_table(std::index_sequence<Slots...>) {
         return {reinterpret_cast<std::uintptr_t>(&unsupported_queue<Slots>)...};
@@ -270,6 +304,7 @@ struct GraphicsDevices::State {
             result[1] = reinterpret_cast<std::uintptr_t>(&queue_add);
             result[2] = reinterpret_cast<std::uintptr_t>(&queue_release);
             result[7] = reinterpret_cast<std::uintptr_t>(&queue_device);
+            result[18] = reinterpret_cast<std::uintptr_t>(&queue_description);
             return result;
         }();
         return entries;
@@ -299,7 +334,7 @@ struct GraphicsDevices::State {
             if (count > 0 && static_cast<std::size_t>(count) < sizeof(message)) {
                 diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
             }
-            if ((copy.type != 0 && copy.type != 2 && copy.type != 3) || copy.priority || copy.flags ||
+            if ((copy.type != 0 && copy.type != 2 && copy.type != 3) || copy.priority || (copy.flags & ~1u) ||
                 copy.node_mask > 1 || access.state.queues.size() >= 8 || pointer->references == UINT32_MAX) {
                 diagnostics::stop_trace("unsupported native command queue descriptor or ownership capacity",
                                         78);

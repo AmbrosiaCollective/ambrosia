@@ -258,3 +258,18 @@ Both compiler builds pass 20 real queue checks, including console argument guard
 and independent parent references. Both actual games reach the compute-queue
 request with DISABLE_GPU_TIMEOUT flag 1, which remains explicitly unsupported at
 this checkpoint. No heap import, queue work or game frame/menu is established.
+
+## Queue policy and descriptor readback
+
+The PC queue path accepts only flag 0 or DISABLE_GPU_TIMEOUT bit 1 and retains
+its descriptor unchanged. Queue slot 18 GetDesc returns exactly 16 bytes through
+either explicit C-style output or compiled Microsoft aggregate-return ABI. This
+policy metadata does not remove sandbox deadlines or change OS/driver reset
+behavior. Queue execution remains explicitly unsupported.
+
+Both compiler builds pass 22 live queue checks and 1516 strict checks; an unknown
+PC flag 2 is rejected. Both actual games now create two queue frontends and one
+shared fence, then reach another Xbox descriptor with third word 2. Its meaning
+is not established by the public PC enum. A dedicated console descriptor mapping
+needs investigation; do not silently mask those words or claim GPU scheduling.
+No game frame or interactive menu is verified.
