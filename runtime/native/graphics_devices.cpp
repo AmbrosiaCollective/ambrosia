@@ -476,6 +476,13 @@ struct GraphicsDevices::State {
             if (!supports_fence(interface_id)) {
                 return no_interface;
             }
+            char request[128];
+            const auto count =
+                std::snprintf(request, sizeof(request), "TRACE native fence request initial=%llu flags=%x\n",
+                              static_cast<unsigned long long>(initial), flags);
+            if (count > 0 && static_cast<std::size_t>(count) < sizeof(request)) {
+                diagnostics::write_service_trace(std::string_view(request, static_cast<std::size_t>(count)));
+            }
             if (flags || initial == UINT64_MAX) {
                 diagnostics::stop_trace("unsupported native fence creation flags or initial value", 78);
             }
