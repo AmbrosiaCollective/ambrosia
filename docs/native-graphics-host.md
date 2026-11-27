@@ -4,6 +4,11 @@ The Linux guest runtime does not inherit host GPU nodes or display credentials.
 A separate trusted service owns host integration. Game code and ordinary tests
 stay in their reviewed sandbox under the default outer tool sandbox.
 
+Current boot frontier: both GCC and Clang create and close 581 CPU command lists
+and record 10 cache barriers, then stop at Xbox device slot 78 (frame interval).
+The menu and GPU submission remain unverified. The sections below retain the
+staged investigation; the latest implemented cache policy is described last.
+
 The first service, `scripts/query_native_graphics_host.py`, reports Vulkan API
 version, device class, queue availability and selected Vulkan 1.2/1.3 features.
 It accepts no payload or entrypoint, creates no logical device and submits no GPU
@@ -370,3 +375,26 @@ provisional. No register or cache operation is implemented by this diagnostic.
 Next, review conservative whole-memory barrier recording through the canonical
 IR, retain original masks/range metadata, and reject overflow or closed recordings.
 GPU execution must remain explicit until a real submission backend exists.
+
+## Conservative console cache-barrier recording
+
+Extended console list slots 131 and 132 now append a canonical GlobalBarrier with
+ALL synchronization and COMMON access before/after. This adapts TuxBox's public
+Apache-2.0 whole-memory policy; LICENSE.TuxBox and REUSE.md retain its provenance.
+Both original masks, address, byte count and canonical command index are retained
+outside guest-writable storage. Range overflow, closed recordings, changed inline
+bounds and more than 4,096 cache requests fail before an excess command is added.
+Failed IR allocation rolls back its metadata; successful Reset clears both.
+
+This broad CPU recording policy preserves ordering for future replay. It does
+not implement individual hardware cache controls, narrow range synchronization,
+GPU submission or prove console SDK conformance. Existing portable Vulkan replay
+maps these IR scopes to ALL_COMMANDS and MEMORY_READ/WRITE, but that replay path
+has not been executed by this native implementation.
+
+Both compilers pass 1,531 strict checks and 30 live list checks. Targeted closed-list
+and overflowing-range probes stop at the intended boundary. Both actual read-only
+game launches create and close 581 lists, record 10 barriers and reach device slot
+78 without fault, timeout or watchdog failure. Xbox slot 78 is the inherited HLE's
+SetFrameIntervalX override, distinct from its public PC SDK slot. Raw game evidence
+remains private. No guest/host/compiler capability or dependency changed.

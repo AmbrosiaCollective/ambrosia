@@ -377,3 +377,12 @@ and uses this project's unchanged canonical `runtime/src/command_list.h` IR.
 Equal owned write/end bounds select virtual-method fallback; changed bounds
 terminate before Close/Reset instead of silently discarding unknown commands.
 CPU recording lifetime does not imply GPU submission support.
+
+The cache-barrier range validation and whole-memory ALL/COMMON fallback in
+`graphics_recording.cpp` adapt the policy of `extended_cache_barrier` and
+`global_cache_barrier` in [TuxBox commands.rs](https://github.com/brcly/TuxBox/blob/8661492d74886bc99ab7816745999bc02e2f393d/runtime/d3d12/src/commands.rs).
+Apache-2.0 terms are preserved in LICENSE.TuxBox. This adaptation replaces its
+Windows COM submission with canonical CPU IR recording, retains original request
+metadata and adds bounded ownership, transition and atomic failure handling.
+No TuxBox runtime, compiler or shader code is built or executed. Shader compiler
+notices are unrelated to this command-recording policy and no shader source is used.

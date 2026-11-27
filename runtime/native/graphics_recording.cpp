@@ -4,6 +4,7 @@
 #include <array>
 #include <cstring>
 #include <stdexcept>
+#include <vector>
 
 namespace ambrosia::services {
 struct GraphicsRecording::State {
@@ -11,6 +12,7 @@ struct GraphicsRecording::State {
     // deliberately outside this mapping so those writes cannot corrupt them.
     host::Mapping object{console_list_object_bytes};
     CommandList commands;
+    std::vector<RecordedCacheBarrier> cache_barriers;
 
     void store(std::size_t offset, std::uintptr_t value) {
         std::memcpy(object.data() + offset, &value, sizeof(value));
@@ -78,11 +80,38 @@ bool GraphicsRecording::reset() {
         return false;
     }
     state_->install_bounds();
+    state_->cache_barriers.clear();
     return true;
 }
 
 bool GraphicsRecording::closed() const {
     return state_->commands.closed();
+}
+
+bool GraphicsRecording::cache_barrier(const ConsoleCacheBarrier &request) {
+    state_->require_bounds();
+    if (closed() || request.address > UINT64_MAX - request.bytes ||
+        state_->cache_barriers.size() >= console_cache_barrier_limit) {
+        return false;
+    }
+    // Adapt TuxBox's full-memory fallback, not its Windows COM implementation.
+    // Keep both masks and the range for future narrower lowering. See REUSE.md.
+    const GlobalBarrier barrier{d3d12_sync::all, d3d12_sync::all, d3d12_access::common, d3d12_access::common};
+    state_->cache_barriers.push_back({request, state_->commands.commands().size()});
+    try {
+        if (state_->commands.barrier(barrier)) {
+            return true;
+        }
+    } catch (...) {
+        state_->cache_barriers.pop_back();
+        throw;
+    }
+    state_->cache_barriers.pop_back();
+    return false;
+}
+
+std::span<const RecordedCacheBarrier> GraphicsRecording::cache_barriers() const {
+    return state_->cache_barriers;
 }
 
 CommandList &GraphicsRecording::command_ir() {

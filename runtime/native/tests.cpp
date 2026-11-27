@@ -736,6 +736,7 @@ extern "C" int ambrosia_native_tests() {
         graphics_creation_checks();
         graphics_option_checks();
         graphics_recording_checks();
+        graphics_cache_recording_checks();
         graphics_transport_rejection_checks();
         xmem_checks();
         memory_budget_checks();
@@ -1082,7 +1083,7 @@ extern "C" int ambrosia_native_presentation_tests() {
 extern "C" int ambrosia_native_graphics_list_tests(const char *root, unsigned probe) {
     checks = failures = 0;
     try {
-        if (!root || probe > 6) {
+        if (!root || probe > 7) {
             return 2;
         }
         graphics_list_live_checks(root, probe);

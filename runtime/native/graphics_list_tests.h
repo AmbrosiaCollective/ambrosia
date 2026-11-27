@@ -42,6 +42,60 @@ void graphics_recording_checks() {
           "unexpected inline buffer progress fails before close and preserves known IR records");
 }
 
+void graphics_cache_recording_checks() {
+    using namespace ambrosia;
+    using namespace services;
+    const std::array<std::uintptr_t, 1> table{1};
+    GraphicsRecording recording(table.data());
+    const ConsoleCacheBarrier first{5, 2, 4096, 128};
+    check(recording.cache_barrier(first), "console cache request records through canonical IR");
+    const auto current_commands = [&recording] { return recording.command_ir().commands(); };
+    const auto *barrier =
+        current_commands().empty() ? nullptr : std::get_if<GlobalBarrier>(&current_commands().front());
+    check(barrier && barrier->sync_before == d3d12_sync::all && barrier->sync_after == d3d12_sync::all &&
+              barrier->access_before == d3d12_access::common &&
+              barrier->access_after == d3d12_access::common &&
+              recording.cache_barriers().front().request == first &&
+              recording.cache_barriers().front().command_index == 0,
+          "cache fallback retains exact masks/range and records full-memory synchronization");
+    Dispatch dispatch{};
+    dispatch.pipeline = 1;
+    dispatch.x = 1;
+    dispatch.y = 1;
+    dispatch.z = 1;
+    check(recording.command_ir().dispatch(dispatch) && recording.cache_barrier({1, 4, 0, 256}) &&
+              current_commands().size() == 3 && recording.cache_barriers()[1].command_index == 2,
+          "cache barriers preserve ordering with other canonical commands");
+    check(!recording.cache_barrier({5, 2, UINT64_MAX, 1}) && current_commands().size() == 3 &&
+              recording.cache_barriers().size() == 2,
+          "range overflow rejects atomically without losing preceding commands or metadata");
+    check(recording.close() && !recording.cache_barrier(first) && current_commands().size() == 3 &&
+              recording.cache_barriers().size() == 2,
+          "closed recordings retain cache metadata and refuse new work");
+    check(recording.reset() && current_commands().empty() && recording.cache_barriers().empty() &&
+              recording.cache_barrier({0, 0, UINT64_MAX, 0}),
+          "Reset clears metadata and an empty nonoverflowing range retains conservative synchronization");
+    bool within_capacity = true;
+    for (std::size_t index = 1; index < console_cache_barrier_limit; ++index) {
+        within_capacity = recording.cache_barrier(first) && within_capacity;
+    }
+    check(within_capacity && !recording.cache_barrier(first) &&
+              current_commands().size() == console_cache_barrier_limit &&
+              recording.cache_barriers().size() == console_cache_barrier_limit,
+          "the bounded cache record budget fails before appending an excess command");
+    auto *object = static_cast<std::byte *>(recording.guest_object());
+    std::uintptr_t changed = 0;
+    std::memcpy(object + console_list_write_offset, &changed, sizeof(changed));
+    bool rejected = false;
+    try {
+        (void)recording.cache_barrier(first);
+    } catch (const std::runtime_error &error) {
+        rejected = std::string_view(error.what()).find("bounds changed") != std::string_view::npos;
+    }
+    check(rejected && current_commands().size() == console_cache_barrier_limit,
+          "unknown inline buffer progress fails before cache recording mutates IR");
+}
+
 void graphics_list_live_checks(const std::filesystem::path &root, unsigned probe = 0) {
     using namespace ambrosia;
     using namespace services;
@@ -116,15 +170,22 @@ void graphics_list_live_checks(const std::filesystem::path &root, unsigned probe
     const auto get_type = reinterpret_cast<Reference>(table[8]);
     const auto close = reinterpret_cast<Close>(table[9]);
     const auto reset = reinterpret_cast<Reset>(table[10]);
+    using CacheBarrier =
+        void(AMBROSIA_GUEST_ABI *)(void *, std::uint32_t, std::uint32_t, std::uint64_t, std::uint64_t);
+    const auto cache_barrier = reinterpret_cast<CacheBarrier>(table[132]);
     if (probe == 6) {
-        diagnostics::ImportStops stops;
-        stops.seal();
-        diagnostics::ImportStopScope trace(stops);
-        using Capture =
-            void(AMBROSIA_GUEST_ABI *)(void *, std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t);
-        reinterpret_cast<Capture>(table[132])(list, 0x12345678u, 0xabcdef01u, 0, 0xffffffffff00ull);
-        throw std::runtime_error("register diagnostic unexpectedly returned");
+        (void)close(list);
+        cache_barrier(list, 5, 2, 0, 256);
+        throw std::runtime_error("closed cache barrier unexpectedly recorded");
     }
+    if (probe == 7) {
+        cache_barrier(list, 5, 2, UINT64_MAX, 1);
+        throw std::runtime_error("overflowing cache range unexpectedly recorded");
+    }
+    cache_barrier(list, 5, 2, 0, 256);
+    reinterpret_cast<CacheBarrier>(table[131])(list, 1, 4, 4096, 128);
+    check(errno == E2BIG && get_last_error() == 89 && crt_error() == 37,
+          "both console cache slots preserve native and guest errors while recording");
     if (probe == 1 || probe == 5) {
         const auto unsupported = probe == 1 ? 12u : 599u;
         reinterpret_cast<Close>(table[unsupported])(list);
