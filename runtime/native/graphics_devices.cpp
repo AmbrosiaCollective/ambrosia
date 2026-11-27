@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -41,6 +42,19 @@ constexpr std::array<Guid, 13> supported_interfaces{{
     {0x5405c344, 0xd457, 0x444e, {0xb4, 0xdd, 0x23, 0x66, 0xe4, 0x5a, 0xee, 0x39}}, // ID3D12Device11
 }};
 
+constexpr Guid pageable_interface{
+    0x63ee58fb, 0x1268, 0x4835, {0x86, 0xda, 0xf0, 0x08, 0xce, 0x62, 0xf0, 0xd6}};
+constexpr Guid device_child_interface{
+    0x905db94b, 0xa00c, 0x4140, {0x9d, 0xf5, 0x2b, 0x64, 0xca, 0x9e, 0xa3, 0x57}};
+
+bool supports_fence(const void *interface_id) {
+    Guid requested;
+    std::memcpy(&requested, interface_id, sizeof(requested));
+    return requested == unknown_interface_id || requested == supported_interfaces.front() ||
+           requested == device_child_interface || requested == pageable_interface ||
+           requested == fence_interface;
+}
+
 bool supports(const void *interface_id) {
     Guid requested;
     std::memcpy(&requested, interface_id, sizeof(requested));
@@ -60,11 +74,20 @@ struct GraphicsDevices::State {
         std::optional<GraphicsMemoryPlan> memory_plan;
     };
 
+    struct Fence {
+        const std::uintptr_t *table;
+        std::uint32_t references = 1;
+        std::uint32_t real = 0;
+        Device *parent = nullptr;
+    };
+
     static_assert(offsetof(Device, table) == 0);
+    static_assert(offsetof(Fence, table) == 0);
 
     std::mutex mutex;
     std::unique_ptr<host::Graphics> backend;
     std::unique_ptr<Device> device;
+    std::map<Fence *, std::unique_ptr<Fence>> fences;
 
     struct Access {
         State &state;
@@ -82,6 +105,208 @@ struct GraphicsDevices::State {
             diagnostics::stop_trace("native graphics device is not owned by this runtime", 78);
         }
         return {state, std::move(lock)};
+    }
+
+    static Access owned_fence(Fence *pointer) {
+        auto *runtime = current_runtime();
+        if (!runtime || !guest::ThreadContext::current()) {
+            diagnostics::stop_trace("native fence requires an active guest runtime", 78);
+        }
+        auto &state = *runtime->graphics_devices().state_;
+        std::unique_lock lock(state.mutex);
+        if (!pointer || !state.fences.contains(pointer) || !state.backend || !state.device) {
+            diagnostics::stop_trace("native fence is not owned by this runtime", 78);
+        }
+        return {state, std::move(lock)};
+    }
+
+    static void release_device(State &state, Device &pointer) {
+        if (pointer.references > 1) {
+            --pointer.references;
+        } else {
+            state.backend->destroy_device(pointer.real.id);
+            state.device.reset();
+        }
+    }
+
+    template <std::size_t Slot> static std::uintptr_t AMBROSIA_GUEST_ABI unsupported_fence(Fence *) noexcept {
+        diagnostics::stop_trace("unsupported native ID3D12Fence slot " + std::to_string(Slot), 78);
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI fence_query(Fence *pointer, const void *interface_id,
+                                                       void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_fence(pointer);
+            if (!supports_fence(interface_id)) {
+                return no_interface;
+            }
+            increment_fence(*pointer);
+            *output = pointer;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static void increment_fence(Fence &pointer) {
+        if (pointer.references == UINT32_MAX) {
+            diagnostics::stop_trace("native fence reference count exhausted", 78);
+        }
+        ++pointer.references;
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI fence_add(Fence *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_fence(pointer);
+            increment_fence(*pointer);
+            return pointer->references;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI fence_release(Fence *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_fence(pointer);
+            const auto remaining = pointer->references - 1;
+            if (remaining) {
+                pointer->references = remaining;
+            } else {
+                access.state.backend->destroy_fence(pointer->real);
+                auto *parent = pointer->parent;
+                access.state.fences.erase(pointer);
+                release_device(access.state, *parent);
+            }
+            return remaining;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI fence_device(Fence *pointer, const void *interface_id,
+                                                        void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_fence(pointer);
+            if (!supports(interface_id)) {
+                return no_interface;
+            }
+            increment(*pointer->parent);
+            *output = pointer->parent;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint64_t AMBROSIA_GUEST_ABI fence_completed(Fence *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_fence(pointer);
+            return access.state.backend->completed_fence(pointer->real);
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI fence_signal(Fence *pointer, std::uint64_t value) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_fence(pointer);
+            if (value == UINT64_MAX) {
+                return static_cast<std::int32_t>(0x80070057u);
+            }
+            const auto completed = access.state.backend->completed_fence(pointer->real);
+            if (value < completed) {
+                diagnostics::stop_trace("native timeline cannot rewind a D3D12 fence", 78);
+            }
+            access.state.backend->signal_fence(pointer->real, value);
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    template <std::size_t... Slots>
+    static std::array<std::uintptr_t, sizeof...(Slots)> make_fence_table(std::index_sequence<Slots...>) {
+        return {reinterpret_cast<std::uintptr_t>(&unsupported_fence<Slots>)...};
+    }
+
+    static const auto &fence_table() {
+        static const auto entries = [] {
+            auto result = make_fence_table(std::make_index_sequence<11>{});
+            result[0] = reinterpret_cast<std::uintptr_t>(&fence_query);
+            result[1] = reinterpret_cast<std::uintptr_t>(&fence_add);
+            result[2] = reinterpret_cast<std::uintptr_t>(&fence_release);
+            result[7] = reinterpret_cast<std::uintptr_t>(&fence_device);
+            result[8] = reinterpret_cast<std::uintptr_t>(&fence_completed);
+            result[10] = reinterpret_cast<std::uintptr_t>(&fence_signal);
+            return result;
+        }();
+        return entries;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI create_fence(Device *pointer, std::uint64_t initial,
+                                                        std::uint32_t flags, const void *interface_id,
+                                                        void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned(pointer);
+            if (!supports_fence(interface_id)) {
+                return no_interface;
+            }
+            if (flags || initial == UINT64_MAX) {
+                diagnostics::stop_trace("unsupported native fence creation flags or initial value", 78);
+            }
+            if (pointer->references == UINT32_MAX || access.state.fences.size() >= 32) {
+                diagnostics::stop_trace("native fence ownership capacity exhausted", 78);
+            }
+            auto fence = std::make_unique<Fence>();
+            fence->table = fence_table().data();
+            fence->parent = pointer;
+            auto *result = fence.get();
+            // Allocate map ownership before asking the host for a real semaphore.
+            auto [position, inserted] = access.state.fences.emplace(result, std::move(fence));
+            if (!inserted) {
+                throw std::runtime_error("native fence object ownership collision");
+            }
+            try {
+                result->real = access.state.backend->create_fence(initial);
+            } catch (...) {
+                access.state.fences.erase(position);
+                throw;
+            }
+            ++pointer->references; // The child retains its real parent device.
+            *output = result;
+            diagnostics::write_service_trace("TRACE native real timeline fence created\n");
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
     }
 
     template <std::size_t Slot> static std::uintptr_t AMBROSIA_GUEST_ABI unsupported(Device *) noexcept {
@@ -134,12 +359,7 @@ struct GraphicsDevices::State {
         try {
             auto access = owned(pointer);
             const auto remaining = pointer->references - 1;
-            if (remaining) {
-                pointer->references = remaining;
-            } else {
-                access.state.backend->destroy_device(pointer->real.id);
-                access.state.device.reset();
-            }
+            release_device(access.state, *pointer);
             return remaining;
         } catch (const std::exception &error) {
             diagnostics::stop_trace(error.what(), 78);
@@ -171,6 +391,7 @@ struct GraphicsDevices::State {
             result[1] = reinterpret_cast<std::uintptr_t>(&add_reference);
             result[2] = reinterpret_cast<std::uintptr_t>(&release);
             result[7] = reinterpret_cast<std::uintptr_t>(&node_count);
+            result[36] = reinterpret_cast<std::uintptr_t>(&create_fence);
             return result;
         }();
         return entries;

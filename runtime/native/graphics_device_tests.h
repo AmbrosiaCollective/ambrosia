@@ -81,3 +81,81 @@ void graphics_device_live_checks(const std::filesystem::path &root, unsigned pro
     check(release(device) == 0, "recreated devices also release their native ownership");
     errno = saved_errno;
 }
+
+void graphics_fence_live_checks(const std::filesystem::path &root, unsigned probe) {
+    using namespace ambrosia;
+    using namespace services;
+    Runtime runtime;
+    Scope scope(runtime);
+    guest::ThreadContext context;
+    auto activation = context.activate();
+    runtime.graphics_devices().bind(root);
+    using CreateDevice = std::int32_t(AMBROSIA_GUEST_ABI *)(void *, const void *, const void *, void **);
+    const auto create_device = reinterpret_cast<CreateDevice>(
+        runtime.resolve(service_symbol("D3D12XboxCreateDevice", "d3d12_xs.dll")));
+    void *device = nullptr;
+    check(create_device(nullptr, nullptr, &device11_interface, &device) == 0 && device,
+          "fence fixture owns a real native device");
+    auto *device_table = *static_cast<const std::uintptr_t **>(device);
+    using CreateFence =
+        std::int32_t(AMBROSIA_GUEST_ABI *)(void *, std::uint64_t, std::uint32_t, const void *, void **);
+    using Query = std::int32_t(AMBROSIA_GUEST_ABI *)(void *, const void *, void **);
+    using Reference = std::uint32_t(AMBROSIA_GUEST_ABI *)(void *);
+    using Counter = std::uint64_t(AMBROSIA_GUEST_ABI *)(void *);
+    using Signal = std::int32_t(AMBROSIA_GUEST_ABI *)(void *, std::uint64_t);
+    const auto create_fence = reinterpret_cast<CreateFence>(device_table[36]);
+    const auto release_device = reinterpret_cast<Reference>(device_table[2]);
+    const auto saved_errno = errno;
+    errno = E2BIG;
+    set_last_error(71);
+    crt_error() = 19;
+    check(create_fence(device, 7, 0, reinterpret_cast<const void *>(1), nullptr) == pointer_error,
+          "CreateFence validates output before reading interface identity");
+    void *fence = reinterpret_cast<void *>(1);
+    check(create_fence(device, 7, 0, nullptr, &fence) == pointer_error && !fence,
+          "CreateFence clears only the output before rejecting a null IID");
+    const Guid unsupported{};
+    check(create_fence(device, 7, 0, &unsupported, &fence) == no_interface && !fence,
+          "CreateFence rejects unsupported identity without making a host semaphore");
+    check(create_fence(device, 7, probe == 3 ? 1 : 0, &fence_interface, &fence) == 0 && fence,
+          "CreateFence publishes a real timeline-backed guest fence");
+    auto *table = *static_cast<const std::uintptr_t **>(fence);
+    const auto query = reinterpret_cast<Query>(table[0]);
+    const auto add = reinterpret_cast<Reference>(table[1]);
+    const auto release = reinterpret_cast<Reference>(table[2]);
+    const auto get_device = reinterpret_cast<Query>(table[7]);
+    const auto completed = reinterpret_cast<Counter>(table[8]);
+    const auto signal = reinterpret_cast<Signal>(table[10]);
+    if (probe == 1) {
+        reinterpret_cast<Reference>(table[9])(fence);
+        throw std::runtime_error("unsupported fence event method unexpectedly returned");
+    }
+    if (probe == 2) {
+        (void)signal(fence, 6);
+        throw std::runtime_error("decreasing timeline fence signal unexpectedly returned");
+    }
+    check(completed(fence) == 7, "fence completion reads the actual initial Vulkan counter");
+    check(signal(fence, std::uint64_t{1} << 40) == 0 && completed(fence) == (std::uint64_t{1} << 40),
+          "fence host signal and completion preserve values above 32 bits");
+    check(signal(fence, std::uint64_t{1} << 40) == 0 &&
+              signal(fence, UINT64_MAX) == static_cast<std::int32_t>(0x80070057u) &&
+              completed(fence) == (std::uint64_t{1} << 40),
+          "equal signals are satisfied and reserved values fail without changing the counter");
+    void *queried = nullptr;
+    check(query(fence, &fence_interface, &queried) == 0 && queried == fence && release(queried) == 1 &&
+              add(fence) == 2 && release(fence) == 1,
+          "fence identity and reference methods preserve real ownership");
+    check(release_device(device) == 1,
+          "a live fence retains its parent after the guest releases its device reference");
+    check(get_device(fence, &device11_interface, &queried) == 0 && queried == device &&
+              release_device(queried) == 1,
+          "GetDevice returns the retained real parent with a new guest reference");
+    check(errno == E2BIG && get_last_error() == 71 && crt_error() == 19,
+          "fence ABI methods preserve host and guest error state");
+    check(release(fence) == 0, "final fence release frees its semaphore and last parent reference");
+    device = nullptr;
+    check(create_device(nullptr, nullptr, &device11_interface, &device) == 0 && device &&
+              release_device(device) == 0,
+          "fence-child teardown releases the device backend for actual recreation");
+    errno = saved_errno;
+}

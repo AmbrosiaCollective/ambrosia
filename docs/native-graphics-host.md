@@ -163,3 +163,21 @@ The isolated client verifies real counters, high values, host signals, ownership
 recreation and cleanup with no direct GPU access. CPU ABI/protocol and public C
 layout checks precede hardware use. Native guest CreateFence wiring is separate;
 this service alone does not render or verify a game frame/menu.
+
+## Native guest fence frontend
+
+Device slot36 creates an owned ID3D12Fence with a real host timeline semaphore.
+The 11-slot guest ABI implements identity/refcounts/GetDevice/completed/hostsignal.
+A child retains its parent; final release destroys the semaphore before releasing
+the parent reference. Counters come from Vulkan, including values above32bits.
+Equal signals succeed, reserved values fail, and decreasing signals stop explicitly.
+Shared flags, event completion and other unimplemented methods stop explicitly.
+There is no GPU queue submission or complete D3D12 fence conformance claim.
+
+Slot numbers must be checked against the pinned SDK independently of fixtures.
+An initial mistaken slot26 assignment also existed in its fixture, so a synthetic
+pass missed it and the actual diagnostic faulted. The mapping is corrected:
+slot26 is GetCustomHeapProperties and slot36 is CreateFence. Six independent public
+SDK slot checks now pass. Corrected GCC/Clang builds pass1516 strict and14 real
+fence checks each; both game runs stop cleanly at the unimplemented heap-properties
+call, with no fault. Fence support is upcoming coverage, not progress past slot26.

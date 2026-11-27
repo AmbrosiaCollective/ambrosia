@@ -306,3 +306,9 @@ counter query, host signal and destruction are added; no shaders/queue submissio
 CPU guest payloads or direct guest GPU access.32 live/128 lifetime nonreused fence
 IDs; explicit rewind/reserved-value rejection. Original services/profiles stay
 unchanged. See docs/native-graphics-host.md; game/test execution never escalates.
+
+For manual COM interfaces, verify every implemented slot and struct-return ABI
+against pinned public declarations before use. Validate fixture call indices
+independently too: implementation and fixture can share the same wrong numeric
+slot and falsely pass. Preserve incorrect diagnostic evidence, correct the mapping,
+repeat affected builds/checks and actual startup before claiming progress.

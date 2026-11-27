@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstddef>
 #include <mutex>
+#include <set>
 #include <stdexcept>
 #include <thread>
 #ifdef __linux__
@@ -23,12 +24,14 @@ constexpr std::uint32_t minimum_api = (1u << 22) | (3u << 12);
 struct Packet {
     std::array<char, 8> signature = magic;
     std::uint32_t sequence = 0, operation = 0, owner = 0;
-    std::array<std::uint32_t, 5> unused{};
+    std::uint32_t payload = 0;
+    std::uint64_t value = 0;
+    std::array<std::uint32_t, 2> unused{};
     std::uint32_t status = 0, api_version = 0;
     std::array<std::uint32_t, 4> reserved{};
 };
 
-static_assert(sizeof(Packet) == 64 && offsetof(Packet, status) == 40);
+static_assert(sizeof(Packet) == 64 && offsetof(Packet, status) == 40 && offsetof(Packet, value) == 24);
 static_assert(std::endian::native == std::endian::little);
 
 #ifdef __linux__
@@ -55,6 +58,8 @@ struct Graphics::Transport {
     std::mutex mutex;
     std::uint32_t sequence = 0;
     GraphicsDevice owned;
+    std::set<std::uint32_t> fences;
+    std::uint32_t last_fence = 0;
     int request = -1, response = -1;
     bool ready = false;
 
@@ -76,7 +81,7 @@ struct Graphics::Transport {
 #endif
     }
 
-    Packet exchange(std::uint32_t operation, std::uint32_t owner) {
+    Packet exchange(std::uint32_t operation, std::uint32_t owner, std::uint64_t value = 0) {
 #ifdef __linux__
         if (sequence >= 1024) {
             throw std::runtime_error("native graphics request budget exhausted");
@@ -85,6 +90,7 @@ struct Graphics::Transport {
         command.sequence = ++sequence;
         command.operation = operation;
         command.owner = owner;
+        command.value = value;
         transfer(request, command, true);
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
         Packet reply;
@@ -98,13 +104,24 @@ struct Graphics::Transport {
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        if (reply.signature != magic || reply.operation != operation || reply.status ||
-            reply.unused != std::array<std::uint32_t, 5>{} ||
+        if (reply.signature != magic || reply.operation != operation || reply.status || reply.payload ||
+            reply.unused != std::array<std::uint32_t, 2>{} ||
             reply.reserved != std::array<std::uint32_t, 4>{}) {
             throw std::runtime_error(
                 "native graphics service rejected the request or returned invalid fields");
         }
-        if (operation == 1 || operation == 3) {
+        if (operation != 6 && reply.value) {
+            throw std::runtime_error("unexpected native graphics response value");
+        }
+        if (operation == 5) {
+            if (!reply.owner || reply.owner > 128 || reply.api_version) {
+                throw std::runtime_error("invalid native fence creation reply");
+            }
+        } else if (operation >= 6 && operation <= 8) {
+            if (reply.owner != owner || reply.api_version || reply.value == UINT64_MAX) {
+                throw std::runtime_error("invalid native fence operation reply");
+            }
+        } else if (operation == 1 || operation == 3) {
             if (!reply.owner || reply.owner > 64 || reply.api_version < minimum_api ||
                 (operation == 3 && reply.owner != owner)) {
                 throw std::runtime_error("invalid native graphics device ownership reply");
@@ -116,6 +133,7 @@ struct Graphics::Transport {
 #else
         (void)operation;
         (void)owner;
+        (void)value;
         throw std::runtime_error("native graphics file transport is unsupported on this host");
 #endif
     }
@@ -193,7 +211,55 @@ void Graphics::destroy_device(std::uint32_t id) {
     if (!id || id != transport_->owned.id) {
         throw std::runtime_error("native graphics device is not owned by this session");
     }
+    if (!transport_->fences.empty()) {
+        throw std::runtime_error("native graphics device still owns live fences");
+    }
     (void)transport_->exchange(2, id);
     transport_->owned = {};
 }
+
+std::uint32_t Graphics::create_fence(std::uint64_t initial) {
+    const std::lock_guard lock(transport_->mutex);
+    if (!transport_->owned.id || initial == UINT64_MAX || transport_->fences.size() >= 32) {
+        throw std::runtime_error("native fence creation requires an owned device and bounded value/capacity");
+    }
+    const auto reply = transport_->exchange(5, transport_->owned.id, initial);
+    if (reply.owner <= transport_->last_fence) {
+        throw std::runtime_error("native fence service reused an ownership ID");
+    }
+    try {
+        transport_->fences.insert(reply.owner);
+    } catch (...) {
+        (void)transport_->exchange(8, reply.owner);
+        throw;
+    }
+    transport_->last_fence = reply.owner;
+    return reply.owner;
+}
+
+std::uint64_t Graphics::completed_fence(std::uint32_t id) {
+    const std::lock_guard lock(transport_->mutex);
+    if (!transport_->fences.contains(id)) {
+        throw std::runtime_error("native fence is not owned by this session");
+    }
+    return transport_->exchange(6, id).value;
+}
+
+void Graphics::signal_fence(std::uint32_t id, std::uint64_t value) {
+    const std::lock_guard lock(transport_->mutex);
+    if (!transport_->fences.contains(id) || value == UINT64_MAX) {
+        throw std::runtime_error("native fence signal requires an owned fence and bounded value");
+    }
+    (void)transport_->exchange(7, id, value);
+}
+
+void Graphics::destroy_fence(std::uint32_t id) {
+    const std::lock_guard lock(transport_->mutex);
+    if (!transport_->fences.contains(id)) {
+        throw std::runtime_error("native fence is not owned by this session");
+    }
+    (void)transport_->exchange(8, id);
+    transport_->fences.erase(id);
+}
+
 } // namespace ambrosia::host
