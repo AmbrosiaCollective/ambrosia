@@ -4,9 +4,11 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace ambrosia::services {
+class PhysicalPage;
 inline constexpr std::uint32_t error_invalid_function = 1;
 inline constexpr std::uint32_t error_not_enough_memory = 8;
 inline constexpr std::uint32_t error_not_supported = 50;
@@ -63,6 +65,8 @@ class MemoryServices {
                                    std::size_t guest_page_bytes) noexcept;
     std::optional<XmemRegionInfo> xmem_region(const void *address) const;
     std::optional<XmemRegionInfo> window(const void *address) const;
+    std::uint32_t map_physical(void *address,
+                               std::span<const std::shared_ptr<const PhysicalPage>> pages) noexcept;
 
     std::size_t reserved_bytes() const {
         const std::lock_guard lock(mutex_);
@@ -74,6 +78,8 @@ class MemoryServices {
                                     std::optional<XmemRegionInfo> xmem);
 
     struct Region {
+        // Declared before Mapping so mapped views are destroyed before leases.
+        std::map<std::size_t, std::shared_ptr<const PhysicalPage>> physical_views;
         host::Mapping memory;
         std::vector<std::uint32_t> protection;
         std::optional<XmemRegionInfo> xmem;

@@ -7,7 +7,7 @@ stay in their reviewed sandbox under the default outer tool sandbox.
 Current boot frontier: both GCC and Clang create and close 581 CPU command lists,
 record 10 cache barriers, configure the frame timer and schedule two events, then
 pass the first descriptor-increment query, split the placeholder and replace its
-five windows, then stop at XMemMapPhysicalPages after allocating physical tokens.
+five windows and map their physical pages, then stop at Xbox device slot 133.
 The menu and GPU submission
 remain unverified. The sections below retain the staged investigation; later
 sections describe the current implementations.
@@ -494,3 +494,30 @@ and a three-check duplicate-replacement race. Both actual games now complete the
 split sequence and five replacements, allocate 2,960 page tokens and stop at
 xmem.dll!XMemMapPhysicalPages without timeout, fault or watchdog failure. Tokens
 are owned allocations, not yet mapped game memory or GPU-visible backing.
+
+## Leased physical-window aliases
+
+XMemMapPhysicalPages now maps prevalidated owned page leases into aligned window
+ranges through the existing SharedBacking adapter. Null arrays and zero tokens
+unmap pages back to inaccessible anonymous reservation. Counts, destinations and
+all nonzero token IDs validate before any mapping changes. Ordinary private
+allocations and gaps cannot be used as physical windows. At most 16,384 mapped
+pages are retained per owner, under the existing sealed 1 GiB backing profile.
+
+Mapped leases outlive token release and are destroyed after their Mapping views.
+Reused token IDs therefore cannot silently recycle an older alias's backing.
+Remaps prepare metadata before host operations; failure restores the original
+mapped prefix and failed-page view while retaining old/new leases. If rollback
+itself fails, execution terminates instead of continuing with unknown aliases.
+The inherited CPU-renderer policy projects CPU-noaccess GPU windows to RW staging;
+raw console protection is retained, read-only windows stay read-only, and no
+execute permission or GPU-coherence claim is added.
+
+Both compilers pass 1,573 strict regressions and 20 physical alias/lifetime checks
+under the existing physical sandbox. A denial-only rule forces the second shared
+mapping to fail; five rollback checks per compiler prove original aliases remain
+coherent and all backing is reclaimed afterward. No extra sandbox access is added.
+Both actual games complete five physical-window mapping calls, then stop at device
+slot 133 without fault, timeout or watchdog failure. Actual unmaps are not reached;
+their evidence is synthetic. No GPU submission, game frame or interactive menu is
+verified. Scatter mapping and further device extensions remain separate work.

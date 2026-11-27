@@ -167,6 +167,47 @@ void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std:
     }
     return result.address;
 }
+
+std::int32_t AMBROSIA_GUEST_ABI map_physical(void *address, std::uint64_t count,
+                                             const void *page_array) noexcept {
+    PreserveNativeError restore;
+    auto *runtime = current_runtime();
+    if (!runtime) {
+        diagnostics::stop_trace("XMem physical mapping requires a scoped runtime", 78);
+    }
+    try {
+        if (count > runtime->physical_pages().capacity() || count > 16384) {
+            set_last_error(error_invalid_parameter);
+            return 0;
+        }
+        std::vector<std::shared_ptr<const PhysicalPage>> leases(static_cast<std::size_t>(count));
+        if (page_array) {
+            const auto *bytes = static_cast<const std::byte *>(page_array);
+            for (std::size_t index = 0; index < leases.size(); ++index) {
+                std::uint64_t token;
+                std::memcpy(&token, bytes + index * sizeof(token), sizeof(token));
+                if (token) {
+                    leases[index] = runtime->physical_pages().lease(token);
+                    if (!leases[index]) {
+                        set_last_error(error_invalid_parameter);
+                        return 0;
+                    }
+                }
+            }
+        }
+        const auto error = runtime->memory().map_physical(address, leases);
+        if (error) {
+            set_last_error(error);
+            return 0;
+        }
+        diagnostics::write_service_trace(page_array ? "TRACE native physical window pages mapped\n"
+                                                    : "TRACE native physical window pages unmapped\n");
+        return 1;
+    } catch (...) {
+        set_last_error(error_not_enough_memory);
+        return 0;
+    }
+}
 } // namespace
 
 void register_xmem_services(ImportRegistry &registry) {
@@ -174,5 +215,6 @@ void register_xmem_services(ImportRegistry &registry) {
                  reinterpret_cast<std::uintptr_t>(&allocate_physical));
     registry.add("xmem.dll", "XMemFreePhysicalPages", reinterpret_cast<std::uintptr_t>(&free_physical));
     registry.add("xmem.dll", "XMemVirtualAlloc", reinterpret_cast<std::uintptr_t>(&virtual_allocate));
+    registry.add("xmem.dll", "XMemMapPhysicalPages", reinterpret_cast<std::uintptr_t>(&map_physical));
 }
 } // namespace ambrosia::services

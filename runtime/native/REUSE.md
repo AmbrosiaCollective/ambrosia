@@ -421,3 +421,11 @@ partition keeps one Mapping; bounded prefix/suffix metadata updates are atomic.
 The inherited xmem_exe_calls.md documents all five attribute-0x27 reserve-only
 replacement protection words. No Windows split/VirtualAlloc2 implementation is
 copied, and physical mapping remains a separate component.
+
+Native physical-window mapping extends the existing original PhysicalPage and
+SharedBacking adapters. The three-argument XMem ABI, null/zero-page unmap behavior
+and CPU-renderer projection of GPU-only windows follow inherited xmem.cpp and
+xmem_exe_calls.md under the project's existing terms. No Windows MapViewOfFile3
+implementation is ported. Native ownership adds retained page leases, prevalidated
+requests, bounded metadata, rollback and teardown ordering. CPU aliases do not
+prove host GPU coherence, and unsupported scatter mapping remains separate.

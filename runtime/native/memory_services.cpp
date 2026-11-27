@@ -1,5 +1,7 @@
 #include "memory_services.h"
+#include "physical_pages.h"
 #include <algorithm>
+#include <exception>
 #include <iterator>
 #include <limits>
 #include <stdexcept>
@@ -347,5 +349,103 @@ std::optional<XmemRegionInfo> MemoryServices::xmem_region(const void *address) c
 std::optional<XmemRegionInfo> MemoryServices::window(const void *address) const {
     const auto region = xmem_region(address);
     return region && region->backing == XmemBacking::physical_window ? region : std::nullopt;
+}
+
+std::uint32_t
+MemoryServices::map_physical(void *address,
+                             std::span<const std::shared_ptr<const PhysicalPage>> pages) noexcept {
+    if (pages.empty()) {
+        return 0;
+    }
+    const auto pointer = reinterpret_cast<std::uintptr_t>(address);
+    constexpr std::size_t maximum_views = 16384;
+    if (!address || pointer % physical_page_bytes || pages.size() > maximum_views) {
+        return error_invalid_parameter;
+    }
+    try {
+        const std::lock_guard lock(mutex_);
+        auto owner = regions_.upper_bound(pointer);
+        if (owner == regions_.begin()) {
+            return error_invalid_address;
+        }
+        --owner;
+        auto &region = *owner->second;
+        std::optional<XmemRegionInfo> window;
+        if (region.xmem && region.xmem->backing == XmemBacking::physical_window) {
+            window = region.xmem;
+        } else {
+            auto child = region.placeholder_windows.upper_bound(pointer);
+            if (child != region.placeholder_windows.begin()) {
+                --child;
+                window = child->second;
+            }
+        }
+        if (!window) {
+            return error_not_supported;
+        }
+        const auto window_base = reinterpret_cast<std::uintptr_t>(window->base);
+        const auto offset = pointer - window_base;
+        const auto bytes = pages.size() * physical_page_bytes;
+        if (offset >= window->bytes || bytes > window->bytes - offset) {
+            return error_invalid_address;
+        }
+        host::Access access;
+        switch (window->protection & 0xff) {
+        case 1:
+        case 4:
+            // Inherited CPU-renderer projection: GPU-only windows need readable
+            // CPU staging. Raw console protection remains in window metadata.
+            access = host::Access::read_write;
+            break;
+        case 2:
+            access = host::Access::read;
+            break;
+        default:
+            return error_not_supported;
+        }
+        const auto first = pointer - owner->first;
+        auto replacement = region.physical_views;
+        for (std::size_t index = 0; index < pages.size(); ++index) {
+            const auto at = first + index * physical_page_bytes;
+            if (pages[index]) {
+                replacement.insert_or_assign(at, pages[index]);
+            } else {
+                replacement.erase(at);
+            }
+        }
+        if (replacement.size() > maximum_views) {
+            return error_not_enough_memory;
+        }
+        const auto install = [&](std::size_t at, const std::shared_ptr<const PhysicalPage> &page) {
+            if (page) {
+                page->map_into(region.memory, at, access);
+            } else {
+                region.memory.decommit(at, physical_page_bytes);
+            }
+        };
+        std::size_t attempted = 0;
+        try {
+            for (std::size_t index = 0; index < pages.size(); ++index) {
+                ++attempted;
+                install(first + index * physical_page_bytes, pages[index]);
+            }
+        } catch (...) {
+            try {
+                for (std::size_t index = 0; index < attempted; ++index) {
+                    const auto at = first + index * physical_page_bytes;
+                    const auto prior = region.physical_views.find(at);
+                    install(at, prior == region.physical_views.end() ? nullptr : prior->second);
+                }
+            } catch (...) {
+                // Never release page leases or continue with unknown live aliases.
+                std::terminate();
+            }
+            throw;
+        }
+        region.physical_views.swap(replacement);
+        return 0;
+    } catch (...) {
+        return error_not_enough_memory;
+    }
 }
 } // namespace ambrosia::services
