@@ -267,3 +267,12 @@ escalation must never wrap guest/runtime/tests; those retain the default outer
 sandbox and reviewed isolation. No host cookie/socket is exposed to the guest.
 The earlier direct/nested-display profile is unvalidated and must not be used:
 the outer tool sandbox denied host X11 connections before any guest entry.
+
+Task136's fixed trusted graphics metadata service is validated. Only
+scripts/query_native_graphics_host.py may access its allowlisted host GPU nodes
+under reviewed host integration; it accepts no guest/test/game entrypoint,
+creates no logical device and submits no GPU work. Its 43 fail-closed checks,
+private/read-only mounts, bounded module-state/topology copies, syscall controls
+and resource limits are documented in docs/native-graphics-host.md. Guest/test
+execution retains the default outer sandbox. Do not wrap it in host-service
+permissions. Original isolation profiles remain unchanged.
