@@ -17,6 +17,7 @@
 #include "gdk_packages.h"
 #include "gdk_threading.h"
 #include "gdk_users.h"
+#include "graphics_devices.h"
 #include "graphics_memory_policy.h"
 #include "import_registry.h"
 #include "invalid_parameters.h"
@@ -95,6 +96,10 @@ class Runtime {
 
     RegistryKeys &registry_keys() {
         return registry_keys_;
+    }
+
+    GraphicsDevices &graphics_devices() {
+        return graphics_devices_;
     }
 
     GraphicsMemoryPolicy &graphics_memory() {
@@ -251,6 +256,7 @@ class Runtime {
     ReadonlyFiles files_;
     PersistentStorage persistent_storage_;
     GraphicsMemoryPolicy graphics_memory_;
+    GraphicsDevices graphics_devices_;
     ExceptionFilter exception_filter_;
     GdkBootstrap gdk_bootstrap_;
     GdkThreading gdk_threading_;

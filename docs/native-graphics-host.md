@@ -122,3 +122,23 @@ process/exec, WX, arbitrary shared mapping and resource controls are retained.
 This launcher and every guest/test payload run only in the default outer tool
 sandbox. Only the separately reviewed fixed host services use host integration.
 The profile is ready for frontend/game probes; fixtures establish no game frame.
+
+## Initial guest device frontend
+
+Run modes accept explicit `--graphics-root DIR`. `GraphicsDevices` owns the manual
+80-slot Windows ABI frontend independently of the host compiler's virtual layout.
+Public IDs/order come from pinned DirectX-Headers. QueryInterface, AddRef, Release
+and GetNodeCount use runtime-scoped, mutex-protected ownership. Unsupported slots
+stop with their number. This identifies inherited interfaces; it does not claim
+all their methods are implemented. Foreign-runtime objects are rejected before
+access. Final release acknowledges real backend destruction before object removal.
+
+The existing memory plan is frozen only after actual creation succeeds and retained
+as a future resource/address-mapping constraint. Creating a logical device does
+not reserve that plan's contiguous GPU VA range. Explicit adapters are unsupported.
+Successful facade calls preserve thread error state. No resource/shader/submission
+support or complete D3D12 conformance is claimed by this initial frontend.
+
+Both native game builds now pass device creation with a real host owner. Their
+next observed blocker is an unsupported 64 KiB XMem commit request, after which
+the bounded diagnostic run times out. No game-rendered frame or menu is verified.

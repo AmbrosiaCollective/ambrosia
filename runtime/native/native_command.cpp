@@ -26,6 +26,7 @@ struct Options {
     std::filesystem::path inventory;
     std::filesystem::path storage;
     std::filesystem::path presentation;
+    std::filesystem::path graphics;
     std::optional<std::string> locale_name;
     std::optional<int> physical_backing_descriptor;
     bool run = false;
@@ -44,6 +45,7 @@ constexpr const char *usage =
     "              --storage-root DIR selects an existing separate writable state directory.\n"
     "              --locale-name TAG selects the guest formatting locale (default en-US).\n"
     "              --presentation-root DIR selects explicit trusted host-presentation endpoints.\n"
+    "              --graphics-root DIR selects explicit trusted native graphics endpoints.\n"
     "              --physical-backing-fd N transfers a reviewed sealed backing descriptor in run modes.\n"
     "Inspect maps supported PE dependencies without running callbacks.\n"
     "Run-bootstrap supports synthetic PE startup only.\n"
@@ -108,7 +110,8 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
         }
         if (flag != "--inspect" && flag != "--run-bootstrap" && flag != "--trace-startup" &&
             flag != "--package" && flag != "--work" && flag != "--package-inventory" &&
-            flag != "--storage-root" && flag != "--locale-name" && flag != "--presentation-root") {
+            flag != "--storage-root" && flag != "--locale-name" && flag != "--presentation-root" &&
+            flag != "--graphics-root") {
             throw std::invalid_argument("unknown bootstrap option");
         }
         if (++index == arguments.size() || arguments[index].empty() ||
@@ -139,6 +142,11 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
                 throw std::invalid_argument("duplicate presentation-root option");
             }
             options.presentation = value;
+        } else if (flag == "--graphics-root") {
+            if (!options.graphics.empty()) {
+                throw std::invalid_argument("duplicate graphics-root option");
+            }
+            options.graphics = value;
         } else if (flag == "--storage-root") {
             if (!options.storage.empty()) {
                 throw std::invalid_argument("duplicate storage root option");
@@ -164,6 +172,9 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
     }
     if (!options.presentation.empty() && !options.run) {
         throw std::invalid_argument("presentation-root requires a run mode");
+    }
+    if (!options.graphics.empty() && !options.run) {
+        throw std::invalid_argument("graphics-root requires a run mode");
     }
     if (options.physical_backing_descriptor && !options.run) {
         throw std::invalid_argument("physical-backing-fd requires a run mode");
@@ -226,6 +237,9 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         services::Runtime service_runtime(memory_limits);
         if (!options.presentation.empty()) {
             service_runtime.windows().bind(options.presentation);
+        }
+        if (!options.graphics.empty()) {
+            service_runtime.graphics_devices().bind(options.graphics);
         }
         if (options.physical_backing_descriptor) {
             service_runtime.physical_pages().bind(host::SharedBacking::adopt_descriptor(

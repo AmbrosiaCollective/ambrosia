@@ -356,3 +356,9 @@ package implementation is copied from another project. Pinned primary Microsoft
 XPackage contracts and existing pinned public console ABI tables supply interface
 facts; the process identity comes from matching local descriptors, not embedded
 title values. Public upstream license notices remain intact.
+
+Native graphics frontend uses public interface identities and vtable order from
+Microsoft DirectX-Headers commit61c7718954ec73dbdd43c723240fe1a0452a3724 (MIT).
+See LICENSE.DirectX-Headers. No SDK executable or game-derived declarations are
+embedded. The initial frontend supports only explicit implemented methods and
+stops on unsupported slots; it is not complete D3D12 conformance.

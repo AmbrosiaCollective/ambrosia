@@ -231,6 +231,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "registry_tests.h"
 #include "graphics_memory_tests.h"
 #include "graphics_creation_tests.h"
+#include "graphics_device_tests.h"
 #include "xmem_tests.h"
 #include "memory_budget_tests.h"
 #include "xmem_committed_tests.h"
@@ -729,6 +730,7 @@ extern "C" int ambrosia_native_tests() {
         registry_checks();
         graphics_memory_checks();
         graphics_creation_checks();
+        graphics_option_checks();
         graphics_transport_rejection_checks();
         xmem_checks();
         memory_budget_checks();
@@ -782,7 +784,8 @@ extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
 
 int trace_native_image(const char *image, const char *package, unsigned memory_profile,
                        const char *inventory = nullptr, const char *storage = nullptr,
-                       int physical_descriptor = -1, const char *presentation = nullptr) {
+                       int physical_descriptor = -1, const char *presentation = nullptr,
+                       const char *graphics = nullptr) {
     if (!image || !package) {
         return 2;
     }
@@ -805,6 +808,10 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
         if (presentation) {
             arguments.emplace_back("--presentation-root");
             arguments.emplace_back(std::u8string(reinterpret_cast<const char8_t *>(presentation)));
+        }
+        if (graphics) {
+            arguments.emplace_back("--graphics-root");
+            arguments.emplace_back(std::u8string(reinterpret_cast<const char8_t *>(graphics)));
         }
         if (memory_profile == 1) {
             arguments.emplace_back("--sparse-windows");
@@ -1065,6 +1072,30 @@ extern "C" int ambrosia_native_presentation_tests() {
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
     return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_graphics_device_tests(const char *root, unsigned probe) {
+    checks = failures = 0;
+    try {
+        if (!root || probe > 2) {
+            return 2;
+        }
+        graphics_device_live_checks(root, probe);
+    } catch (const std::exception &error) {
+        std::cerr << "native graphics device: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "graphics device: " << checks << " checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_trace_menu_8g(const char *image, const char *package, const char *inventory,
+                                             const char *storage, int descriptor, const char *presentation,
+                                             const char *graphics) {
+    if (descriptor < 3 || !presentation || !graphics) {
+        return 2;
+    }
+    return trace_native_image(image, package, 3, inventory, storage, descriptor, presentation, graphics);
 }
 
 extern "C" int ambrosia_native_graphics_transport_tests(const char *root) {

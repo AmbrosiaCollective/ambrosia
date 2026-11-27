@@ -53,7 +53,22 @@ std::int32_t AMBROSIA_GUEST_ABI create_device(void *adapter, const void *paramet
         }
         trace += '\n';
         diagnostics::write_service_trace(trace);
-        diagnostics::stop_trace("native graphics backend is not configured; no device was returned", 78);
+        auto &runtime = *current_runtime();
+        if (!runtime.graphics_devices().configured()) {
+            diagnostics::stop_trace("native graphics backend is not configured; no device was returned", 78);
+        }
+        if (adapter) {
+            errno = saved_errno;
+            return static_cast<std::int32_t>(0x80070057u);
+        }
+        auto creation = runtime.graphics_memory().begin_device_creation();
+        const auto result = runtime.graphics_devices().create(interface_id, output, creation.plan());
+        if (result == 0) {
+            creation.succeeded();
+            diagnostics::write_service_trace("TRACE native graphics real device frontend created\n");
+        }
+        errno = saved_errno;
+        return result;
     } catch (const std::exception &error) {
         diagnostics::stop_trace(error.what(), 78);
     }
