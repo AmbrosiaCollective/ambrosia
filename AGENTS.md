@@ -326,3 +326,14 @@ can intentionally shadow unrelated PC methods, even when QueryInterface returns
 a public device IID. Verify the console override and fixture index independently;
 a correct PC index does not establish the console call's meaning. Preserve failed
 hypotheses as private/local evidence and remove incorrect prototypes before commit.
+
+Task155 validates a separate compiler-only build_native_portable_isolated.py plus
+isolation_native_compiler_guard.py for the canonical runtime/src/command_list.h.
+Only that direct bounded public header is added read-only,with an immutable mount
+directory and no scratch writable alias. Validate the fixed guard before every
+compiler command. Old helpers and all guest/test/host profiles remain unchanged.
+Retain180s wall,2GiB AS,45/50 CPU,128FD and64MiB returned ELF bound;only CMake uses
+the existing256MiB scratch/archive budget. It never executes compiled output.
+For native code using shared IR,use its repeated --syntax-unit checks before full
+builds,and gate execution on before/after native/header/guard hashes plus artifact
+checks. Necessary compiler source access is covered by standing goal authorization.
