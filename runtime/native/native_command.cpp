@@ -25,6 +25,7 @@ struct Options {
     std::filesystem::path work;
     std::filesystem::path inventory;
     std::filesystem::path storage;
+    std::optional<std::string> locale_name;
     bool run = false;
     bool trace = false;
     bool sparse_windows = false;
@@ -39,6 +40,7 @@ constexpr const char *usage =
     "                                   [--private-memory-mib N]\n"
     "              Run modes also accept --package-inventory FILE (trusted expected file metadata).\n"
     "              --storage-root DIR selects an existing separate writable state directory.\n"
+    "              --locale-name TAG selects the guest formatting locale (default en-US).\n"
     "Inspect maps supported PE dependencies without running callbacks.\n"
     "Run-bootstrap supports synthetic PE startup only.\n"
     "Trace-startup is diagnostic: unsupported calls/faults terminate the process.\n"
@@ -82,12 +84,12 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
         }
         if (flag != "--inspect" && flag != "--run-bootstrap" && flag != "--trace-startup" &&
             flag != "--package" && flag != "--work" && flag != "--package-inventory" &&
-            flag != "--storage-root") {
+            flag != "--storage-root" && flag != "--locale-name") {
             throw std::invalid_argument("unknown bootstrap option");
         }
         if (++index == arguments.size() || arguments[index].empty() ||
             arguments[index].native().starts_with(std::filesystem::path("--").native())) {
-            throw std::invalid_argument("bootstrap option requires a path");
+            throw std::invalid_argument("bootstrap option requires a value");
         }
         const auto &value = arguments[index];
         if (flag == "--inspect" || flag == "--run-bootstrap" || flag == "--trace-startup") {
@@ -102,6 +104,12 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
                 throw std::invalid_argument("duplicate package option");
             }
             options.package = value;
+        } else if (flag == "--locale-name") {
+            if (options.locale_name) {
+                throw std::invalid_argument("duplicate locale-name option");
+            }
+            const auto utf8 = value.u8string();
+            options.locale_name = std::string(utf8.begin(), utf8.end());
         } else if (flag == "--storage-root") {
             if (!options.storage.empty()) {
                 throw std::invalid_argument("duplicate storage root option");
@@ -121,6 +129,9 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
     }
     if (options.image.empty()) {
         throw std::invalid_argument("choose an image and bootstrap mode");
+    }
+    if (options.locale_name && !options.run) {
+        throw std::invalid_argument("locale-name requires a run mode");
     }
     if (!options.storage.empty() && !options.run) {
         throw std::invalid_argument("storage root requires a run mode");
@@ -178,6 +189,9 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
             memory_limits.total_bytes = memory_limits.window_bytes + memory_limits.private_bytes;
         }
         services::Runtime service_runtime(memory_limits);
+        if (options.locale_name) {
+            service_runtime.user_locale().configure(*options.locale_name);
+        }
         service_runtime.startup().bind_image(paths.image);
         if (options.run) {
             service_runtime.files().bind(paths.package, paths.image);

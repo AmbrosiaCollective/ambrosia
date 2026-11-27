@@ -175,6 +175,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "crt_heap_tests.h"
 #include "locale_tests.h"
 #include "region_tests.h"
+#include "user_locale_tests.h"
 #include "pointer_tests.h"
 #include "stream_buffer_tests.h"
 #include "c_locale_tests.h"
@@ -653,6 +654,7 @@ extern "C" int ambrosia_native_tests() {
         process_priority_boost_checks();
         precise_time_sleep_checks();
         neutral_region_checks();
+        user_locale_checks();
         crt_time_checks();
         uptime_checks();
         critical_section_checks();
@@ -916,6 +918,10 @@ extern "C" int ambrosia_native_trace_storage_8g(const char *image, const char *p
         return 2;
     }
     return trace_native_image(image, package, 3, inventory, storage);
+}
+
+extern "C" int ambrosia_native_locale_rejection(unsigned mode) {
+    return locale_rejection_probe(mode);
 }
 
 extern "C" int ambrosia_native_sort_rejection(unsigned mode) {

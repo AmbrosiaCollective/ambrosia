@@ -33,6 +33,7 @@
 #include "slim_locks.h"
 #include "storage_factory.h"
 #include "task_queues.h"
+#include "user_locale.h"
 #include "winsock_lifecycle.h"
 #include <functional>
 #include <mutex>
@@ -177,6 +178,10 @@ class Runtime {
     void lock_locales();
     void unlock_locales();
 
+    UserLocale &user_locale() {
+        return user_locale_;
+    }
+
     CrtLocale &locale() {
         return locales_.current();
     }
@@ -211,6 +216,7 @@ class Runtime {
     alignas(8) std::array<std::byte, 40> locale_lock_{};
     PointerCodec pointers_;
     CrtLocales locales_;
+    UserLocale user_locale_;
     CrtStartup startup_;
     ExitCallbacks exit_callbacks_;
     ImportRegistry registry_;
