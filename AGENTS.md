@@ -243,3 +243,20 @@ unrestricted execution is added. Preserve original profiles and use the strict
 helper for ordinary tiny checks. The native backing adapter must explicitly
 adopt and validate the prepared descriptor before using it. This necessary
 profile falls under standing goal authorization; no further permission prompt.
+
+Task129's file-only presentation profile is validated: outer-workspace
+scripts/run_presentation_isolated.py and isolation_presentation_bootstrap.py
+retain physical/thread controls and deny all guest networking. Only three pinned
+regular-file endpoints are added: request/frame RW and response RO, inside a
+separate read-only directory mount. All 57 guards pass; a writable-response
+control fails before entry. The presentation-only file cap is 32 MiB for the
+measured 3840x2160 frame; older profiles keep 8 MiB. AS/data/RSS/thread/CPU limits
+stay unchanged. Trusted scripts/presentation_broker.py (project mirror:
+scripts/native_presentation_broker.py) alone may open the host display under
+standing integration authorization. It executes no guest/game code or tests,
+reads no game files and accepts only bounded owned-window/pixel/input requests.
+New socket/process/exec calls are denied after SDL initialization. Host-service
+escalation must never wrap guest/runtime/tests; those retain the default outer
+sandbox and reviewed isolation. No host cookie/socket is exposed to the guest.
+The earlier direct/nested-display profile is unvalidated and must not be used:
+the outer tool sandbox denied host X11 connections before any guest entry.
