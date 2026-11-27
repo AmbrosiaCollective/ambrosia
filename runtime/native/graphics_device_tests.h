@@ -153,7 +153,7 @@ void graphics_fence_live_checks(const std::filesystem::path &root, unsigned prob
     const Guid unsupported{};
     check(create_fence(device, 7, 0, &unsupported, &fence) == no_interface && !fence,
           "CreateFence rejects unsupported identity without making a host semaphore");
-    check(create_fence(device, 7, probe == 3 ? 1 : 0, &fence_interface, &fence) == 0 && fence,
+    check(create_fence(device, 7, probe == 3 ? 2 : 0, &fence_interface, &fence) == 0 && fence,
           "CreateFence publishes a real timeline-backed guest fence");
     auto *table = *static_cast<const std::uintptr_t **>(fence);
     const auto query = reinterpret_cast<Query>(table[0]);
@@ -181,6 +181,20 @@ void graphics_fence_live_checks(const std::filesystem::path &root, unsigned prob
     check(query(fence, &fence_interface, &queried) == 0 && queried == fence && release(queried) == 1 &&
               add(fence) == 2 && release(fence) == 1,
           "fence identity and reference methods preserve real ownership");
+    void *shared = nullptr;
+    check(create_fence(device, 3, 1, &fence_interface, &shared) == 0 && shared,
+          "SHARED fence creation requires a real exportable host timeline semaphore");
+    if (shared) {
+        auto *shared_table = *static_cast<const std::uintptr_t **>(shared);
+        const auto shared_completed = reinterpret_cast<Counter>(shared_table[8]);
+        const auto shared_signal = reinterpret_cast<Signal>(shared_table[10]);
+        const auto shared_release = reinterpret_cast<Reference>(shared_table[2]);
+        check(shared_completed(shared) == 3 && shared_signal(shared, 11) == 0 &&
+                  shared_completed(shared) == 11,
+              "shared fence counter reads and host signals use the actual exportable semaphore");
+        check(shared_release(shared) == 0,
+              "final shared fence release retires its real semaphore and independent parent lease");
+    }
     check(release_device(device) == 1,
           "a live fence retains its parent after the guest releases its device reference");
     check(get_device(fence, &device11_interface, &queried) == 0 && queried == device &&

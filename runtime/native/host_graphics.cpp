@@ -81,7 +81,8 @@ struct Graphics::Transport {
 #endif
     }
 
-    Packet exchange(std::uint32_t operation, std::uint32_t owner, std::uint64_t value = 0) {
+    Packet exchange(std::uint32_t operation, std::uint32_t owner, std::uint64_t value = 0,
+                    std::uint32_t request_flags = 0) {
 #ifdef __linux__
         if (sequence >= 1024) {
             throw std::runtime_error("native graphics request budget exhausted");
@@ -91,6 +92,7 @@ struct Graphics::Transport {
         command.operation = operation;
         command.owner = owner;
         command.value = value;
+        command.status = request_flags;
         transfer(request, command, true);
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
         Packet reply;
@@ -138,6 +140,7 @@ struct Graphics::Transport {
         (void)operation;
         (void)owner;
         (void)value;
+        (void)request_flags;
         throw std::runtime_error("native graphics file transport is unsupported on this host");
 #endif
     }
@@ -230,12 +233,12 @@ bool Graphics::unified_memory() {
     return transport_->exchange(9, transport_->owned.id).value == 1;
 }
 
-std::uint32_t Graphics::create_fence(std::uint64_t initial) {
+std::uint32_t Graphics::create_fence(std::uint64_t initial, bool shared) {
     const std::lock_guard lock(transport_->mutex);
     if (!transport_->owned.id || initial == UINT64_MAX || transport_->fences.size() >= 32) {
         throw std::runtime_error("native fence creation requires an owned device and bounded value/capacity");
     }
-    const auto reply = transport_->exchange(5, transport_->owned.id, initial);
+    const auto reply = transport_->exchange(5, transport_->owned.id, initial, shared ? 1u : 0u);
     if (reply.owner <= transport_->last_fence) {
         throw std::runtime_error("native fence service reused an ownership ID");
     }

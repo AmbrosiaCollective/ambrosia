@@ -21,7 +21,7 @@ class Graphics {
     GraphicsDevice query_device(std::uint32_t id);
     void destroy_device(std::uint32_t id);
     bool unified_memory();
-    std::uint32_t create_fence(std::uint64_t initial);
+    std::uint32_t create_fence(std::uint64_t initial, bool shared = false);
     std::uint64_t completed_fence(std::uint32_t id);
     void signal_fence(std::uint32_t id, std::uint64_t value);
     void destroy_fence(std::uint32_t id);

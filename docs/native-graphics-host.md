@@ -238,3 +238,10 @@ The isolated client has exercised real exportable counters/signals/lifetime with
 Native shared-fence frontend validation follows separately. This establishes
 exportable object creation, not Windows shared handles, cross-process imports,
 GPU queue work or a game frame/menu.
+
+Native SHARED flag1 now reaches actual exportable semaphore creation. Its creation
+flags are retained; other flag bits remain unsupported. Both builds pass1516 strict
+and17 native fence checks, including shared counters/signals/release. The actual
+game creates a shared fence on both compilers and now stops at device48
+OpenExistingHeapFromAddress. No shared handle export/import, GPU queue work or game
+frame/menu is claimed. Descriptor-transfer support remains separate work.

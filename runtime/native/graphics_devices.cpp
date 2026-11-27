@@ -87,6 +87,7 @@ struct GraphicsDevices::State {
         const std::uintptr_t *table;
         std::uint32_t references = 1;
         std::uint32_t real = 0;
+        std::uint32_t creation_flags = 0;
         Device *parent = nullptr;
     };
 
@@ -483,7 +484,7 @@ struct GraphicsDevices::State {
             if (count > 0 && static_cast<std::size_t>(count) < sizeof(request)) {
                 diagnostics::write_service_trace(std::string_view(request, static_cast<std::size_t>(count)));
             }
-            if (flags || initial == UINT64_MAX) {
+            if ((flags & ~1u) || initial == UINT64_MAX) {
                 diagnostics::stop_trace("unsupported native fence creation flags or initial value", 78);
             }
             if (pointer->references == UINT32_MAX || access.state.fences.size() >= 32) {
@@ -492,6 +493,7 @@ struct GraphicsDevices::State {
             auto fence = std::make_unique<Fence>();
             fence->table = fence_table().data();
             fence->parent = pointer;
+            fence->creation_flags = flags;
             auto *result = fence.get();
             // Allocate map ownership before asking the host for a real semaphore.
             auto [position, inserted] = access.state.fences.emplace(result, std::move(fence));
@@ -499,7 +501,7 @@ struct GraphicsDevices::State {
                 throw std::runtime_error("native fence object ownership collision");
             }
             try {
-                result->real = access.state.backend->create_fence(initial);
+                result->real = access.state.backend->create_fence(initial, flags == 1);
             } catch (...) {
                 access.state.fences.erase(position);
                 throw;
