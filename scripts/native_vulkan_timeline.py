@@ -49,6 +49,19 @@ class TimelineDevice(base.NativeDevice):
             self.close()
             raise
 
+    def create_device(self, physical, family, required12, required13):
+        super().create_device(physical, family, required12, required13)
+        properties = self.function('vkGetPhysicalDeviceProperties', None,
+                                   [ctypes.c_void_p, ctypes.c_void_p])
+        storage = (ctypes.c_uint64 * 512)()
+        properties(physical, ctypes.byref(storage))
+        prefix = (ctypes.c_uint32 * 5).from_buffer(storage)
+        device_class = int(prefix[4])
+        ctypes.memset(ctypes.addressof(storage), 0, ctypes.sizeof(storage))
+        # Match the existing portable renderer's UMA selection. Other device
+        # classes need a reviewed policy rather than an invented heap mapping.
+        self.heap_model = {1: 1, 2: 2}.get(device_class, 0)
+
     def create_fence(self, initial):
         initial = checked_value(initial)
         if len(self.fences) >= 32 or self.next_fence > 128:

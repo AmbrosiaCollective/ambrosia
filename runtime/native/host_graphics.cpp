@@ -110,12 +110,16 @@ struct Graphics::Transport {
             throw std::runtime_error(
                 "native graphics service rejected the request or returned invalid fields");
         }
-        if (operation != 6 && reply.value) {
+        if (operation != 6 && operation != 9 && reply.value) {
             throw std::runtime_error("unexpected native graphics response value");
         }
         if (operation == 5) {
             if (!reply.owner || reply.owner > 128 || reply.api_version) {
                 throw std::runtime_error("invalid native fence creation reply");
+            }
+        } else if (operation == 9) {
+            if (reply.owner != owner || reply.api_version || (reply.value != 1 && reply.value != 2)) {
+                throw std::runtime_error("invalid native device heap model reply");
             }
         } else if (operation >= 6 && operation <= 8) {
             if (reply.owner != owner || reply.api_version || reply.value == UINT64_MAX) {
@@ -216,6 +220,14 @@ void Graphics::destroy_device(std::uint32_t id) {
     }
     (void)transport_->exchange(2, id);
     transport_->owned = {};
+}
+
+bool Graphics::unified_memory() {
+    const std::lock_guard lock(transport_->mutex);
+    if (!transport_->owned.id) {
+        throw std::runtime_error("native heap properties require an owned device");
+    }
+    return transport_->exchange(9, transport_->owned.id).value == 1;
 }
 
 std::uint32_t Graphics::create_fence(std::uint64_t initial) {

@@ -181,3 +181,24 @@ slot26 is GetCustomHeapProperties and slot36 is CreateFence. Six independent pub
 SDK slot checks now pass. Corrected GCC/Clang builds pass1516 strict and14 real
 fence checks each; both game runs stop cleanly at the unimplemented heap-properties
 call, with no fault. Fence support is upcoming coverage, not progress past slot26.
+
+## Custom heap properties
+
+Device slot26 returns the 20-byte custom equivalent of default/upload/readback
+heaps. Packet operation9 queries the owned selected device's integrated/discrete
+class through the existing Vulkan properties entrypoint. The mapping matches the
+portable Vulkan renderer's UMA policy. Other classes/types/node masks are explicit
+unsupported cases; metadata does not establish resource allocation or GPU coherence.
+
+The adapter accepts the SDK C-style receiver-first call and compiler-generated
+Microsoft aggregate-return call. Exactly one incoming pointer must match the owned
+device before either pointer is accessed. The other pointer is the result buffer.
+The first receiver-first-only prototype stopped on the game's layout before any
+result write. An independently compiled return-by-value fixture exposed the hidden
+buffer-first form; both actual builds confirm that layout for all three queries.
+
+Canary fixtures verify exact result bounds, returned pointer, fields and error
+preservation for both layouts. Both final native builds pass1516 strict and17 live
+device/heap checks; six CPU class cases, existing26 timeline and24 protocol checks,
+and seven independent SDK slot checks pass. Both games now stop cleanly at
+CreateCommandQueue slot8. No game frame or menu is verified by these checks.

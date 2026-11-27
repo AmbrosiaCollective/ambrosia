@@ -5,6 +5,7 @@
 #include "startup_trace.h"
 #include <algorithm>
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -379,6 +380,64 @@ struct GraphicsDevices::State {
         }
     }
 
+    struct HeapProperties {
+        std::uint32_t type = 4;
+        std::uint32_t cpu_page = 0;
+        std::uint32_t memory_pool = 0;
+        std::uint32_t creation_node = 1;
+        std::uint32_t visible_node = 1;
+    };
+
+    static_assert(sizeof(HeapProperties) == 20);
+
+    // SDK C-style calls name This before the result buffer. An ms_abi
+    // function-pointer returning the aggregate uses the compiler's hidden
+    // result before This. Recognize the receiver by exact owned identity,
+    // never by dereferencing or guessing either incoming pointer.
+    static HeapProperties *AMBROSIA_GUEST_ABI heap_properties(void *first, void *second,
+                                                              std::uint32_t node_mask,
+                                                              std::uint32_t heap_type) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto *runtime = current_runtime();
+            if (!runtime || !guest::ThreadContext::current()) {
+                diagnostics::stop_trace("native heap properties require an active guest runtime", 78);
+            }
+            auto &state = *runtime->graphics_devices().state_;
+            std::unique_lock lock(state.mutex);
+            const bool first_receiver = state.device && first == state.device.get();
+            const bool second_receiver = state.device && second == state.device.get();
+            if (first_receiver == second_receiver || !state.backend) {
+                diagnostics::stop_trace("native heap properties receiver layout is not owned", 78);
+            }
+            auto *output = static_cast<HeapProperties *>(first_receiver ? second : first);
+            char message[128];
+            const auto count = std::snprintf(
+                message, sizeof(message),
+                "TRACE native heap properties output_present=%u return_first=%u node=%u type=%u\n",
+                output ? 1u : 0u, second_receiver ? 1u : 0u, node_mask, heap_type);
+            if (count > 0 && static_cast<std::size_t>(count) < sizeof(message)) {
+                diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
+            }
+            if (!output || node_mask > 1 || heap_type < 1 || heap_type > 3) {
+                diagnostics::stop_trace("unsupported native custom heap properties request", 78);
+            }
+            const bool unified = state.backend->unified_memory();
+            HeapProperties result;
+            if (heap_type == 1) {
+                result.cpu_page = 1; // NOT_AVAILABLE.
+                result.memory_pool = unified ? 1 : 2;
+            } else {
+                result.cpu_page = heap_type == 2 ? 2 : 3; // WRITE_COMBINE / WRITE_BACK.
+                result.memory_pool = 1;
+            }
+            std::memcpy(output, &result, sizeof(result));
+            return output;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
     template <std::size_t... Slots>
     static std::array<std::uintptr_t, sizeof...(Slots)> make_table(std::index_sequence<Slots...>) {
         return {reinterpret_cast<std::uintptr_t>(&unsupported<Slots>)...};
@@ -391,6 +450,7 @@ struct GraphicsDevices::State {
             result[1] = reinterpret_cast<std::uintptr_t>(&add_reference);
             result[2] = reinterpret_cast<std::uintptr_t>(&release);
             result[7] = reinterpret_cast<std::uintptr_t>(&node_count);
+            result[26] = reinterpret_cast<std::uintptr_t>(&heap_properties);
             result[36] = reinterpret_cast<std::uintptr_t>(&create_fence);
             return result;
         }();

@@ -74,6 +74,42 @@ void graphics_device_live_checks(const std::filesystem::path &root, unsigned pro
           "device AddRef and Release preserve independent guest references");
     check(nodes(device) == 1 && errno == E2BIG && get_last_error() == 73 && crt_error() == 29,
           "GetNodeCount validates the real one-device backend and preserves guest errors");
+    using Heap = void *(AMBROSIA_GUEST_ABI *)(void *, void *, std::uint32_t, std::uint32_t);
+    const auto heap = reinterpret_cast<Heap>(table[26]);
+
+    struct GuardedHeap {
+        std::uint64_t before = 0x1234567812345678ull;
+        std::array<std::uint32_t, 5> fields{};
+        std::uint32_t after = 0x87654321;
+    } properties;
+
+    auto *returned = heap(device, properties.fields.data(), 1, 1);
+    const auto default_pool = properties.fields[2];
+    check(returned == properties.fields.data() && properties.before == 0x1234567812345678ull &&
+              properties.after == 0x87654321 && properties.fields[0] == 4 && properties.fields[1] == 1 &&
+              (default_pool == 1 || default_pool == 2) && properties.fields[3] == 1 &&
+              properties.fields[4] == 1,
+          "Windows member struct-return ABI writes exactly the custom default-heap properties");
+    returned = heap(device, properties.fields.data(), 0, 2);
+    check(returned == properties.fields.data() &&
+              properties.fields == std::array<std::uint32_t, 5>{4, 2, 1, 1, 1},
+          "upload heaps map to CPU write-combined system memory for the actual one-node backend");
+    returned = heap(device, properties.fields.data(), 1, 3);
+    check(returned == properties.fields.data() &&
+              properties.fields == std::array<std::uint32_t, 5>{4, 3, 1, 1, 1} &&
+              properties.before == 0x1234567812345678ull && properties.after == 0x87654321 &&
+              errno == E2BIG && get_last_error() == 73 && crt_error() == 29,
+          "readback heap metadata preserves neighboring bytes and caller error state");
+
+    struct HeapByValue {
+        std::array<std::uint32_t, 5> fields;
+    };
+
+    using AggregateHeap = HeapByValue(AMBROSIA_GUEST_ABI *)(void *, std::uint32_t, std::uint32_t);
+    const auto aggregate_heap = reinterpret_cast<AggregateHeap>(table[26]);
+    const auto aggregate_result = aggregate_heap(device, 1, 2);
+    check(aggregate_result.fields == std::array<std::uint32_t, 5>{4, 2, 1, 1, 1},
+          "an independently compiled Microsoft aggregate return receives correct heap fields");
     check(release(device) == 0, "the final guest reference releases actual native device ownership");
     device = nullptr;
     check(create(nullptr, nullptr, &device11_interface, &device) == 0 && device && nodes(device) == 1,

@@ -24,12 +24,12 @@ def decode(data):
     if fields[2] <= 4:
         sequence, operation, owner = base.decode_request(data)
         return sequence, operation, owner, 0
-    if fields[0] != base.MAGIC or not fields[1] or fields[2] not in (5, 6, 7, 8) or not fields[3]:
+    if fields[0] != base.MAGIC or not fields[1] or fields[2] not in (5, 6, 7, 8, 9) or not fields[3]:
         raise ValueError('invalid native fence command')
     if any(fields[index] for index in (4, 7, 8, 9, 10, 11, 12)) or any(data[-8:]):
         raise ValueError('unsupported native fence command fields')
     value = struct.unpack_from('<Q', data, 24)[0]
-    if value == 2**64 - 1 or fields[2] in (6, 8) and value:
+    if value == 2**64 - 1 or fields[2] in (6, 8, 9) and value:
         raise ValueError('invalid native fence command value')
     return fields[1], fields[2], fields[3], value
 
@@ -109,6 +109,10 @@ def serve(request, reply, device_factory):
                         device.signal(requested_owner, value)
                     elif operation == 8:
                         device.destroy_fence(requested_owner)
+                    elif operation == 9:
+                        if requested_owner != owner or device.heap_model not in (1, 2):
+                            raise ValueError('native device heap model is unavailable')
+                        result_value = device.heap_model
                 except ValueError:
                     status = 1
             encoded = response(sequence, operation, result_owner, status, result_value, api)

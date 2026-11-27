@@ -96,5 +96,18 @@ check(released[-3:][0][0] == 'semaphore' and released[-2:] == [('device', 11), (
 check(not object.fences and not object.device.value)
 object.close()
 check(len(released) == 4)
+original_create_device = module.base.NativeDevice.create_device
+try:
+    module.base.NativeDevice.create_device = lambda *arguments: None
+    for device_class, expected in [(1, 1), (2, 2), (0, 0), (3, 0), (4, 0), (99, 0)]:
+        selected = module.TimelineDevice.__new__(module.TimelineDevice)
+        def physical_properties(physical, output):
+            prefix = ctypes.cast(output, ctypes.POINTER(ctypes.c_uint32))
+            prefix[4] = device_class
+        selected.function = lambda name, result, arguments: physical_properties
+        selected.create_device(1, 0, (), ())
+        check(selected.heap_model == expected)
+finally:
+    module.base.NativeDevice.create_device = original_create_device
 ctypes.CDLL = saved_loader
 print(json.dumps({'CPU_timeline_checks': checks, 'failures': 0, 'driver_loaded': False}))
