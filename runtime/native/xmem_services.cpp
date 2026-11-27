@@ -1,10 +1,92 @@
 #include "xmem_services.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
+#include <cerrno>
 #include <cstdio>
+#include <cstring>
+#include <vector>
 
 namespace ambrosia::services {
 namespace {
+struct PreserveNativeError {
+    int saved = errno;
+
+    ~PreserveNativeError() {
+        errno = saved;
+    }
+};
+
+void trace_physical_allocation(std::uint64_t attributes, std::uint64_t count, std::uint32_t error) noexcept {
+    char message[192];
+    const auto length = std::snprintf(
+        message, sizeof(message), "TRACE XMem physical pages=%llu attributes=%llx error=%u\n",
+        static_cast<unsigned long long>(count), static_cast<unsigned long long>(attributes), error);
+    if (length > 0 && static_cast<std::size_t>(length) < sizeof(message)) {
+        diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(length)));
+    }
+}
+
+std::int32_t AMBROSIA_GUEST_ABI allocate_physical(std::uint64_t attributes, void *page_count,
+                                                  void *page_array) noexcept {
+    PreserveNativeError restore;
+    auto *runtime = current_runtime();
+    if (!runtime) {
+        diagnostics::stop_trace("XMem physical allocation requires a scoped runtime", 78);
+    }
+    std::uint64_t count = 0;
+    if (page_count) {
+        std::memcpy(&count, page_count, sizeof(count));
+    }
+    if (!page_count || (count && !page_array)) {
+        set_last_error(error_invalid_parameter);
+        return 0;
+    }
+    auto allocation = runtime->physical_pages().allocate(attributes, count);
+    trace_physical_allocation(attributes, count, allocation.error);
+    if (allocation.error == error_not_supported) {
+        diagnostics::stop_trace("unsupported XMem physical attributes or missing backing configuration", 78);
+    }
+    if (allocation.error) {
+        const std::uint64_t zero = 0;
+        std::memcpy(page_count, &zero, sizeof(zero));
+        set_last_error(allocation.error);
+        return 0;
+    }
+    if (count) {
+        std::memcpy(page_array, allocation.pages.data(), allocation.pages.size() * sizeof(std::uint64_t));
+    }
+    diagnostics::write_service_trace("TRACE native XMem physical pages allocated\n");
+    return 1;
+}
+
+std::int32_t AMBROSIA_GUEST_ABI free_physical(std::uint64_t count, const void *page_array) noexcept {
+    PreserveNativeError restore;
+    auto *runtime = current_runtime();
+    if (!runtime) {
+        diagnostics::stop_trace("XMem physical release requires a scoped runtime", 78);
+    }
+    try {
+        if ((count && !page_array) || count > runtime->physical_pages().capacity()) {
+            set_last_error(error_invalid_parameter);
+            return 0;
+        }
+        std::vector<std::uint64_t> tokens(static_cast<std::size_t>(count));
+        if (count) {
+            std::memcpy(tokens.data(), page_array, tokens.size() * sizeof(std::uint64_t));
+        }
+        const auto error = runtime->physical_pages().free(tokens);
+        if (error) {
+            set_last_error(error);
+            return 0;
+        }
+        diagnostics::write_service_trace("TRACE native XMem physical pages released\n");
+        return 1;
+    } catch (...) {
+        set_last_error(error_not_enough_memory);
+        return 0;
+    }
+}
+
 void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std::uint32_t allocation_type,
                                           std::uint64_t attributes, std::uint32_t protection) noexcept {
     auto *runtime = current_runtime();
@@ -52,6 +134,9 @@ void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std:
 } // namespace
 
 void register_xmem_services(ImportRegistry &registry) {
+    registry.add("xmem.dll", "XMemAllocatePhysicalPages",
+                 reinterpret_cast<std::uintptr_t>(&allocate_physical));
+    registry.add("xmem.dll", "XMemFreePhysicalPages", reinterpret_cast<std::uintptr_t>(&free_physical));
     registry.add("xmem.dll", "XMemVirtualAlloc", reinterpret_cast<std::uintptr_t>(&virtual_allocate));
 }
 } // namespace ambrosia::services

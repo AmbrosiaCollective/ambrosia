@@ -11,10 +11,24 @@ aliases, unmapping and remapping. A retained kernel view stays valid after the
 descriptor owner closes. Retired ranges can be discarded for zero-filled reuse;
 the caller must first retire every page lease and alias for that range.
 
-Linux syscalls stay inside the host adapter. Guest page IDs, allocation budgets,
-window validation and lease lifetimes belong above it. Backing bytes are not host
-physical frame numbers, locked RAM, GPU addresses or proof of device support.
-The guest allocation and mapping imports are still pending integration.
+Linux syscalls stay inside the host adapter. The portable allocator owns 64 KiB
+page leases and packed nonzero frame IDs below 2²⁵. IDs can be reused while a
+retired alias retains different backing bytes. The last lease clears storage
+before reuse. A discard error disables reuse rather than exposing stale data.
+Backing bytes are not host physical frames, locked RAM or GPU addresses.
+
+`XMemAllocatePhysicalPages` and `XMemFreePhysicalPages` use that allocator with
+the measured attribute word `0x280`. They support packed count/array pointers,
+bounded all-or-nothing allocation and valid-prefix freeing. Success preserves
+native errno, guest errno and LastError; failures set the corresponding Win32
+error. Positive requests without backing, and unmeasured attributes, stop
+explicitly. Guest physical-page mapping imports remain unsupported until needed.
+
+Native run modes accept `--physical-backing-fd N` to consume an explicitly owned
+sealed descriptor after argument/path validation. Its immutable size bounds the
+pool; the packed ID format imposes a separate addressability limit. The reviewed
+launcher supplies descriptor 3. Inspection, duplicate options and descriptors
+below 3 are rejected before transfer. No host descriptor discovery is performed.
 
 The reviewed physical-pool sandbox prepares one sealed 1 GiB backing file on a
 dedicated descriptor, then permits its initial shared nonexecuting mappings.

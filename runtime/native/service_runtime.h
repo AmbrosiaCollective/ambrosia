@@ -27,6 +27,7 @@
 #include "native_threads.h"
 #include "new_allocations.h"
 #include "persistent_storage.h"
+#include "physical_pages.h"
 #include "pointer_codec.h"
 #include "processor_information.h"
 #include "readonly_files.h"
@@ -148,6 +149,10 @@ class Runtime {
         return memory_;
     }
 
+    PhysicalPages &physical_pages() {
+        return physical_pages_;
+    }
+
     CriticalSections &critical_sections() {
         return critical_sections_;
     }
@@ -208,6 +213,8 @@ class Runtime {
     }
 
   private:
+    // Memory windows are destroyed before the allocator releases its ID leases.
+    PhysicalPages physical_pages_;
     MemoryServices memory_;
     CriticalSections critical_sections_;
     SlimLocks slim_locks_;

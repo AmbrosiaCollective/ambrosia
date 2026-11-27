@@ -251,6 +251,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "prng_tests.h"
 #include "shared_backing_tests.h"
 #include "physical_page_tests.h"
+#include "physical_api_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -770,7 +771,8 @@ extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
 }
 
 int trace_native_image(const char *image, const char *package, unsigned memory_profile,
-                       const char *inventory = nullptr, const char *storage = nullptr) {
+                       const char *inventory = nullptr, const char *storage = nullptr,
+                       int physical_descriptor = -1) {
     if (!image || !package) {
         return 2;
     }
@@ -785,6 +787,10 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
         if (storage) {
             arguments.emplace_back("--storage-root");
             arguments.emplace_back(std::u8string(reinterpret_cast<const char8_t *>(storage)));
+        }
+        if (physical_descriptor >= 3) {
+            arguments.emplace_back("--physical-backing-fd");
+            arguments.emplace_back(std::to_string(physical_descriptor));
         }
         if (memory_profile == 1) {
             arguments.emplace_back("--sparse-windows");
@@ -984,6 +990,47 @@ extern "C" int ambrosia_native_physical_page_tests(int descriptor, bool workers)
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
     return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_physical_api_tests(int descriptor, bool command) {
+    checks = failures = 0;
+    try {
+        if (command) {
+            physical_command_checks(descriptor);
+        } else {
+            physical_api_checks(descriptor);
+        }
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL physical API exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_trace_physical_8g(const char *image, const char *package,
+                                                 const char *inventory, const char *storage, int descriptor) {
+    if (descriptor < 3) {
+        return 2;
+    }
+    return trace_native_image(image, package, 3, inventory, storage, descriptor);
+}
+
+extern "C" int ambrosia_native_physical_api_rejection(unsigned mode) {
+    using namespace ambrosia::services;
+    using Allocate = std::int32_t(AMBROSIA_GUEST_ABI *)(std::uint64_t, void *, void *);
+    Runtime runtime;
+    const auto allocate =
+        reinterpret_cast<Allocate>(runtime.resolve(service_symbol("XMemAllocatePhysicalPages", "xmem.dll")));
+    if (mode == 3) {
+        (void)allocate(0x280, nullptr, nullptr);
+        return 1;
+    }
+    Scope scope(runtime);
+    std::uint64_t count = mode == 1 ? 0 : 1;
+    std::uint64_t token = 0;
+    (void)allocate(mode == 1 ? 0x281 : 0x280, &count, &token);
+    return 1;
 }
 
 extern "C" int ambrosia_native_locale_rejection(unsigned mode) {

@@ -9,6 +9,7 @@
 
 namespace ambrosia::services {
 inline constexpr std::size_t physical_page_bytes = 65536;
+// The guest packs 64 KiB pages as 4 KiB frame numbers below 2^25.
 inline constexpr std::uint64_t physical_slot_limit = std::uint64_t{1} << 21;
 
 class PhysicalPage {

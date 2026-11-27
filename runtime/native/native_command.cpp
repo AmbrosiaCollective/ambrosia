@@ -26,6 +26,7 @@ struct Options {
     std::filesystem::path inventory;
     std::filesystem::path storage;
     std::optional<std::string> locale_name;
+    std::optional<int> physical_backing_descriptor;
     bool run = false;
     bool trace = false;
     bool sparse_windows = false;
@@ -41,6 +42,7 @@ constexpr const char *usage =
     "              Run modes also accept --package-inventory FILE (trusted expected file metadata).\n"
     "              --storage-root DIR selects an existing separate writable state directory.\n"
     "              --locale-name TAG selects the guest formatting locale (default en-US).\n"
+    "              --physical-backing-fd N transfers a reviewed sealed backing descriptor in run modes.\n"
     "Inspect maps supported PE dependencies without running callbacks.\n"
     "Run-bootstrap supports synthetic PE startup only.\n"
     "Trace-startup is diagnostic: unsupported calls/faults terminate the process.\n"
@@ -60,10 +62,30 @@ std::size_t parse_private_memory(const std::filesystem::path &argument) {
     return static_cast<std::size_t>(mib) * one_mib;
 }
 
+int parse_backing_descriptor(const std::filesystem::path &argument) {
+    const auto text = argument.string();
+    int descriptor = -1;
+    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), descriptor);
+    if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size() || descriptor < 3) {
+        throw std::invalid_argument("physical-backing-fd requires an owned decimal descriptor at least 3");
+    }
+    return descriptor;
+}
+
 Options parse_options(std::span<const std::filesystem::path> arguments) {
     Options options;
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const auto &flag = arguments[index];
+        if (flag == "--physical-backing-fd") {
+            if (options.physical_backing_descriptor) {
+                throw std::invalid_argument("duplicate physical-backing-fd option");
+            }
+            if (++index == arguments.size()) {
+                throw std::invalid_argument("physical-backing-fd requires a value");
+            }
+            options.physical_backing_descriptor = parse_backing_descriptor(arguments[index]);
+            continue;
+        }
         if (flag == "--private-memory-mib") {
             if (options.private_memory_bytes) {
                 throw std::invalid_argument("duplicate private-memory-mib option");
@@ -133,6 +155,9 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
     if (options.locale_name && !options.run) {
         throw std::invalid_argument("locale-name requires a run mode");
     }
+    if (options.physical_backing_descriptor && !options.run) {
+        throw std::invalid_argument("physical-backing-fd requires a run mode");
+    }
     if (!options.storage.empty() && !options.run) {
         throw std::invalid_argument("storage root requires a run mode");
     }
@@ -189,6 +214,10 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
             memory_limits.total_bytes = memory_limits.window_bytes + memory_limits.private_bytes;
         }
         services::Runtime service_runtime(memory_limits);
+        if (options.physical_backing_descriptor) {
+            service_runtime.physical_pages().bind(host::SharedBacking::adopt_descriptor(
+                *options.physical_backing_descriptor, services::PhysicalPages::maximum_backing_bytes));
+        }
         if (options.locale_name) {
             service_runtime.user_locale().configure(*options.locale_name);
         }
