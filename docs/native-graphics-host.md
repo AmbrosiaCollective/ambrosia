@@ -610,3 +610,30 @@ allowlisted GPU nodes, network/exec/process/WX denial, exact 32-task pthread
 controls, 64 GiB AS, 8 GiB data and sampled RSS, 8 MiB file/stack, 64 FDs, 40/45 CPU
 seconds and a 30-second parent wall watchdog. No hard RSS or VRAM cap is claimed.
 Original host services and all guest/compiler profiles remain unchanged.
+
+## Coherent buffer backend
+
+BufferStore owns real Vulkan buffers backed by host-visible coherent allocations.
+It uses checked nonreused IDs, at most 32 live and 128 lifetime buffers, 256 MiB
+per allocation and 1 GiB total allocated bytes. Upload/download chunks are at
+most 1 MiB and must fit the requested buffer extent. New allocations are cleared
+before publication. Foreign/released IDs, invalid scalar types, overflowing
+extents, overlapping same-buffer copies and unaligned GPU copy ranges fail
+before touching Vulkan. No CPU pointer or driver handle crosses this API.
+
+Copies include prior CPU/device writes in their memory dependency and wait on
+a bounded completion fence. CPU reads and subsequent device reads are covered
+by the completion barrier. Pending submission failures drain before resources
+are freed; a hung driver remains bounded by the parent wall watchdog. Callers
+must serialize store access with their device queue. This initial synchronous
+path establishes correctness; asynchronous batching remains future work.
+
+The separate fixed host-only buffer probe passes all 43 unchanged isolation
+guards. It verifies a real 192 MiB buffer plus a 64 KiB buffer, initially cleared
+bytes, uploads, two chained 32 KiB GPU copies, exact downloads and complete
+reclamation. The second copy reads the first copy's GPU output. All 106 CPU
+ownership/bounds/failure checks pass without loading a driver. No game resource,
+physical-pool coherence, frame or interactive menu is established by this probe.
+Existing host services and guest/compiler profiles retain their capabilities
+and limits. Next connect explicit transfer endpoints and retained physical
+spans to this backend before returning a resource to the game.
