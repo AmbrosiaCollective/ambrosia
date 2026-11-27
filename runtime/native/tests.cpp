@@ -1074,6 +1074,21 @@ extern "C" int ambrosia_native_presentation_tests() {
     return failures ? 1 : 0;
 }
 
+extern "C" int ambrosia_native_graphics_queue_tests(const char *root, unsigned probe) {
+    checks = failures = 0;
+    try {
+        if (!root || probe > 3) {
+            return 2;
+        }
+        graphics_queue_live_checks(root, probe);
+    } catch (const std::exception &error) {
+        std::cerr << "native graphics queue: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "graphics queue: " << checks << " checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
+}
+
 extern "C" int ambrosia_native_fence_tests(const char *root, unsigned probe) {
     checks = failures = 0;
     try {

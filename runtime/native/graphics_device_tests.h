@@ -195,3 +195,79 @@ void graphics_fence_live_checks(const std::filesystem::path &root, unsigned prob
           "fence-child teardown releases the device backend for actual recreation");
     errno = saved_errno;
 }
+
+void graphics_queue_live_checks(const std::filesystem::path &root, unsigned probe) {
+    using namespace ambrosia;
+    using namespace services;
+    Runtime runtime;
+    Scope scope(runtime);
+    guest::ThreadContext context;
+    auto activation = context.activate();
+    runtime.graphics_devices().bind(root);
+    using CreateDevice = std::int32_t(AMBROSIA_GUEST_ABI *)(void *, const void *, const void *, void **);
+    const auto create_device = reinterpret_cast<CreateDevice>(
+        runtime.resolve(service_symbol("D3D12XboxCreateDevice", "d3d12_xs.dll")));
+    void *device = nullptr;
+    check(create_device(nullptr, nullptr, &device11_interface, &device) == 0 && device,
+          "command queue fixture owns a real device with a host queue");
+    auto *device_table = *static_cast<const std::uintptr_t **>(device);
+    using CreateQueue = std::int32_t(AMBROSIA_GUEST_ABI *)(void *, const void *, const void *, void **);
+    using Query = std::int32_t(AMBROSIA_GUEST_ABI *)(void *, const void *, void **);
+    using Reference = std::uint32_t(AMBROSIA_GUEST_ABI *)(void *);
+    const auto create_queue = reinterpret_cast<CreateQueue>(device_table[8]);
+    const auto release_device = reinterpret_cast<Reference>(device_table[2]);
+    check(create_queue(device, reinterpret_cast<const void *>(1), reinterpret_cast<const void *>(1),
+                       nullptr) == pointer_error,
+          "CreateCommandQueue validates output before reading descriptor or identity");
+    void *output = reinterpret_cast<void *>(1);
+    check(create_queue(device, nullptr, &command_queue_interface, &output) == pointer_error && !output,
+          "CreateCommandQueue clears output before rejecting a missing descriptor");
+    const Guid unsupported{};
+    const std::array<std::uint32_t, 4> description{};
+    check(create_queue(device, description.data(), &unsupported, &output) == no_interface && !output,
+          "CreateCommandQueue rejects an unsupported identity without frontend ownership");
+    std::array<void *, 3> queues{};
+    const std::array<std::uint32_t, 3> types{0, 2, 3};
+    errno = E2BIG;
+    set_last_error(79);
+    crt_error() = 21;
+    for (std::size_t index = 0; index < queues.size(); ++index) {
+        std::array<std::uint32_t, 4> selected{types[index], probe == 2 ? 100u : 0u, 0, 1};
+        check(create_queue(device, selected.data(), &command_queue_interface, &queues[index]) == 0 &&
+                  queues[index],
+              "supported queue kinds acquire a frontend retaining the real backend queue owner");
+    }
+    auto *table = *static_cast<const std::uintptr_t **>(queues[0]);
+    const auto query = reinterpret_cast<Query>(table[0]);
+    const auto add = reinterpret_cast<Reference>(table[1]);
+    const auto release = reinterpret_cast<Reference>(table[2]);
+    const auto get_device = reinterpret_cast<Query>(table[7]);
+    if (probe == 1) {
+        reinterpret_cast<Reference>(table[10])(queues[0]);
+        throw std::runtime_error("unimplemented queue execution unexpectedly returned");
+    }
+    if (probe == 3) {
+        Runtime other;
+        Scope foreign(other);
+        (void)add(queues[0]);
+        throw std::runtime_error("foreign-runtime queue unexpectedly accepted");
+    }
+    check(query(queues[0], &command_queue_interface, &output) == 0 && output == queues[0] &&
+              release(output) == 1 && add(queues[0]) == 2 && release(queues[0]) == 1,
+          "queue identity and reference counts share one actual owned frontend");
+    check(release_device(device) == 3, "three queue children retain their device independently");
+    check(get_device(queues[0], &device11_interface, &output) == 0 && output == device &&
+              release_device(output) == 3,
+          "queue GetDevice returns the retained backend parent with an added reference");
+    check(errno == E2BIG && get_last_error() == 79 && crt_error() == 21,
+          "queue facade preserves native and guest error state");
+    for (auto *queue : queues) {
+        auto *entries = *static_cast<const std::uintptr_t **>(queue);
+        check(reinterpret_cast<Reference>(entries[2])(queue) == 0,
+              "each final queue reference releases its own parent lease");
+    }
+    device = nullptr;
+    check(create_device(nullptr, nullptr, &device11_interface, &device) == 0 && device &&
+              release_device(device) == 0,
+          "final queue-child teardown frees actual backend ownership for recreation");
+}

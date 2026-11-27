@@ -56,6 +56,14 @@ bool supports_fence(const void *interface_id) {
            requested == fence_interface;
 }
 
+bool supports_queue(const void *interface_id) {
+    Guid requested;
+    std::memcpy(&requested, interface_id, sizeof(requested));
+    return requested == unknown_interface_id || requested == supported_interfaces.front() ||
+           requested == device_child_interface || requested == pageable_interface ||
+           requested == command_queue_interface;
+}
+
 bool supports(const void *interface_id) {
     Guid requested;
     std::memcpy(&requested, interface_id, sizeof(requested));
@@ -82,6 +90,23 @@ struct GraphicsDevices::State {
         Device *parent = nullptr;
     };
 
+    struct QueueDescription {
+        std::uint32_t type = 0;
+        std::int32_t priority = 0;
+        std::uint32_t flags = 0, node_mask = 0;
+    };
+
+    static_assert(sizeof(QueueDescription) == 16);
+
+    struct Queue {
+        const std::uintptr_t *table;
+        std::uint32_t references = 1;
+        Device *parent = nullptr;
+        QueueDescription description;
+    };
+
+    static_assert(offsetof(Queue, table) == 0);
+
     static_assert(offsetof(Device, table) == 0);
     static_assert(offsetof(Fence, table) == 0);
 
@@ -89,6 +114,7 @@ struct GraphicsDevices::State {
     std::unique_ptr<host::Graphics> backend;
     std::unique_ptr<Device> device;
     std::map<Fence *, std::unique_ptr<Fence>> fences;
+    std::map<Queue *, std::unique_ptr<Queue>> queues;
 
     struct Access {
         State &state;
@@ -104,6 +130,19 @@ struct GraphicsDevices::State {
         std::unique_lock lock(state.mutex);
         if (!pointer || state.device.get() != pointer || !state.backend) {
             diagnostics::stop_trace("native graphics device is not owned by this runtime", 78);
+        }
+        return {state, std::move(lock)};
+    }
+
+    static Access owned_queue(Queue *pointer) {
+        auto *runtime = current_runtime();
+        if (!runtime || !guest::ThreadContext::current()) {
+            diagnostics::stop_trace("native command queue requires an active guest runtime", 78);
+        }
+        auto &state = *runtime->graphics_devices().state_;
+        std::unique_lock lock(state.mutex);
+        if (!pointer || !state.queues.contains(pointer) || !state.backend || !state.device) {
+            diagnostics::stop_trace("native command queue is not owned by this runtime", 78);
         }
         return {state, std::move(lock)};
     }
@@ -127,6 +166,163 @@ struct GraphicsDevices::State {
         } else {
             state.backend->destroy_device(pointer.real.id);
             state.device.reset();
+        }
+    }
+
+    template <std::size_t Slot> static std::uintptr_t AMBROSIA_GUEST_ABI unsupported_queue(Queue *) noexcept {
+        diagnostics::stop_trace("unsupported native ID3D12CommandQueue slot " + std::to_string(Slot), 78);
+    }
+
+    static void increment_queue(Queue &pointer) {
+        if (pointer.references == UINT32_MAX) {
+            diagnostics::stop_trace("native command queue reference count exhausted", 78);
+        }
+        ++pointer.references;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI queue_query(Queue *pointer, const void *interface_id,
+                                                       void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_queue(pointer);
+            if (!supports_queue(interface_id)) {
+                return no_interface;
+            }
+            increment_queue(*pointer);
+            *output = pointer;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI queue_add(Queue *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_queue(pointer);
+            increment_queue(*pointer);
+            return pointer->references;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI queue_release(Queue *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_queue(pointer);
+            const auto remaining = pointer->references - 1;
+            if (remaining) {
+                pointer->references = remaining;
+            } else {
+                auto *parent = pointer->parent;
+                access.state.queues.erase(pointer);
+                // The host queue belongs to the device. The last parent lease
+                // releases the real backend, not merely a frontend descriptor.
+                release_device(access.state, *parent);
+            }
+            return remaining;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI queue_device(Queue *pointer, const void *interface_id,
+                                                        void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_queue(pointer);
+            if (!supports(interface_id)) {
+                return no_interface;
+            }
+            increment(*pointer->parent);
+            *output = pointer->parent;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    template <std::size_t... Slots>
+    static std::array<std::uintptr_t, sizeof...(Slots)> make_queue_table(std::index_sequence<Slots...>) {
+        return {reinterpret_cast<std::uintptr_t>(&unsupported_queue<Slots>)...};
+    }
+
+    static const auto &queue_table() {
+        static const auto entries = [] {
+            auto result = make_queue_table(std::make_index_sequence<19>{});
+            result[0] = reinterpret_cast<std::uintptr_t>(&queue_query);
+            result[1] = reinterpret_cast<std::uintptr_t>(&queue_add);
+            result[2] = reinterpret_cast<std::uintptr_t>(&queue_release);
+            result[7] = reinterpret_cast<std::uintptr_t>(&queue_device);
+            return result;
+        }();
+        return entries;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI create_queue(Device *pointer, const QueueDescription *description,
+                                                        const void *interface_id, void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id || !description) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned(pointer);
+            if (!supports_queue(interface_id)) {
+                return no_interface;
+            }
+            QueueDescription copy;
+            std::memcpy(&copy, description, sizeof(copy));
+            char message[160];
+            const auto count = std::snprintf(
+                message, sizeof(message), "TRACE native queue request type=%u priority=%d flags=%u node=%u\n",
+                copy.type, copy.priority, copy.flags, copy.node_mask);
+            if (count > 0 && static_cast<std::size_t>(count) < sizeof(message)) {
+                diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
+            }
+            if ((copy.type != 0 && copy.type != 2 && copy.type != 3) || copy.priority || copy.flags ||
+                copy.node_mask > 1 || access.state.queues.size() >= 8 || pointer->references == UINT32_MAX) {
+                diagnostics::stop_trace("unsupported native command queue descriptor or ownership capacity",
+                                        78);
+            }
+            // Creation obtained a real graphics/compute queue. Its device owner
+            // must remain alive. No submission or independent queue ordering is
+            // claimed until those operations have their own real backend path.
+            (void)access.state.backend->query_device(pointer->real.id);
+            auto queue = std::make_unique<Queue>();
+            queue->table = queue_table().data();
+            queue->parent = pointer;
+            queue->description = copy;
+            auto *result = queue.get();
+            auto [position, inserted] = access.state.queues.emplace(result, std::move(queue));
+            (void)position;
+            if (!inserted) {
+                throw std::runtime_error("native queue ownership collision");
+            }
+            ++pointer->references;
+            *output = result;
+            diagnostics::write_service_trace("TRACE native real command queue frontend created\n");
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
         }
     }
 
@@ -450,6 +646,7 @@ struct GraphicsDevices::State {
             result[1] = reinterpret_cast<std::uintptr_t>(&add_reference);
             result[2] = reinterpret_cast<std::uintptr_t>(&release);
             result[7] = reinterpret_cast<std::uintptr_t>(&node_count);
+            result[8] = reinterpret_cast<std::uintptr_t>(&create_queue);
             result[26] = reinterpret_cast<std::uintptr_t>(&heap_properties);
             result[36] = reinterpret_cast<std::uintptr_t>(&create_fence);
             return result;

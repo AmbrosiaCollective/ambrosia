@@ -202,3 +202,22 @@ preservation for both layouts. Both final native builds pass1516 strict and17 li
 device/heap checks; six CPU class cases, existing26 timeline and24 protocol checks,
 and seven independent SDK slot checks pass. Both games now stop cleanly at
 CreateCommandQueue slot8. No game frame or menu is verified by these checks.
+
+## Initial command queue ownership
+
+Device slot8 creates a queue frontend only after verifying its real device owner,
+whose Vulkan creation already obtained a graphics/compute queue. Direct/compute/
+copy descriptors with normal priority, no flags and a single-node mask are supported.
+Up to eight logical frontends retain independent parent references over that host
+queue. Creation does not claim independent physical queues, submission ordering,
+timestamps or command execution; unimplemented methods stop explicitly. Future
+submission must reuse VulkanQueue/QueueHolds and true backend ordering.
+
+The public 19-slot queue ABI currently implements identity/refcounts/GetDevice.
+Descriptor bytes are copied once and retained. Output/IID/descriptor guards run
+before access; foreign-runtime objects reject before dereference. The last child
+lease releases the real backend. Both builds pass1516 strict and15 live queue
+checks, including three kinds,parent retention and backend recreation. Thirteen
+independent SDK/fixture index checks pass. Actual game direct-queue creation now
+succeeds; the next stop is CreateFence's unsupported flags/initial-value contract.
+No queue work or game frame/menu is verified by ownership checks.
