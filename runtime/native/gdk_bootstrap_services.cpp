@@ -98,6 +98,9 @@ std::int32_t AMBROSIA_GUEST_ABI query_api(const void *class_id, const void *inte
         Guid requested_interface;
         std::memcpy(&requested_class, class_id, sizeof(requested_class));
         std::memcpy(&requested_interface, interface_id, sizeof(requested_interface));
+        if (requested_class == display_class_id) {
+            return current_runtime()->gdk_display().query(requested_interface, output);
+        }
         if (requested_class == threading_class_id) {
             return current_runtime()->gdk_threading().query(requested_interface, output);
         }

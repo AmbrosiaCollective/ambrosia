@@ -195,6 +195,7 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
         service_runtime.startup().bind_image(paths.image);
         if (options.run) {
             service_runtime.files().bind(paths.package, paths.image);
+            service_runtime.gdk_display().select_sdr_output();
             if (!options.storage.empty()) {
                 // Validate separation before the host's writable-directory probe.
                 service_runtime.files().bind_additional_native_root(options.storage);

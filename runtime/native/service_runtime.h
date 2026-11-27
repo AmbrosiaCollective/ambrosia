@@ -12,6 +12,7 @@
 #include "fls_slots.h"
 #include "game_input.h"
 #include "gdk_bootstrap.h"
+#include "gdk_display.h"
 #include "gdk_networking.h"
 #include "gdk_packages.h"
 #include "gdk_threading.h"
@@ -71,6 +72,10 @@ class Runtime {
 
     LibraryReferences &library_references() {
         return library_references_;
+    }
+
+    GdkDisplay &gdk_display() {
+        return gdk_display_;
     }
 
     GdkPackages &gdk_packages() {
@@ -230,6 +235,7 @@ class Runtime {
     ExceptionFilter exception_filter_;
     GdkBootstrap gdk_bootstrap_;
     GdkThreading gdk_threading_;
+    GdkDisplay gdk_display_;
     GdkNetworking gdk_networking_;
     GdkUsers gdk_users_;
     GdkPackages gdk_packages_;

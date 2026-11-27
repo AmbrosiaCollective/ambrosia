@@ -192,6 +192,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "delayed_queue_tests.h"
 #include "app_lifecycle_tests.h"
 #include "gdk_networking_tests.h"
+#include "gdk_display_tests.h"
 #include "gdk_user_tests.h"
 #include "game_input_tests.h"
 #include "storage_factory_tests.h"
@@ -685,6 +686,7 @@ extern "C" int ambrosia_native_tests() {
         task_queue_manual_checks();
         app_lifecycle_checks();
         gdk_networking_checks();
+        display_checks();
         gdk_user_subscription_checks();
         game_input_checks();
         storage_factory_checks();
@@ -918,6 +920,10 @@ extern "C" int ambrosia_native_trace_storage_8g(const char *image, const char *p
         return 2;
     }
     return trace_native_image(image, package, 3, inventory, storage);
+}
+
+extern "C" int ambrosia_native_display_rejection(unsigned mode) {
+    return display_rejection_probe(mode);
 }
 
 extern "C" int ambrosia_native_locale_rejection(unsigned mode) {

@@ -75,6 +75,12 @@ branch settings; these repository files alone do not enforce permissions.
   game services, download game packages or publish to GitHub. These remain outside
   this authorization. Continue in manageable reviewed local commits until the
   menu is actually verified; synthetic checks alone do not satisfy the goal.
+- Historical profile sizes, timeouts, memory/thread budgets and dependency
+  thresholds are records, not further approval gates. For the native-menu goal,
+  review and document necessary bounded replacements, validate isolation and
+  proceed without asking again. This standing authorization overrides conflicting
+  historical limits. Preserve read-only inputs, privacy controls, network/process
+  restrictions and local-only publication; do not remove limits indiscriminately.
 - Task061's sparse-address profile is explicitly approved for CPU-only native
   boot: scripts/run_sparse_isolated.py and isolation_sparse_bootstrap.py in the
   outer workspace retain RO inputs and all home/credential/GPU/network/exec/
@@ -218,3 +224,7 @@ For native C++ changes, use the reviewed long compiler helper's repeated
 rebuild. This source-only mode emits no binary and retains all compiler isolation
 controls. Compiler errors must return nonzero even with no expected artifacts.
 Keep artifact source/hash checks and isolated runtime tests after full builds.
+
+Gate test/game execution on successful build/source/artifact verification. Use
+separate calls or explicit exit-status branching; an ungated multiline shell
+continues after a failed check. Preserve failed attempts as evidence.
