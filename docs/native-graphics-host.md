@@ -45,3 +45,19 @@ python3 -I scripts/query_native_graphics_host.py \
 Labels must be fresh; evidence is never overwritten. Never use host-service
 permissions to launch the guest runtime, tests or arbitrary downloaded code.
 Original guest and compiler profiles remain unchanged.
+
+## Owned logical-device bootstrap
+
+`scripts/create_native_graphics_host.py` is a separate fixed service. It retains
+all 43 controls and Task136 resource bounds, then creates one Vulkan 1.3 device,
+enables the checked renderer feature subset, obtains one graphics/compute queue
+and destroys the device before its instance. It submits no work and accepts no
+guest payload or arbitrary Vulkan command. Host handles stay private.
+
+The hardware bootstrap passes on native Linux. Thirty CPU-only ABI, feature
+selection and failure/cleanup checks pass without loading a driver, and public
+C declarations confirm the queue/device create-info layouts. A real device and
+queue are prerequisites; they do not establish D3D12 coverage or menu rendering.
+The guest-facing device still needs a typed transport and COM interface backed
+by this real ownership. Preserve the metadata-only service and original guest
+profiles. Device names and identifying hardware fields remain omitted.

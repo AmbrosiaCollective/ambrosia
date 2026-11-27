@@ -276,3 +276,9 @@ private/read-only mounts, bounded module-state/topology copies, syscall controls
 and resource limits are documented in docs/native-graphics-host.md. Guest/test
 execution retains the default outer sandbox. Do not wrap it in host-service
 permissions. Original isolation profiles remain unchanged.
+
+Task137 adds the separate fixed scripts/create_native_graphics_host.py service:
+all 43 controls and resource bounds precede one real Vulkan device/queue bootstrap.
+Only creation, queue lookup and reverse-order destruction are added; no GPU work,
+shader, guest/test payload or host handle transfer. The metadata-only service and
+all guest/compiler profiles remain unchanged. See docs/native-graphics-host.md.
