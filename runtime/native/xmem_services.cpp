@@ -100,8 +100,9 @@ void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std:
         protection == 4 || protection == 0x801 || protection == 0x2004 || protection == 0x2404;
     AllocationResult result;
     const bool committed_64k =
-        allocation_type == 0x20403000u &&
-        ((attributes == 0x181 && protection == 4) || (attributes == 0x283 && protection == 0x42404));
+        (allocation_type == 0x20403000u &&
+         ((attributes == 0x181 && protection == 4) || (attributes == 0x283 && protection == 0x42404))) ||
+        (allocation_type == 0x20401000u && attributes == 0x283 && protection == 0x42404);
     const bool committed_2m = allocation_type == 0x20003000u &&
                               ((attributes == 0x183 && protection == 0x22004) ||
                                (attributes == 0x283 && (protection == 0x2004 || protection == 0x2404)));

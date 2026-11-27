@@ -72,6 +72,35 @@ void xmem_committed_checks() {
           "committed XMem ABI regions retain normal whole-region VirtualFree ownership");
     check(!allocate(nullptr, 1, 0x20403000u, 0x183, 0x22004) && get_last_error() == 50,
           "committed XMem refuses unobserved combinations of otherwise known page and policy words");
+    set_last_error(59);
+    auto *commit_only = static_cast<std::byte *>(allocate(nullptr, 1, 0x20401000u, 0x283, 0x42404));
+    const auto commit_info = runtime.memory().xmem_region(commit_only);
+    check(commit_only && commit_info && commit_info->bytes == 65536 &&
+              commit_info->guest_page_bytes == 65536 && commit_info->attributes == 0x283 &&
+              commit_info->protection == 0x42404 && commit_info->backing == XmemBacking::private_pages &&
+              reinterpret_cast<std::uintptr_t>(commit_only) % 65536 == 0 &&
+              !runtime.memory().window(commit_only) && get_last_error() == 59,
+          "null-address commit-only XMem creates a real aligned private region with the observed policy");
+    if (commit_only) {
+        check(commit_only[0] == std::byte{} && commit_only[65535] == std::byte{} &&
+                  inspection_page_permissions(commit_only).starts_with("rw-"),
+              "commit-only XMem pages start zeroed and readable/writable without execute permission");
+        commit_only[0] = std::byte{0x31};
+        commit_only[65535] = std::byte{0x72};
+        check(allocate(commit_only, 65536, 0x20403000u, 0x283, 0x42404) == nullptr &&
+                  get_last_error() == 50 && commit_only[0] == std::byte{0x31} &&
+                  commit_only[65535] == std::byte{0x72},
+              "fixed-address allocation remains unsupported without changing existing committed bytes");
+        check(release(commit_only, 0, 0x8000) == 1 && runtime.memory().reserved_bytes() == 0,
+              "commit-only private backing releases through ordinary VirtualFree ownership");
+    }
+    check(!allocate(nullptr, 1, 0x20401000u, 0x181, 4) && get_last_error() == 50 &&
+              !allocate(nullptr, 1, 0x20401000u, 0x283, 0x2404) && get_last_error() == 50,
+          "commit-only XMem refuses unobserved combinations of otherwise known attributes/protection");
+    check(!allocate(nullptr, 0, 0x20401000u, 0x283, 0x42404) && get_last_error() == 87 &&
+              !allocate(nullptr, large_page * 2 + 1, 0x20401000u, 0x283, 0x42404) && get_last_error() == 8 &&
+              runtime.memory().reserved_bytes() == 0 && crt_error() == 37,
+          "commit-only XMem validates size and private budget before allocating or changing error state");
     std::ostringstream output, errors;
     const std::vector<std::filesystem::path> inspect{"--inspect", "unused", "--boot-memory"};
     check(ambrosia::run_native_command(inspect, output, errors) == 2 &&
