@@ -4,6 +4,7 @@
 #include "startup_trace.h"
 #include "text_conversion.h"
 #include <cerrno>
+#include <cstring>
 #include <stdexcept>
 
 namespace ambrosia::services {
@@ -32,12 +33,13 @@ struct RestoreNativeError {
 
 struct CreationRollback {
     NativeWindows &windows;
-    std::uintptr_t handle;
+    NativeWindow &window;
     bool accepted = false;
 
     ~CreationRollback() {
+        window.creation_structure = 0;
         if (!accepted) {
-            windows.retire(handle);
+            windows.retire(window.handle);
         }
     }
 };
@@ -110,7 +112,7 @@ std::uintptr_t AMBROSIA_GUEST_ABI create_window(std::uint32_t extended_style, st
         request.resizable = true;
         // WM_CREATE must occur before visibility, including WS_VISIBLE calls.
         auto window = runtime->windows().create(registered, request, style, extended_style);
-        CreationRollback rollback{runtime->windows(), window->handle};
+        CreationRollback rollback{runtime->windows(), *window};
         const auto &geometry = window->host_window.geometry;
         CreateStructure creation{parameter,
                                  instance,
@@ -126,6 +128,7 @@ std::uintptr_t AMBROSIA_GUEST_ABI create_window(std::uint32_t extended_style, st
                                  class_id,
                                  extended_style,
                                  0};
+        window->creation_structure = reinterpret_cast<std::uintptr_t>(&creation);
         diagnostics::write_service_trace("TRACE native host window created; dispatching WM_NCCREATE\n");
         if (!send_creation(*runtime, *window, 0x81, &creation)) {
             return 0;
@@ -159,11 +162,58 @@ std::uintptr_t AMBROSIA_GUEST_ABI create_window(std::uint32_t extended_style, st
         diagnostics::stop_trace(error.what(), 78);
     }
 }
+
+std::intptr_t AMBROSIA_GUEST_ABI default_window(std::uintptr_t handle, std::uint32_t message,
+                                                std::uintptr_t first, std::intptr_t second) noexcept {
+    RestoreNativeError restore;
+    try {
+        auto *runtime = current_runtime();
+        if (!runtime || !guest::ThreadContext::current()) {
+            throw std::runtime_error("native default window procedure requires an active guest context");
+        }
+        auto window = runtime->windows().find(handle);
+        if (!window) {
+            set_last_error(1400); // ERROR_INVALID_WINDOW_HANDLE.
+            return 0;
+        }
+        if (window->owner != std::this_thread::get_id()) {
+            throw std::runtime_error("native default processing requires the owning window thread");
+        }
+        if (message == 0x81) {
+            if (!second) {
+                return 0;
+            }
+            if (!window->creation_structure ||
+                static_cast<std::uintptr_t>(second) != window->creation_structure) {
+                throw std::runtime_error("default NCCREATE requires its owned active creation structure");
+            }
+            const char *title;
+            std::memcpy(&title, reinterpret_cast<const std::byte *>(second) + 56, sizeof(title));
+            auto copied = title ? copy_string(title, 4096) : std::optional(std::string{});
+            if (!copied || !unicode::utf8_to_utf16(*copied, true)) {
+                throw std::runtime_error("default NCCREATE title requires a bounded valid UTF8 name");
+            }
+            // Initialize the actual owned host title before accepting creation.
+            window->presentation->set_title(window->host_window.id, *copied);
+            window->title = std::move(*copied);
+            diagnostics::write_service_trace(
+                "TRACE native default NCCREATE initialized owned window title\n");
+            return 1;
+        }
+        // Numeric shape only: no game string, pointer or message payload bytes.
+        throw std::runtime_error("unsupported native default window message=" + std::to_string(message) +
+                                 " wparam_present=" + std::to_string(first != 0) +
+                                 " lparam_present=" + std::to_string(second != 0));
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
+}
 } // namespace
 
 void register_window_services(ImportRegistry &registry) {
     for (const auto *module : {"user32.dll", "ext-ms-win-rtcore-ntuser-window-ansi-l1-1-0.dll"}) {
         registry.add(module, "CreateWindowExA", reinterpret_cast<std::uintptr_t>(&create_window));
+        registry.add(module, "DefWindowProcA", reinterpret_cast<std::uintptr_t>(&default_window));
     }
 }
 } // namespace ambrosia::services

@@ -17,6 +17,8 @@ struct NativeWindow {
     host::PresentationWindow host_window;
     std::thread::id owner;
     std::uint32_t style = 0, extended_style = 0;
+    // Nonzero only while the owning thread is dispatching creation messages.
+    std::uintptr_t creation_structure = 0;
     std::string title;
     std::array<std::int32_t, 4> client_rectangle{};
     std::vector<std::byte> extra;

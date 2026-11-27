@@ -5,6 +5,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ambrosia::host {
@@ -41,6 +42,7 @@ class Presentation {
     PresentationWindow create(const WindowRequest &request);
     void destroy(std::uint32_t window);
     WindowGeometry show(std::uint32_t window, bool visible);
+    void set_title(std::uint32_t window, std::string_view title);
     std::vector<PresentationEvent> poll();
     void present(std::uint32_t window, std::int32_t width, std::int32_t height,
                  std::span<const std::byte> rgba);

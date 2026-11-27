@@ -1070,6 +1070,11 @@ extern "C" int ambrosia_native_window_creation_tests() {
     return failures ? 1 : 0;
 }
 
+extern "C" int ambrosia_native_default_window_probe(unsigned mode) {
+    window_creation_checks(mode);
+    return 99;
+}
+
 extern "C" int ambrosia_native_trace_window_8g(const char *image, const char *package, const char *inventory,
                                                const char *storage, int descriptor,
                                                const char *presentation) {

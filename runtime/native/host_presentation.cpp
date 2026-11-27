@@ -240,6 +240,20 @@ std::vector<PresentationEvent> Presentation::poll() {
     return events;
 }
 
+void Presentation::set_title(std::uint32_t window, std::string_view title) {
+    if (title.size() > payload_limit || title.find('\0') != std::string_view::npos) {
+        throw std::runtime_error("native presentation title exceeds its string contract");
+    }
+    const std::lock_guard lock(transport_->mutex);
+    Packet packet;
+    packet.operation = 6;
+    packet.window = window;
+    const auto reply = transport_->exchange(packet, title);
+    if (reply.window != window) {
+        throw std::runtime_error("native presentation title refers to a different window");
+    }
+}
+
 void Presentation::present(std::uint32_t window, std::int32_t width, std::int32_t height,
                            std::span<const std::byte> rgba) {
     const auto expected_bytes = frame_bytes(width, height);

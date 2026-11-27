@@ -6,6 +6,7 @@ struct CreationObservation {
     std::vector<std::uint32_t> messages;
     bool valid = true;
     unsigned reject = 0;
+    unsigned default_mode = 0;
 };
 
 CreationObservation *active_creation = nullptr;
@@ -49,12 +50,28 @@ std::intptr_t AMBROSIA_GUEST_ABI creation_procedure(std::uintptr_t handle, std::
     crt_error() = 31;
     set_last_error(211);
     if (message == 0x81) {
+        if (observation.default_mode) {
+            using Default = std::intptr_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::uint32_t, std::uintptr_t,
+                                                                std::intptr_t);
+            const auto procedure = reinterpret_cast<Default>(
+                observation.runtime->resolve(service_symbol("DefWindowProcA", "user32.dll")));
+            if (observation.default_mode == 2) {
+                return procedure(handle, message, first, second + 8);
+            }
+            if (observation.default_mode == 3) {
+                return procedure(handle, 0x1234, 0, 0);
+            }
+            observation.valid = observation.valid && !procedure(handle, message, 0, 0);
+            const char *changed_title = "Original default title \xc3\xa9";
+            std::memcpy(reinterpret_cast<std::byte *>(second) + 56, &changed_title, sizeof(changed_title));
+            return procedure(handle, message, first, second);
+        }
         return observation.reject == 1 ? 0 : 1;
     }
     return message == 1 && observation.reject == 2 ? -1 : 0;
 }
 
-void window_creation_checks() {
+void window_creation_checks(unsigned default_probe = 0) {
     using namespace ambrosia;
     using namespace services;
     Runtime runtime;
@@ -68,6 +85,11 @@ void window_creation_checks() {
     if (!address) {
         return;
     }
+    const auto default_address = runtime.resolve(service_symbol("DefWindowProcA", "user32.dll"));
+    check(default_address &&
+              default_address == runtime.resolve(service_symbol(
+                                     "DefWindowProcA", "ext-ms-win-rtcore-ntuser-window-ansi-l1-1-0.dll")),
+          "default processing aliases expose the same typed Windows ABI service");
     runtime.windows().bind("/presentation");
     auto bytes = fixture();
     put<std::uint32_t>(bytes, 0x98 + 120, 0);
@@ -95,6 +117,7 @@ void window_creation_checks() {
     observation.procedure = description.procedure;
     observation.parameter = 0x123456789abcdef0ull;
     observation.thread = std::this_thread::get_id();
+    observation.default_mode = default_probe;
     active_creation = &observation;
     const auto create = reinterpret_cast<Create>(address);
     const auto call = [&](std::uintptr_t class_id) {
@@ -188,6 +211,25 @@ void window_creation_checks() {
           "an original PE supplies all twelve register/stack arguments, including64-bit instance and "
           "creation parameter");
     runtime.windows().retire(pe_handle);
+    if (default_address) {
+        observation.default_mode = 1;
+        observation.messages.clear();
+        const auto default_handle = call(registered.atom);
+        auto default_window = runtime.windows().find(default_handle);
+        check(
+            default_window && observation.valid &&
+                default_window->title == "Original default title \xc3\xa9" &&
+                !default_window->creation_structure &&
+                observation.messages == std::vector<std::uint32_t>{0x81, 0x83, 1},
+            "default NCCREATE updates the real host title before acceptance and clears its structure lease");
+        using Default =
+            std::intptr_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::uint32_t, std::uintptr_t, std::intptr_t);
+        const auto procedure = reinterpret_cast<Default>(default_address);
+        runtime.windows().retire(default_handle);
+        default_window.reset();
+        check(!procedure(default_handle, 0x81, 0, 0) && get_last_error() == 1400,
+              "default processing rejects retired handles before inspecting a creation pointer");
+    }
     active_creation = nullptr;
     errno = saved_error;
 }

@@ -86,6 +86,8 @@ class Video:
             'SDL_DestroyWindow': ([ctypes.c_void_p], None),
             'SDL_ShowWindow': ([ctypes.c_void_p], None),
             'SDL_HideWindow': ([ctypes.c_void_p], None),
+            'SDL_SetWindowTitle': ([ctypes.c_void_p, ctypes.c_char_p], None),
+            'SDL_GetWindowTitle': ([ctypes.c_void_p], ctypes.c_char_p),
             'SDL_GetWindowID': ([ctypes.c_void_p], ctypes.c_uint),
             'SDL_GetWindowSize': ([ctypes.c_void_p, ctypes.POINTER(ctypes.c_int),
                                     ctypes.POINTER(ctypes.c_int)], None),
@@ -173,7 +175,7 @@ class Video:
             if b'\0' in payload:
                 return 1, 0, (0, 0, 0, 0), b'', 0
             native_flags = (4 if flags & 1 else 8) | (32 if flags & 2 else 0) | (16 if flags & 4 else 0)
-            pointer = self.library.SDL_CreateWindow(payload or b'Ambrosia',
+            pointer = self.library.SDL_CreateWindow(payload,
                 0x1fff0000 if x == -2147483648 else x,
                 0x1fff0000 if y == -2147483648 else y, width, height, native_flags)
             if not pointer:
@@ -194,6 +196,17 @@ class Video:
             return 0, identifier, (0, 0, 0, 0), b'', 0
         if operation == 3 and flags in (0, 1):
             (self.library.SDL_ShowWindow if flags else self.library.SDL_HideWindow)(pointer)
+            return 0, identifier, self.geometry(pointer), b'', 0
+        if operation == 6:
+            try:
+                payload.decode('utf-8', errors='strict')
+            except UnicodeDecodeError:
+                return 1, identifier, (0, 0, 0, 0), b'', 0
+            if b'\0' in payload:
+                return 1, identifier, (0, 0, 0, 0), b'', 0
+            self.library.SDL_SetWindowTitle(pointer, payload)
+            if self.library.SDL_GetWindowTitle(pointer) != payload:
+                return 3, identifier, (0, 0, 0, 0), b'', 0
             return 0, identifier, self.geometry(pointer), b'', 0
         if operation == 5:
             if width <= 0 or height <= 0 or width * height > MAX_PIXELS or width > 4096 or height > 2160:
@@ -251,7 +264,7 @@ def serve(root, seconds):
                 time.sleep(0.002)
                 continue
             requests += 1
-            if magic != MAGIC or size > MAX_PAYLOAD or reserved1 or reserved2 or operation not in range(1, 6):
+            if magic != MAGIC or size > MAX_PAYLOAD or reserved1 or reserved2 or operation not in range(1, 7):
                 status, identifier, geometry, output, argument = 1, 0, (0, 0, 0, 0), b'', 0
             else:
                 payload = os.pread(request_fd, size, HEADER.size)
