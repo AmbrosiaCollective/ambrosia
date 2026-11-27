@@ -5,6 +5,7 @@
 #include "guest_thread.h"
 #include "host_affinity.h"
 #include "host_priority.h"
+#include "host_shared_backing.h"
 #include "nls_services.h"
 #include "module_graph.h"
 #include "native_command.h"
@@ -33,6 +34,10 @@
 #include <sstream>
 #include <stdexcept>
 #include <utility>
+#ifdef __linux__
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace {
 using Bytes = std::vector<std::byte>;
@@ -243,6 +248,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "invalid_parameter_tests.h"
 #include "random_tests.h"
 #include "prng_tests.h"
+#include "shared_backing_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -944,6 +950,18 @@ extern "C" int ambrosia_native_prng_workers() {
         prng_worker_check();
     } catch (const std::exception &error) {
         std::cerr << "FAIL native PRNG worker exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_shared_backing_tests(int descriptor) {
+    checks = failures = 0;
+    try {
+        shared_backing_checks(descriptor);
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL shared backing exception: " << error.what() << '\n';
         ++failures;
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
