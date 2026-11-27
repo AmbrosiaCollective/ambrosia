@@ -22,6 +22,90 @@ HEADER = struct.Struct('<8sIIIIiiiiIIII8x')
 EVENT = struct.Struct('<IIIIii')
 MAX_PIXELS = 3840 * 2160
 MAX_PAYLOAD = 4096
+PROJECT_TITLE = b'Ambrosia'
+
+
+def project_icon():
+    path = Path(__file__).resolve().parents[1] / 'assets' / 'window-icon.rgba'
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        information = os.fstat(descriptor)
+        if not stat.S_ISREG(information.st_mode) or information.st_nlink != 1 or information.st_size > 262160:
+            raise RuntimeError('invalid project icon asset')
+        data = os.pread(descriptor, information.st_size, 0)
+    finally:
+        os.close(descriptor)
+    if len(data) < 16:
+        raise RuntimeError('truncated project icon asset')
+    magic, width, height = struct.unpack_from('<8sII', data)
+    if magic != b'AMBICON1' or not 1 <= width <= 256 or not 1 <= height <= 256:
+        raise RuntimeError('invalid project icon dimensions')
+    if len(data) != 16 + width * height * 4:
+        raise RuntimeError('invalid project icon pixel count')
+    return width, height, data[16:]
+
+
+class SdlVersion(ctypes.Structure):
+    _fields_ = [('major', ctypes.c_ubyte), ('minor', ctypes.c_ubyte), ('patch', ctypes.c_ubyte)]
+
+
+class WindowManagerInfo(ctypes.Structure):
+    _fields_ = [('version', SdlVersion), ('subsystem', ctypes.c_int), ('information', ctypes.c_uint64 * 8)]
+
+
+class OwnedBranding:
+    """Read back three fixed properties from this service's own X11 window only."""
+    def __init__(self, sdl):
+        self.sdl = sdl
+        self.x11 = ctypes.CDLL('libX11.so.6')
+        self.x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+        self.x11.XInternAtom.restype = ctypes.c_ulong
+        self.x11.XGetWindowProperty.argtypes = [
+            ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_long, ctypes.c_long,
+            ctypes.c_int, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_void_p)]
+        self.x11.XGetWindowProperty.restype = ctypes.c_int
+        self.x11.XFree.argtypes = [ctypes.c_void_p]
+        self.x11.XFree.restype = ctypes.c_int
+
+    def property(self, display, window, name, expected_type, expected_format, items):
+        atom = self.x11.XInternAtom(display, name, 1)
+        actual_type, count, remaining = ctypes.c_ulong(), ctypes.c_ulong(), ctypes.c_ulong()
+        actual_format = ctypes.c_int()
+        pointer = ctypes.c_void_p()
+        length = items if expected_format == 32 else (items + 3) // 4
+        status = self.x11.XGetWindowProperty(display, window, atom, 0, length, 0, expected_type,
+            ctypes.byref(actual_type), ctypes.byref(actual_format), ctypes.byref(count),
+            ctypes.byref(remaining), ctypes.byref(pointer))
+        try:
+            if (not atom or status or actual_type.value != expected_type or
+                    actual_format.value != expected_format or count.value != items or
+                    remaining.value or not pointer.value):
+                raise RuntimeError('owned window branding property failed readback')
+            if expected_format == 8:
+                return ctypes.string_at(pointer, items)
+            values = ctypes.cast(pointer, ctypes.POINTER(ctypes.c_ulong))
+            return [values[index] & 0xffffffff for index in range(items)]
+        finally:
+            if pointer.value:
+                self.x11.XFree(pointer)
+
+    def verify(self, window, width, height, pixels):
+        information = WindowManagerInfo()
+        self.sdl.SDL_GetVersion(ctypes.byref(information.version))
+        if not self.sdl.SDL_GetWindowWMInfo(window, ctypes.byref(information)) or information.subsystem != 2:
+            raise RuntimeError('owned X11 window identity unavailable')
+        display, native_window = information.information[:2]
+        utf8 = self.x11.XInternAtom(display, b'UTF8_STRING', 1)
+        title = self.property(display, native_window, b'_NET_WM_NAME', utf8, 8, len(PROJECT_TITLE))
+        window_class = self.property(display, native_window, b'WM_CLASS', 31, 8, 2 * (len(PROJECT_TITLE) + 1))
+        icon = self.property(display, native_window, b'_NET_WM_ICON', 6, 32, 2 + width * height)
+        expected = [width, height]
+        for offset in range(0, len(pixels), 4):
+            red, green, blue, alpha = pixels[offset:offset + 4]
+            expected.append((alpha << 24) | (red << 16) | (green << 8) | blue)
+        if title != PROJECT_TITLE or window_class != (PROJECT_TITLE + b'\0') * 2 or icon != expected:
+            raise RuntimeError('owned window branding disagrees with project identity')
 
 
 def limit_lifetime(seconds):
@@ -95,6 +179,9 @@ class Video:
             'SDL_HideWindow': ([ctypes.c_void_p], None),
             'SDL_SetWindowTitle': ([ctypes.c_void_p, ctypes.c_char_p], None),
             'SDL_GetWindowTitle': ([ctypes.c_void_p], ctypes.c_char_p),
+            'SDL_SetWindowIcon': ([ctypes.c_void_p, ctypes.c_void_p], None),
+            'SDL_GetVersion': ([ctypes.POINTER(SdlVersion)], None),
+            'SDL_GetWindowWMInfo': ([ctypes.c_void_p, ctypes.POINTER(WindowManagerInfo)], ctypes.c_int),
             'SDL_GetWindowID': ([ctypes.c_void_p], ctypes.c_uint),
             'SDL_GetWindowFlags': ([ctypes.c_void_p], ctypes.c_uint),
             'SDL_RaiseWindow': ([ctypes.c_void_p], None),
@@ -121,15 +208,28 @@ class Video:
             function.restype = result
         self.windows = {}
         self.next_id = 1
+        self.icon_width, self.icon_height, self.icon_data = project_icon()
+        self.icon_pixels = ctypes.create_string_buffer(self.icon_data)
+        self.icon_surface = None
+        self.branding = OwnedBranding(self.library)
+        self.library.SDL_SetHint(b'SDL_APP_NAME', PROJECT_TITLE)
         self.library.SDL_SetHint(b'SDL_FRAMEBUFFER_ACCELERATION', b'0')
         self.library.SDL_SetHint(b'SDL_RENDER_DRIVER', b'software')
         if self.library.SDL_Init(0x20):
             raise RuntimeError('cannot initialize native software presentation')
+        self.icon_surface = self.library.SDL_CreateRGBSurfaceFrom(
+            self.icon_pixels, self.icon_width, self.icon_height, 32, self.icon_width * 4,
+            0xff, 0xff00, 0xff0000, 0xff000000)
+        if not self.icon_surface:
+            raise RuntimeError('cannot initialize project icon surface')
 
     def close(self):
         for pointer in self.windows.values():
             self.library.SDL_DestroyWindow(pointer)
         self.windows.clear()
+        if self.icon_surface:
+            self.library.SDL_FreeSurface(self.icon_surface)
+            self.icon_surface = None
         self.library.SDL_Quit()
 
     def geometry(self, pointer):
@@ -187,11 +287,19 @@ class Video:
             if b'\0' in payload:
                 return 1, 0, (0, 0, 0, 0), b'', 0
             native_flags = (4 if flags & 1 else 8) | (32 if flags & 2 else 0) | (16 if flags & 4 else 0)
-            pointer = self.library.SDL_CreateWindow(payload,
+            pointer = self.library.SDL_CreateWindow(PROJECT_TITLE,
                 0x1fff0000 if x == -2147483648 else x,
                 0x1fff0000 if y == -2147483648 else y, width, height, native_flags)
             if not pointer:
                 return 3, 0, (0, 0, 0, 0), b'', 0
+            self.library.SDL_SetWindowIcon(pointer, self.icon_surface)
+            try:
+                self.branding.verify(pointer, self.icon_width, self.icon_height, self.icon_data)
+            except RuntimeError:
+                self.library.SDL_DestroyWindow(pointer)
+                return 3, 0, (0, 0, 0, 0), b'', 0
+            print(json.dumps({'project_branding_verified': True, 'title': 'Ambrosia',
+                              'desktop_class': 'Ambrosia', 'icon': [self.icon_width, self.icon_height]}), flush=True)
             identifier = self.next_id
             self.next_id += 1
             self.windows[identifier] = pointer
@@ -216,8 +324,8 @@ class Video:
                 return 1, identifier, (0, 0, 0, 0), b'', 0
             if b'\0' in payload:
                 return 1, identifier, (0, 0, 0, 0), b'', 0
-            self.library.SDL_SetWindowTitle(pointer, payload)
-            if self.library.SDL_GetWindowTitle(pointer) != payload:
+            self.library.SDL_SetWindowTitle(pointer, PROJECT_TITLE)
+            if self.library.SDL_GetWindowTitle(pointer) != PROJECT_TITLE:
                 return 3, identifier, (0, 0, 0, 0), b'', 0
             return 0, identifier, self.geometry(pointer), b'', 0
         if operation == 7:
@@ -337,7 +445,8 @@ def main():
         parser.error('seconds must be from1 to120')
     limit_lifetime(arguments.seconds)
     environment = {key: os.environ[key] for key in ('DISPLAY', 'XAUTHORITY') if key in os.environ}
-    environment.update(PATH='/usr/bin', SDL_VIDEODRIVER='x11', SDL_RENDER_DRIVER='software')
+    environment.update(PATH='/usr/bin', SDL_VIDEODRIVER='x11', SDL_RENDER_DRIVER='software',
+                       SDL_VIDEO_X11_WMCLASS='Ambrosia')
     os.environ.clear()
     os.environ.update(environment)
     resource.setrlimit(resource.RLIMIT_AS, (2 * 1024**3,) * 2)

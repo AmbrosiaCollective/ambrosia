@@ -11,6 +11,13 @@ accepts no executable code, guest callbacks, game files, arbitrary paths or X11
 packets. Window IDs are service-owned integers, never host pointers. Titles,
 dimensions, frames, event counts and live windows have explicit limits.
 
+Visible windows use the Ambrosia title, desktop class and transparent project icon.
+The icon is a metadata-free pixel copy of the existing favicon; the broker loads
+only its fixed, bounded asset beside the project scripts. It verifies its own X11
+title, class and every icon pixel before acknowledging creation. Game-requested
+titles remain in the native runtime's logical window metadata; they do not replace
+the project display identity. No host window handles are exposed to the guest.
+
 The reviewed launcher gives the guest writable request/frame files and a read-only
 response file inside an immutable endpoint directory. The guest retains network
 and execution denial, hidden home/credentials/GPU, read-only inputs and existing

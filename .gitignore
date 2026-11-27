@@ -9,6 +9,8 @@ work/
 !/assets/wordmark.svg
 !/assets/banner.png
 !/assets/favicon.ico
+!/assets/window-icon.rgba
+!/assets/window-icon.json
 !/assets/README.md
 carve/
 *.rpf

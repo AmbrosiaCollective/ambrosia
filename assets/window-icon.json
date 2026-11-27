@@ -1,0 +1,13 @@
+{
+  "source": "assets/favicon.ico",
+  "source_sha256": "63836cf8157110bd5afb83126afdbb6ab022568dcb27c4a28a3d851c7dab6e92",
+  "output": "assets/window-icon.rgba",
+  "bytes": 262160,
+  "sha256": "aa1419867624dbd78862187791755a735b2f7f683721159172b9ace855595abf",
+  "format": "AMBICON1, little-endian u32 width/height, tightly packed straight RGBA8",
+  "width": 256,
+  "height": 256,
+  "alpha_preserved": true,
+  "metadata_stripped": true,
+  "method": "Existing largest PNG icon decoded with bounded standard-library helper; no new artwork or dependency"
+}
