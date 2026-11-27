@@ -3,7 +3,10 @@
 
 namespace ambrosia::services {
 namespace {
-std::size_t view_bytes(const PhysicalSpan &span) {
+std::size_t view_bytes(const PhysicalSpan &span, host::Access access) {
+    if (access != host::Access::read && access != host::Access::read_write) {
+        throw std::invalid_argument("retained physical views require nonexecuting read or read/write access");
+    }
     if (!span.size() || span.pages().empty() || span.pages().size() > 16384 ||
         span.first_page_offset() >= physical_page_bytes) {
         throw std::invalid_argument("invalid retained physical span");
@@ -16,15 +19,23 @@ std::size_t view_bytes(const PhysicalSpan &span) {
 }
 } // namespace
 
-PhysicalSpanView::PhysicalSpanView(const PhysicalSpan &span)
-    : span_(span), mapping_(view_bytes(span), host::Access::none, physical_page_bytes) {
+PhysicalSpanView::PhysicalSpanView(const PhysicalSpan &span, host::Access access)
+    : span_(span), mapping_(view_bytes(span, access), host::Access::none, physical_page_bytes),
+      access_(access) {
     for (std::size_t index = 0; index < span_.pages().size(); ++index) {
         const auto &page = span_.pages()[index];
         if (!page.lease) {
             throw std::invalid_argument("retained physical span contains an unmapped page");
         }
-        page.lease->map_into(mapping_, index * physical_page_bytes, host::Access::read);
+        page.lease->map_into(mapping_, index * physical_page_bytes, access);
     }
+}
+
+std::byte *PhysicalSpanView::writable_data() {
+    if (access_ != host::Access::read_write) {
+        throw std::runtime_error("retained physical view is read-only");
+    }
+    return mapping_.data() + span_.first_page_offset();
 }
 
 const std::byte *PhysicalSpanView::data() const {

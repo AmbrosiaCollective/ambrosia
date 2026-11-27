@@ -3,6 +3,8 @@
 #include "command_list.h"
 #include "frame_timing.h"
 #include "graphics_recording.h"
+#include "physical_buffer.h"
+#include "resource_description.h"
 #include "event_signal.h"
 #include "file_services.h"
 #include "guest_thread.h"
@@ -273,6 +275,8 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "window_creation_tests.h"
 #include "graphics_transport_tests.h"
 #include "graphics_buffer_tests.h"
+#include "physical_buffer_tests.h"
+#include "placed_buffer_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -1264,6 +1268,30 @@ extern "C" int ambrosia_native_trace_menu_8g(const char *image, const char *pack
         return 2;
     }
     return trace_native_image(image, package, 3, inventory, storage, descriptor, presentation, graphics);
+}
+
+extern "C" int ambrosia_native_physical_buffer_tests(int descriptor, const char *root) {
+    checks = failures = 0;
+    try {
+        physical_buffer_checks(descriptor, root);
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL physical buffer exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "physical GPU buffers: " << checks << " checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_placed_buffer_tests(int descriptor, const char *root, unsigned probe) {
+    checks = failures = 0;
+    try {
+        placed_buffer_checks(descriptor, root, probe);
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL placed buffer exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "native placed buffers: " << checks << " checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
 }
 
 extern "C" int ambrosia_native_graphics_buffer_tests(const char *root) {

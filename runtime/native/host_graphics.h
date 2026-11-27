@@ -18,7 +18,8 @@ struct GraphicsBuffer {
 };
 
 // The service owns Vulkan handles. This portable seam carries only bounded
-// commands and numeric ownership IDs, never driver entrypoints or GPU pointers.
+// commands, numeric ownership IDs and GPU virtual addresses. Driver entrypoints
+// and host CPU pointers remain private to the service.
 class Graphics {
   public:
     explicit Graphics(const std::filesystem::path &endpoint_root);

@@ -35,13 +35,15 @@ class PhysicalSpan {
 // claim that the guest's original virtual addresses remain mapped afterward.
 class PhysicalSpanView {
   public:
-    explicit PhysicalSpanView(const PhysicalSpan &span);
+    explicit PhysicalSpanView(const PhysicalSpan &span, host::Access access = host::Access::read);
     const std::byte *data() const;
+    std::byte *writable_data();
     std::size_t size() const;
 
   private:
     // Reverse destruction removes aliases before retiring retained page leases.
     PhysicalSpan span_;
     host::Mapping mapping_;
+    host::Access access_;
 };
 } // namespace ambrosia::services

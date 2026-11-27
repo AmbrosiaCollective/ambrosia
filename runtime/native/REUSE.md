@@ -449,3 +449,12 @@ protocol. It uses the previously verified coherent Vulkan backend and existing
 isolation controls with separately pinned directional payload files. No external
 implementation is copied. This transport alone does not establish game physical
 coherence or return a native game resource.
+
+The retained PhysicalBuffer coordinator and placed-resource facade are original
+C++ implementations over Ambrosia's existing leases and host seam. Public SDK
+ID3D12Resource slots/56-byte description and FiveStar's pinned Xbox resource
+notes establish API facts: console slot133 and original console GPUVA identity.
+No external resource implementation is ported. Raw console description/initial
+policy is retained; the supported row-major buffer projection uses coherent
+Vulkan storage with explicit byte synchronization. The console-only0x20000 hint
+is preserved as metadata, not interpreted as a Vulkan resource flag.

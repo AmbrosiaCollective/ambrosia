@@ -337,3 +337,21 @@ the existing256MiB scratch/archive budget. It never executes compiled output.
 For native code using shared IR,use its repeated --syntax-unit checks before full
 builds,and gate execution on before/after native/header/guard hashes plus artifact
 checks. Necessary compiler source access is covered by standing goal authorization.
+
+Task169 validates the separate run_menu_buffers_isolated.py and
+isolation_menu_buffers_bootstrap.py profiles:69guestcontrols retain all original
+restrictions and add two pinned directional payload files. Host uploadRO /
+downloadRW, client inverse, exact1MiB expected sizes and immutable directories.
+Size growth fails closed; existing32MiB guest filecap bounds growth before
+detection, not a per-inode1MiB hardcap. Fixed run_native_buffer_host.py alone
+uses56hostcontrols for ownedbuffer operations. No CPUguest/game entrypoint is
+accepted by the host service. Original profiles remain unchanged; never escalate
+guest execution. See docs/native-buffer-protocol.md in the active project.
+
+Task170 validates the separate compiler-only build_native_buffer_isolated.py
+after a measured180second Clang full-build timeout. Only command wall rises to
+240seconds; read-only native/canonical source,25guards,2GiBAS,45/50CPU,64MiB
+returnedELF and all privacy/network/game/GPU hiding remain. CMake keeps the
+existing256MiB scratch bound. It never executes output. Prefer this reviewed
+helper for subsequent native syntax/full builds; preserve older helpers and all
+guest profiles. This is covered by standing necessary-resource authorization.

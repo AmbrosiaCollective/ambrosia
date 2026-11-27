@@ -662,3 +662,19 @@ passes 56 checks without a Vulkan driver. Native sources, canonical header,
 compiler guard and artifacts match exact build hashes. No CMake wiring changes.
 This proves the byte transport; connecting retained game physical spans and
 returning a correct resource object remain next. No game frame/menu is claimed.
+
+## Actual retained placed-resource progress
+
+The native placed-buffer facade now initializes real GPU storage from retained
+physical bytes before returning success. See
+[native-placed-buffers.md](native-placed-buffers.md) for ownership, supported
+shapes, CPU map policy, console addresses and synchronization limits. Both
+compiler builds pass 11 real physical/GPU coherence checks and 16 resource
+ABI/lifetime checks, alongside the existing regressions and span checks.
+
+Both actual game runs create one retained GPU-backed buffer and then reach
+ID3D12Device slot 14, CreateDescriptorHeap. Neither faults nor times out.
+Resource allocation is no longer the startup boundary. Descriptor heaps, further
+command lowering and an actual frame/menu still require implementation and
+verification. General submission must retain the same physical upload/writeback
+ordering; the new resource is not a claim that arbitrary commands can execute.

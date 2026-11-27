@@ -1603,3 +1603,11 @@ byte uploads/downloads and synchronous copies through optional directional
 payload files. Old device/fence-only sessions remain usable. Buffer ranges and
 IDs are checked on both sides; CPU pointers and driver handles stay host-owned.
 The game resource facade and physical-page synchronization remain separate work.
+
+Mapped row-major console buffers can now retain physical pages and initialize
+real coherent GPU buffers through the directional bridge. CPU bytes are refreshed
+before synchronous copies and GPU writes return to those same physical pages
+before completion. Resource identity, references, parent, Map/Unmap, both GetDesc
+return conventions and console GPU virtual address are separate from backend
+addresses. Unsupported descriptions, textures and resource slots remain explicit
+failures. General command submission and game rendering are not implied.

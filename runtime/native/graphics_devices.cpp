@@ -4,6 +4,8 @@
 #include "guest_thread.h"
 #include "host.h"
 #include "host_graphics.h"
+#include "physical_buffer.h"
+#include "resource_description.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
 #include <algorithm>
@@ -81,6 +83,14 @@ bool supports_allocator(const void *interface_id) {
     return requested == unknown_interface_id || requested == supported_interfaces.front() ||
            requested == device_child_interface || requested == pageable_interface ||
            requested == command_allocator_interface;
+}
+
+bool supports_resource(const void *interface_id) {
+    Guid requested;
+    std::memcpy(&requested, interface_id, sizeof(requested));
+    return requested == unknown_interface_id || requested == supported_interfaces.front() ||
+           requested == device_child_interface || requested == pageable_interface ||
+           requested == resource_interface;
 }
 
 bool supports(const void *interface_id) {
@@ -173,6 +183,23 @@ struct GraphicsDevices::State {
         explicit List(const std::uintptr_t *table) : recording(table) {}
     };
 
+    struct Resource {
+        const std::uintptr_t *table;
+        std::uint32_t references = 1;
+        Device *parent = nullptr;
+        std::uint64_t console_address = 0;
+        ResourceDescription description;
+        std::uint32_t initial_layout = 0;
+        PhysicalBuffer *physical = nullptr;
+    };
+
+    static_assert(offsetof(Resource, table) == 0);
+
+    struct OwnedResource {
+        Resource object;
+        std::unique_ptr<PhysicalBuffer> physical;
+    };
+
     std::mutex mutex;
     std::unique_ptr<host::Graphics> backend;
     std::unique_ptr<Device> device;
@@ -180,6 +207,8 @@ struct GraphicsDevices::State {
     std::map<Queue *, std::unique_ptr<Queue>> queues;
     std::map<Allocator *, std::unique_ptr<Allocator>> allocators;
     std::map<void *, std::unique_ptr<List>> lists;
+    // Resources retire their GPU buffers and aliases before the backend closes.
+    std::map<Resource *, std::unique_ptr<OwnedResource>> resources;
 
     struct Access {
         State &state;
@@ -255,6 +284,20 @@ struct GraphicsDevices::State {
         std::unique_lock lock(state.mutex);
         if (!pointer || !state.allocators.contains(pointer) || !state.backend || !state.device) {
             diagnostics::stop_trace("native command allocator is not owned by this runtime", 78);
+        }
+        return {state, std::move(lock)};
+    }
+
+    static Access owned_resource(Resource *pointer) {
+        auto *runtime = current_runtime();
+        if (!runtime || !guest::ThreadContext::current()) {
+            diagnostics::stop_trace("native resource requires an active guest runtime", 78);
+        }
+        auto &state = *runtime->graphics_devices().state_;
+        std::unique_lock lock(state.mutex);
+        if (!pointer || !state.resources.contains(pointer) || !state.backend || !state.device ||
+            pointer->parent != state.device.get()) {
+            diagnostics::stop_trace("native resource is not owned by this runtime", 78);
         }
         return {state, std::move(lock)};
     }
@@ -1261,15 +1304,226 @@ struct GraphicsDevices::State {
         }
     }
 
-    static std::int32_t AMBROSIA_GUEST_ABI capture_placed_resource(
-        Device *pointer, std::uint64_t address, const void *description, std::uint32_t initial_layout,
-        const void *clear, const void *interface_id, void **output) noexcept {
+    template <std::size_t Slot>
+    static std::uintptr_t AMBROSIA_GUEST_ABI unsupported_resource(Resource *) noexcept {
+        diagnostics::stop_trace("unsupported native ID3D12Resource slot " + std::to_string(Slot), 78);
+    }
+
+    static void increment_resource(Resource &resource) {
+        if (resource.references == UINT32_MAX) {
+            diagnostics::stop_trace("native resource reference count exhausted", 78);
+        }
+        ++resource.references;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI resource_query(Resource *pointer, const void *interface_id,
+                                                          void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_resource(pointer);
+            if (!supports_resource(interface_id)) {
+                return no_interface;
+            }
+            increment_resource(*pointer);
+            *output = pointer;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI resource_add(Resource *pointer) noexcept {
         const PreserveErrno preserve;
         try {
-            auto access = owned(pointer);
-            if (!description || !interface_id || !output) {
-                diagnostics::stop_trace("native placed-resource capture requires complete inputs", 78);
+            auto access = owned_resource(pointer);
+            increment_resource(*pointer);
+            return pointer->references;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI resource_release(Resource *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_resource(pointer);
+            const auto remaining = pointer->references - 1;
+            if (remaining) {
+                pointer->references = remaining;
+            } else {
+                auto *parent = pointer->parent;
+                pointer->physical->close();
+                access.state.resources.erase(pointer);
+                release_device(access.state, *parent);
             }
+            return remaining;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI resource_device(Resource *pointer, const void *interface_id,
+                                                           void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_resource(pointer);
+            if (!supports(interface_id)) {
+                return no_interface;
+            }
+            increment(*pointer->parent);
+            *output = pointer->parent;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static bool resource_range(const Resource &resource, const void *range_pointer, ResourceRange &range) {
+        range = {0, resource.physical->size()};
+        if (range_pointer) {
+            std::memcpy(&range, range_pointer, sizeof(range));
+        }
+        return range.begin <= range.end && range.end <= resource.physical->size();
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI resource_map(Resource *pointer, std::uint32_t subresource,
+                                                        const void *read_range, void **output) noexcept {
+        const PreserveErrno preserve;
+        if (output) {
+            *output = nullptr;
+        }
+        try {
+            auto access = owned_resource(pointer);
+            ResourceRange range;
+            if (subresource || !resource_range(*pointer, read_range, range)) {
+                return static_cast<std::int32_t>(0x80070057u);
+            }
+            if (!pointer->physical->cpu_writable()) {
+                return static_cast<std::int32_t>(0x80004001u);
+            }
+            if (output) {
+                auto *runtime = current_runtime();
+                const auto current = runtime->memory().physical_span(
+                    reinterpret_cast<const void *>(pointer->console_address), pointer->physical->size());
+                // Preserve console CPU/GPU address identity while its original
+                // mappings still refer to exactly the retained physical pages.
+                *output = current.span && pointer->physical->same_pages(*current.span)
+                              ? reinterpret_cast<void *>(pointer->console_address)
+                              : pointer->physical->cpu_data();
+            }
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static void AMBROSIA_GUEST_ABI resource_unmap(Resource *pointer, std::uint32_t subresource,
+                                                  const void *written_range) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_resource(pointer);
+            ResourceRange range;
+            if (subresource || !resource_range(*pointer, written_range, range) ||
+                !pointer->physical->cpu_writable()) {
+                diagnostics::stop_trace("unsupported native resource Unmap range or CPU policy", 78);
+            }
+            pointer->physical->upload(range.begin, range.end - range.begin);
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static ResourceDescription *AMBROSIA_GUEST_ABI resource_description(void *first, void *second) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto *runtime = current_runtime();
+            if (!runtime || !guest::ThreadContext::current()) {
+                diagnostics::stop_trace("native resource description requires an active runtime", 78);
+            }
+            auto &state = *runtime->graphics_devices().state_;
+            const std::lock_guard lock(state.mutex);
+            auto *first_resource = static_cast<Resource *>(first);
+            auto *second_resource = static_cast<Resource *>(second);
+            const bool first_receiver = state.resources.contains(first_resource);
+            const bool second_receiver = state.resources.contains(second_resource);
+            if (first_receiver == second_receiver || !state.backend || !state.device) {
+                diagnostics::stop_trace("native resource description receiver is not uniquely owned", 78);
+            }
+            auto *resource = first_receiver ? first_resource : second_resource;
+            auto *output = static_cast<ResourceDescription *>(first_receiver ? second : first);
+            if (!output) {
+                diagnostics::stop_trace("native resource description requires output storage", 78);
+            }
+            std::memcpy(output, &resource->description, sizeof(*output));
+            return output;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint64_t AMBROSIA_GUEST_ABI resource_address(Resource *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_resource(pointer);
+            // Console code keeps its original virtual identity. Command lowering
+            // must resolve that identity to the backend buffer, not execute it as
+            // a CPU pointer or substitute a driver address into game arithmetic.
+            return pointer->console_address;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    template <std::size_t... Slots> static auto make_resource_table(std::index_sequence<Slots...>) {
+        return std::array<std::uintptr_t, sizeof...(Slots)>{
+            reinterpret_cast<std::uintptr_t>(&unsupported_resource<Slots>)...};
+    }
+
+    static const auto &resource_table() {
+        static const auto entries = [] {
+            auto result = make_resource_table(std::make_index_sequence<192>{});
+            result[0] = reinterpret_cast<std::uintptr_t>(&resource_query);
+            result[1] = reinterpret_cast<std::uintptr_t>(&resource_add);
+            result[2] = reinterpret_cast<std::uintptr_t>(&resource_release);
+            result[7] = reinterpret_cast<std::uintptr_t>(&resource_device);
+            result[8] = reinterpret_cast<std::uintptr_t>(&resource_map);
+            result[9] = reinterpret_cast<std::uintptr_t>(&resource_unmap);
+            result[10] = reinterpret_cast<std::uintptr_t>(&resource_description);
+            result[11] = reinterpret_cast<std::uintptr_t>(&resource_address);
+            return result;
+        }();
+        return entries;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI create_placed_resource(Device *pointer, std::uint64_t address,
+                                                                  const void *description,
+                                                                  std::uint32_t initial_layout,
+                                                                  const void *clear, const void *interface_id,
+                                                                  void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!description || !interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned(pointer);
             // D3D12_RESOURCE_DESC layout from the pinned public SDK. Read only
             // its fixed 56-byte shape; exact request details remain private.
             std::array<std::byte, 56> bytes;
@@ -1316,7 +1570,42 @@ struct GraphicsDevices::State {
                 diagnostics::stop_trace("native placed-resource capture exceeded its text bound", 78);
             }
             diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
-            diagnostics::stop_trace("native placed resource requires GPU-backed memory integration", 78);
+            if (identity != resource_interface) {
+                return no_interface;
+            }
+            ResourceDescription requested;
+            std::memcpy(&requested, bytes.data(), sizeof(requested));
+            if (requested.dimension != 1 || !requested.width || requested.width > 256ull * 1024 * 1024 ||
+                (requested.alignment != 0 && requested.alignment != physical_page_bytes) ||
+                requested.height != 1 || requested.depth != 1 || requested.mips != 1 || requested.format ||
+                requested.samples != 1 || requested.quality || requested.layout != 1 ||
+                (requested.flags & ~0x20004u) || (initial_layout != 0 && initial_layout != UINT32_MAX) ||
+                clear) {
+                diagnostics::stop_trace("unsupported native placed-resource description or initial policy",
+                                        78);
+            }
+            if (!physical.span || address % physical_page_bytes) {
+                diagnostics::stop_trace(
+                    "native placed buffer requires a complete aligned mapped physical span", 78);
+            }
+            if (access.state.resources.size() >= 32 || pointer->references == UINT32_MAX) {
+                throw std::runtime_error("native resource ownership budget exhausted");
+            }
+            auto owner = std::make_unique<OwnedResource>();
+            auto &resource = owner->object;
+            resource.table = resource_table().data();
+            resource.parent = pointer;
+            resource.console_address = address;
+            resource.description = requested;
+            resource.initial_layout = initial_layout;
+            owner->physical = std::make_unique<PhysicalBuffer>(*access.state.backend, *physical.span);
+            resource.physical = owner->physical.get();
+            auto *result = &resource;
+            access.state.resources.emplace(result, std::move(owner));
+            ++pointer->references;
+            *output = result;
+            diagnostics::write_service_trace("TRACE native retained placed buffer initialized on GPU\n");
+            return 0;
         } catch (const std::exception &error) {
             diagnostics::stop_trace(error.what(), 78);
         }
@@ -1432,7 +1721,7 @@ struct GraphicsDevices::State {
             result[78] = reinterpret_cast<std::uintptr_t>(&set_frame_interval);
             result[79] = reinterpret_cast<std::uintptr_t>(&schedule_frame_event);
             result[80] = reinterpret_cast<std::uintptr_t>(&wait_frame_event);
-            result[133] = reinterpret_cast<std::uintptr_t>(&capture_placed_resource);
+            result[133] = reinterpret_cast<std::uintptr_t>(&create_placed_resource);
             return result;
         }();
         return entries;
