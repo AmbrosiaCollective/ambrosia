@@ -64,6 +64,14 @@ bool supports_queue(const void *interface_id) {
            requested == command_queue_interface;
 }
 
+bool supports_allocator(const void *interface_id) {
+    Guid requested;
+    std::memcpy(&requested, interface_id, sizeof(requested));
+    return requested == unknown_interface_id || requested == supported_interfaces.front() ||
+           requested == device_child_interface || requested == pageable_interface ||
+           requested == command_allocator_interface;
+}
+
 bool supports(const void *interface_id) {
     Guid requested;
     std::memcpy(&requested, interface_id, sizeof(requested));
@@ -129,11 +137,24 @@ struct GraphicsDevices::State {
     static_assert(offsetof(Device, table) == 0);
     static_assert(offsetof(Fence, table) == 0);
 
+    struct Allocator {
+        const std::uintptr_t *table;
+        std::uint32_t references = 1;
+        std::uint32_t type = 0;
+        Device *parent = nullptr;
+        // Lists own the portable command IR. One list may record into this
+        // allocator at a time, matching the existing renderer's CPU model.
+        const void *recording = nullptr;
+    };
+
+    static_assert(offsetof(Allocator, table) == 0);
+
     std::mutex mutex;
     std::unique_ptr<host::Graphics> backend;
     std::unique_ptr<Device> device;
     std::map<Fence *, std::unique_ptr<Fence>> fences;
     std::map<Queue *, std::unique_ptr<Queue>> queues;
+    std::map<Allocator *, std::unique_ptr<Allocator>> allocators;
 
     struct Access {
         State &state;
@@ -179,12 +200,193 @@ struct GraphicsDevices::State {
         return {state, std::move(lock)};
     }
 
+    static Access owned_allocator(Allocator *pointer) {
+        auto *runtime = current_runtime();
+        if (!runtime || !guest::ThreadContext::current()) {
+            diagnostics::stop_trace("native command allocator requires an active guest runtime", 78);
+        }
+        auto &state = *runtime->graphics_devices().state_;
+        std::unique_lock lock(state.mutex);
+        if (!pointer || !state.allocators.contains(pointer) || !state.backend || !state.device) {
+            diagnostics::stop_trace("native command allocator is not owned by this runtime", 78);
+        }
+        return {state, std::move(lock)};
+    }
+
     static void release_device(State &state, Device &pointer) {
         if (pointer.references > 1) {
             --pointer.references;
         } else {
             state.backend->destroy_device(pointer.real.id);
             state.device.reset();
+        }
+    }
+
+    template <std::size_t Slot>
+    static std::uintptr_t AMBROSIA_GUEST_ABI unsupported_allocator(Allocator *) noexcept {
+        diagnostics::stop_trace("unsupported native ID3D12CommandAllocator slot " + std::to_string(Slot), 78);
+    }
+
+    static void increment_allocator(Allocator &pointer) {
+        if (pointer.references == UINT32_MAX) {
+            diagnostics::stop_trace("native command allocator reference count exhausted", 78);
+        }
+        ++pointer.references;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI allocator_query(Allocator *pointer, const void *interface_id,
+                                                           void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_allocator(pointer);
+            if (!supports_allocator(interface_id)) {
+                return no_interface;
+            }
+            increment_allocator(*pointer);
+            *output = pointer;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI allocator_add(Allocator *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_allocator(pointer);
+            increment_allocator(*pointer);
+            return pointer->references;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI allocator_release(Allocator *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_allocator(pointer);
+            const auto remaining = pointer->references - 1;
+            if (remaining) {
+                pointer->references = remaining;
+            } else {
+                if (pointer->recording) {
+                    diagnostics::stop_trace("native command allocator lost its recording lease", 78);
+                }
+                auto *parent = pointer->parent;
+                access.state.allocators.erase(pointer);
+                release_device(access.state, *parent);
+            }
+            return remaining;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI allocator_device(Allocator *pointer, const void *interface_id,
+                                                            void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_allocator(pointer);
+            if (!supports(interface_id)) {
+                return no_interface;
+            }
+            increment(*pointer->parent);
+            *output = pointer->parent;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI allocator_reset(Allocator *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_allocator(pointer);
+            return pointer->recording ? static_cast<std::int32_t>(0x80004005u) : 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    template <std::size_t... Slots>
+    static std::array<std::uintptr_t, sizeof...(Slots)> make_allocator_table(std::index_sequence<Slots...>) {
+        return {reinterpret_cast<std::uintptr_t>(&unsupported_allocator<Slots>)...};
+    }
+
+    static const auto &allocator_table() {
+        static const auto entries = [] {
+            auto result = make_allocator_table(std::make_index_sequence<9>{});
+            result[0] = reinterpret_cast<std::uintptr_t>(&allocator_query);
+            result[1] = reinterpret_cast<std::uintptr_t>(&allocator_add);
+            result[2] = reinterpret_cast<std::uintptr_t>(&allocator_release);
+            result[7] = reinterpret_cast<std::uintptr_t>(&allocator_device);
+            result[8] = reinterpret_cast<std::uintptr_t>(&allocator_reset);
+            return result;
+        }();
+        return entries;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI create_allocator(Device *pointer, std::uint32_t type,
+                                                            const void *interface_id,
+                                                            void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned(pointer);
+            if (!supports_allocator(interface_id)) {
+                return no_interface;
+            }
+            if (type > 6) {
+                return static_cast<std::int32_t>(0x80070057u);
+            }
+            if (type > 3) {
+                return static_cast<std::int32_t>(0x80004001u);
+            }
+            if (access.state.allocators.size() >= 64 || pointer->references == UINT32_MAX) {
+                diagnostics::stop_trace("native command allocator ownership capacity exhausted", 78);
+            }
+            (void)access.state.backend->query_device(pointer->real.id);
+            auto allocator = std::make_unique<Allocator>();
+            allocator->table = allocator_table().data();
+            allocator->type = type;
+            allocator->parent = pointer;
+            auto *result = allocator.get();
+            auto [position, inserted] = access.state.allocators.emplace(result, std::move(allocator));
+            (void)position;
+            if (!inserted) {
+                throw std::runtime_error("native command allocator ownership collision");
+            }
+            ++pointer->references;
+            *output = result;
+            char message[96];
+            const auto count = std::snprintf(message, sizeof(message),
+                                             "TRACE native CPU command allocator created type=%u\n", type);
+            if (count > 0 && static_cast<std::size_t>(count) < sizeof(message)) {
+                diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
+            }
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
         }
     }
 
@@ -749,6 +951,7 @@ struct GraphicsDevices::State {
             result[2] = reinterpret_cast<std::uintptr_t>(&release);
             result[7] = reinterpret_cast<std::uintptr_t>(&node_count);
             result[8] = reinterpret_cast<std::uintptr_t>(&create_queue);
+            result[9] = reinterpret_cast<std::uintptr_t>(&create_allocator);
             result[26] = reinterpret_cast<std::uintptr_t>(&heap_properties);
             result[36] = reinterpret_cast<std::uintptr_t>(&create_fence);
             // The Xbox ABI shadows PC OpenExistingHeapFromAddress here.

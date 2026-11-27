@@ -232,6 +232,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "graphics_memory_tests.h"
 #include "graphics_creation_tests.h"
 #include "graphics_device_tests.h"
+#include "graphics_allocator_tests.h"
 #include "xmem_tests.h"
 #include "memory_budget_tests.h"
 #include "xmem_committed_tests.h"
@@ -1071,6 +1072,21 @@ extern "C" int ambrosia_native_presentation_tests() {
         ++failures;
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_graphics_allocator_tests(const char *root, unsigned probe) {
+    checks = failures = 0;
+    try {
+        if (!root || probe > 3) {
+            return 2;
+        }
+        graphics_allocator_live_checks(root, probe);
+    } catch (const std::exception &error) {
+        std::cerr << "native graphics allocator: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "graphics allocator: " << checks << " checks, " << failures << " failures\n";
     return failures ? 1 : 0;
 }
 

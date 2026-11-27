@@ -292,3 +292,19 @@ Both builds pass31 real queue and1516 strict checks. Four negative controls reje
 unknown console flags,engine4,queue2 and unknown PC flags. Both actual games now
 create five queues and five shared fences,then stop at device9CreateCommandAllocator.
 No game-rendered frame or interactive menu is verified. Profiles remain unchanged.
+
+## CPU command allocators
+
+Device9 creates owned ID3D12CommandAllocator objects using the inherited renderer's
+CPU recording model. Lists own command IR; an allocator tracks type and one active
+recording owner. The native9-slot ABI implements identity/refcounts/GetDevice/Reset
+and retains the real device until its last child lease is released. Empty resets
+are supported; active-list integration and its busy-reset coverage remain next.
+CPU types0..3 are supported under a64-object bound; video allocation is explicitly
+unsupported. This does not create a Vulkan pool or claim GPU execution.
+
+Both builds pass24 live allocator and1516 strict checks. Three safety controls
+stop unknown methods,foreign runtime access and released objects before access.
+Both actual games create the first allocator and reach Xbox73CreateCommandListX,
+with no fault/timeout/watchdog failure. No game frame or menu is verified. Profiles
+remain unchanged; no game bytes or raw diagnostics belong in publication artifacts.
