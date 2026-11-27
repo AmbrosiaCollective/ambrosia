@@ -4,6 +4,7 @@
 #include "file_services.h"
 #include "guest_thread.h"
 #include "host_affinity.h"
+#include "host_presentation.h"
 #include "host_priority.h"
 #include "host_shared_backing.h"
 #include "nls_services.h"
@@ -253,6 +254,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "physical_page_tests.h"
 #include "physical_api_tests.h"
 #include "window_class_tests.h"
+#include "presentation_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -1037,6 +1039,18 @@ extern "C" int ambrosia_native_physical_api_rejection(unsigned mode) {
 
 extern "C" int ambrosia_native_window_class_rejection(unsigned mode) {
     return window_class_rejection_probe(mode);
+}
+
+extern "C" int ambrosia_native_presentation_tests() {
+    checks = failures = 0;
+    try {
+        presentation_checks();
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL native presentation exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
 }
 
 extern "C" int ambrosia_native_locale_rejection(unsigned mode) {
