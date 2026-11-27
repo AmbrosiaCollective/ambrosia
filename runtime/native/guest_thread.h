@@ -28,6 +28,8 @@ class ThreadContext {
     static ThreadContext *current() noexcept;
     std::uint32_t &last_error();
     std::int32_t &crt_error();
+    void seed_crt_random(std::uint32_t seed);
+    std::int32_t next_crt_random();
     void on_exit(std::function<void()> callback);
     // Host-only notification after guest cleanup and restoration of native TLS.
     void on_completion(std::function<void()> callback);
@@ -84,6 +86,7 @@ class ThreadContext {
     static_assert(offsetof(Anchor, last_error) == 0x68);
     std::thread::id owner_;
     std::int32_t crt_error_ = 0;
+    std::uint32_t crt_random_state_ = 1;
     bool time_sensitive_ = false;
     std::uintptr_t invalid_parameter_handler_ = 0;
     bool sealed_ = false;

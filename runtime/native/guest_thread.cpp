@@ -100,6 +100,18 @@ std::int32_t &ThreadContext::crt_error() {
     return crt_error_;
 }
 
+void ThreadContext::seed_crt_random(std::uint32_t seed) {
+    require_owner();
+    crt_random_state_ = seed;
+}
+
+std::int32_t ThreadContext::next_crt_random() {
+    require_owner();
+    // Windows CRT recurrence: unsigned 32-bit wrap, then bits 16 through 30.
+    crt_random_state_ = crt_random_state_ * 214013u + 2531011u;
+    return static_cast<std::int32_t>((crt_random_state_ >> 16) & 0x7fffu);
+}
+
 ThreadContext::Activation::Activation(ThreadContext &context)
     : segment_(&context.anchor_), saved_(active_context) {
     active_context = &context;

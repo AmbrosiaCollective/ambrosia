@@ -242,6 +242,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "wide_format_tests.h"
 #include "invalid_parameter_tests.h"
 #include "random_tests.h"
+#include "prng_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -733,6 +734,7 @@ extern "C" int ambrosia_native_tests() {
         wide_format_checks();
         invalid_parameter_checks();
         secure_random_checks();
+        prng_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {
         ++failures;
@@ -930,6 +932,22 @@ extern "C" int ambrosia_native_display_rejection(unsigned mode) {
 
 extern "C" int ambrosia_native_decimal_rejection(unsigned mode) {
     return decimal_rejection_probe(mode);
+}
+
+extern "C" int ambrosia_native_prng_rejection(unsigned mode) {
+    return prng_rejection_probe(mode);
+}
+
+extern "C" int ambrosia_native_prng_workers() {
+    checks = failures = 0;
+    try {
+        prng_worker_check();
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL native PRNG worker exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
 }
 
 extern "C" int ambrosia_native_locale_rejection(unsigned mode) {
