@@ -50,7 +50,7 @@ constexpr const char *usage =
     "Inspect maps supported PE dependencies without running callbacks.\n"
     "Run-bootstrap supports synthetic PE startup only.\n"
     "Trace-startup is diagnostic: unsupported calls/faults terminate the process.\n"
-    "Sparse-windows allows 48 GiB of no-access reservations; use the approved sparse sandbox.\n"
+    "Sparse-windows allows 49 GiB of no-access reservations; use the approved sparse sandbox.\n"
     "Boot-memory also allows 2 GiB private reservations; requires its separately approved memory sandbox.\n"
     "Private-memory-mib selects 1..8192 MiB for diagnostics; use a matching approved sandbox.\n";
 
@@ -229,7 +229,9 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
             memory_limits.private_bytes = *options.private_memory_bytes;
         }
         if (options.sparse_windows || options.boot_memory) {
-            memory_limits.window_bytes = 48ull << 30;
+            // Two 24 GiB windows exhaust the original allowance. Leave bounded
+            // headroom for the additional bootstrap placeholder reservation.
+            memory_limits.window_bytes = 49ull << 30;
         }
         if (options.private_memory_bytes || options.sparse_windows || options.boot_memory) {
             memory_limits.total_bytes = memory_limits.window_bytes + memory_limits.private_bytes;

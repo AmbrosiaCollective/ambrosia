@@ -589,7 +589,7 @@ Default memory construction keeps the shared 64 MiB cap. Explicit MemoryLimits
 separate ordinary/private reservations, physical-page windows and their combined
 total. Free releases the correct category; available window capacity never raises
 the private cap. Only diagnostic --trace-startup accepts --sparse-windows, which
-allows 48 GiB of no-access window reservations while ordinary allocations retain
+allows 49 GiB of no-access window reservations while ordinary allocations retain
 64 MiB. The flag grants no OS privilege and does not change execution isolation.
 
 Sparse actual runs require the explicitly approved outer-workspace sparse sandbox:
@@ -617,7 +617,7 @@ implement GPU visibility, coherency or binding; a real backend must establish
 those properties. The Linux host adapter supports this alignment; Windows/macOS
 coverage remains unverified.
 
-Diagnostic --boot-memory selects a 2 GiB private allowance alongside 48 GiB of
+Diagnostic --boot-memory selects a 2 GiB private allowance alongside 49 GiB of
 no-access windows. It grants no OS resources. Its separate approved boot-memory
 sandbox raises the data/RSS watchdog bounds to 2 GiB; the earlier approved sparse
 profile remains at 512 MiB. Tiny regression tests still use the original strict
@@ -657,7 +657,7 @@ Trace mode accepts --private-memory-mib N, a strict decimal value from 1 through
 arguments fail before input loading. Inspection and normal bootstrap modes reject
 it. Defaults and the fixed --boot-memory profile stay unchanged. Explicit private
 selection cannot combine with that fixed profile; --sparse-windows remains the
-independent 48 GiB no-access window option.
+independent 49 GiB no-access window option.
 
 The selected cap reaches the real memory owner; combined accounting includes
 both private and window allowances. A tiny original PE confirms that the same
@@ -1561,3 +1561,21 @@ name, publisher and four-component version when present. Absent metadata means
 unpackaged; a valid loose identity supports the owned XPackage identity methods.
 Package installation, chunks, DLC, licensing and online state are separate services
 and are not inferred from descriptor presence. The process identity is immutable.
+
+
+### Owned placeholders
+
+The sparse allowance now includes 1 GiB of headroom above the measured two
+24 GiB physical windows for an additional no-access placeholder reservation.
+This is an internal reservation budget: the reviewed native boot sandbox retains
+64 GiB address space, 8 GiB data and its sampled RSS watchdog. It is not a hard
+RAM cap or permission to exceed the external profile.
+
+A placeholder owns one aligned Mapping. Reserve-only replacements add checked,
+nonoverlapping child-window metadata without charging or owning the span twice.
+Generic commit/decommit cannot change it, and populated-parent/partial release
+remains explicitly unsupported. Raw policy is retained and pages remain
+inaccessible until physical mapping is actually implemented. Owner metadata and
+accounting are serialized; the Windows VirtualAlloc2 splitting implementation is
+not used. See [native graphics host](../../docs/native-graphics-host.md) and task reports
+for measured boot coverage.

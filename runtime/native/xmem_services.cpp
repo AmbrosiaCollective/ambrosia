@@ -89,6 +89,7 @@ std::int32_t AMBROSIA_GUEST_ABI free_physical(std::uint64_t count, const void *p
 
 void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std::uint32_t allocation_type,
                                           std::uint64_t attributes, std::uint32_t protection) noexcept {
+    PreserveNativeError restore;
     auto *runtime = current_runtime();
     if (!runtime) {
         diagnostics::stop_trace("XMem allocation requires a scoped runtime", 78);
@@ -106,7 +107,15 @@ void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std:
     const bool committed_2m = allocation_type == 0x20003000u &&
                               ((attributes == 0x183 && protection == 0x22004) ||
                                (attributes == 0x283 && (protection == 0x2004 || protection == 0x2404)));
-    if (address) {
+    const bool placeholder_reserve = allocation_type == 0x42000u && attributes == 7 && protection == 1;
+    const bool placeholder_replace = allocation_type == 0x20406000u &&
+                                     (known_attributes || attributes == 7) &&
+                                     (known_protection || protection == 1);
+    if (!address && placeholder_reserve) {
+        result = runtime->memory().reserve_placeholder(bytes, attributes);
+    } else if (placeholder_replace) {
+        result = runtime->memory().replace_placeholder_window(address, bytes, attributes, protection);
+    } else if (address) {
         result.error = error_not_supported;
     } else if (allocation_type == 0x20402000u && known_attributes && known_protection) {
         result = runtime->memory().reserve_window(bytes, attributes, protection);
@@ -123,7 +132,10 @@ void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std:
             target, sizeof(target),
             "TRACE XMem target address_present=%u tracked=%u backing=%u guest_page=%llu region_bytes=%llu\n",
             address ? 1u : 0u, region ? 1u : 0u,
-            region ? (region->backing == XmemBacking::physical_window ? 2u : 1u) : 0u,
+            region ? (region->backing == XmemBacking::physical_window ? 2u
+                      : region->backing == XmemBacking::placeholder   ? 3u
+                                                                      : 1u)
+                   : 0u,
             static_cast<unsigned long long>(region ? region->guest_page_bytes : 0),
             static_cast<unsigned long long>(region ? region->bytes : 0));
         if (length > 0 && static_cast<std::size_t>(length) < sizeof(target)) {

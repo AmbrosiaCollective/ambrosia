@@ -405,3 +405,12 @@ extra view kind 4 follows XCL's published alias to ordinary view records; this
 shadows the public PC SDK's NUM_TYPES marker. Earlier FiveStar startup notes return
 zero for 4; this adapter instead accepts the later published console alias at the
 query boundary. Heap ownership and record encoding remain separate work.
+
+Placeholder reservation and reserve-only window replacement follow inherited
+`runtime/shims/xmem.cpp`'s allocation-granularity and ownership policy, under the
+project's existing GPL terms. Pinned public WinNT declarations independently
+identify MEM_RESERVE_PLACEHOLDER and MEM_REPLACE_PLACEHOLDER. The native owner
+keeps one host Mapping with checked nonoverlapping child metadata; Windows
+VirtualAlloc2/VirtualFree splitting code is not ported. Children retain raw policy
+but acquire no physical backing. Populated-parent/partial release remains explicitly
+unsupported. Parent budgets and metadata are serialized under one owner mutex.

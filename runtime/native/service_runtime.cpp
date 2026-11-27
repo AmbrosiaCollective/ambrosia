@@ -20,6 +20,9 @@
 #include "string_services.h"
 #include "xmem_services.h"
 #include <array>
+#include <atomic>
+#include <cerrno>
+#include <cstdio>
 #include <stdexcept>
 
 namespace ambrosia::services {
@@ -68,6 +71,22 @@ std::int32_t AMBROSIA_GUEST_ABI virtual_free(void *address, std::size_t bytes, s
     const auto result = runtime->memory().free(address, bytes, flags);
     if (result.error) {
         set_last_error(result.error);
+        static std::atomic<unsigned> rejected_traces{0};
+        auto prior = rejected_traces.load(std::memory_order_relaxed);
+        while (prior < 16 &&
+               !rejected_traces.compare_exchange_weak(prior, prior + 1, std::memory_order_relaxed)) {
+        }
+        if (prior < 16) {
+            const auto saved_errno = errno;
+            char message[160];
+            const auto count = std::snprintf(
+                message, sizeof(message), "TRACE native VirtualFree rejected bytes=%llu flags=%x error=%u\n",
+                static_cast<unsigned long long>(bytes), flags, result.error);
+            if (count > 0 && static_cast<std::size_t>(count) < sizeof(message)) {
+                diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
+            }
+            errno = saved_errno;
+        }
     }
     return result.success ? 1 : 0;
 }

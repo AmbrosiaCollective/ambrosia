@@ -1,5 +1,6 @@
 #include "memory_services.h"
 #include <algorithm>
+#include <iterator>
 #include <limits>
 #include <stdexcept>
 
@@ -51,6 +52,7 @@ AllocationResult MemoryServices::allocate(void *address, std::size_t bytes, std:
         return {nullptr, error_not_supported};
     }
     try {
+        const std::lock_guard lock(mutex_);
         const auto page = host::Mapping::page_size();
         std::size_t rounded = 0;
         if (!address) {
@@ -73,7 +75,7 @@ AllocationResult MemoryServices::allocate(void *address, std::size_t bytes, std:
             rounded > found->second->memory.size() - offset) {
             return {nullptr, error_invalid_address};
         }
-        if (found->second->is_window()) {
+        if (found->second->is_sparse_reservation()) {
             return {nullptr, error_not_supported};
         }
         auto &pages = found->second->protection;
@@ -98,6 +100,7 @@ FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t 
         return {false, error_invalid_parameter};
     }
     try {
+        const std::lock_guard lock(mutex_);
         const auto pointer = reinterpret_cast<std::uintptr_t>(address);
         auto found = regions_.upper_bound(pointer);
         if (found == regions_.begin()) {
@@ -109,9 +112,12 @@ FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t 
             if (pointer != found->first) {
                 return {false, error_invalid_address};
             }
+            if (!found->second->placeholder_windows.empty()) {
+                return {false, error_not_supported};
+            }
             reserved_ -= memory.size();
-            if (found->second->is_window()) {
-                window_reserved_ -= memory.size();
+            if (found->second->is_sparse_reservation()) {
+                sparse_reserved_ -= memory.size();
             }
             regions_.erase(found);
             return {true, 0};
@@ -132,7 +138,7 @@ FreeResult MemoryServices::free(void *address, std::size_t bytes, std::uint32_t 
         if (offset > memory.size() || rounded > memory.size() - offset) {
             return {false, error_invalid_address};
         }
-        if (found->second->is_window()) {
+        if (found->second->is_sparse_reservation()) {
             return {false, error_not_supported};
         }
         memory.decommit(offset, rounded);
@@ -152,7 +158,70 @@ AllocationResult MemoryServices::reserve_window(std::size_t bytes, std::uint64_t
         return {nullptr, error_invalid_parameter};
     }
     try {
+        const std::lock_guard lock(mutex_);
         return reserve_region(rounded, reserve, 1, XmemRegionInfo{nullptr, rounded, attributes, protection});
+    } catch (...) {
+        return {nullptr, error_not_enough_memory};
+    }
+}
+
+AllocationResult MemoryServices::reserve_placeholder(std::size_t bytes, std::uint64_t attributes) noexcept {
+    constexpr std::size_t granularity = 65536;
+    std::size_t rounded;
+    if (!bytes || !round_up(bytes, granularity, rounded)) {
+        return {nullptr, error_invalid_parameter};
+    }
+    try {
+        const std::lock_guard lock(mutex_);
+        const XmemRegionInfo placeholder{nullptr, rounded,     attributes,
+                                         1,       granularity, XmemBacking::placeholder};
+        return reserve_region(rounded, reserve, 1, placeholder);
+    } catch (...) {
+        return {nullptr, error_not_enough_memory};
+    }
+}
+
+AllocationResult MemoryServices::replace_placeholder_window(void *address, std::size_t bytes,
+                                                            std::uint64_t attributes,
+                                                            std::uint32_t protection) noexcept {
+    constexpr std::size_t granularity = 65536;
+    const auto pointer = reinterpret_cast<std::uintptr_t>(address);
+    std::size_t rounded;
+    if (!address || pointer % granularity || !bytes || !round_up(bytes, granularity, rounded)) {
+        return {nullptr, error_invalid_parameter};
+    }
+    try {
+        const std::lock_guard lock(mutex_);
+        auto found = regions_.upper_bound(pointer);
+        if (found == regions_.begin()) {
+            return {nullptr, error_invalid_address};
+        }
+        --found;
+        auto &region = *found->second;
+        if (!region.xmem || region.xmem->backing != XmemBacking::placeholder) {
+            return {nullptr, error_not_supported};
+        }
+        const auto offset = pointer - found->first;
+        if (offset >= region.memory.size() || rounded > region.memory.size() - offset) {
+            return {nullptr, error_invalid_address};
+        }
+        auto next = region.placeholder_windows.lower_bound(pointer);
+        if (next != region.placeholder_windows.end() && rounded > next->first - pointer) {
+            return {nullptr, error_invalid_address};
+        }
+        if (next != region.placeholder_windows.begin()) {
+            const auto prior = std::prev(next);
+            if (pointer - prior->first < prior->second.bytes) {
+                return {nullptr, error_invalid_address};
+            }
+        }
+        if (region.placeholder_windows.size() >= 64) {
+            return {nullptr, error_not_enough_memory};
+        }
+        const XmemRegionInfo window{address,    rounded,     attributes,
+                                    protection, granularity, XmemBacking::physical_window};
+        region.placeholder_windows.emplace(pointer, window);
+        return {address, 0};
     } catch (...) {
         return {nullptr, error_not_enough_memory};
     }
@@ -161,9 +230,9 @@ AllocationResult MemoryServices::reserve_window(std::size_t bytes, std::uint64_t
 AllocationResult MemoryServices::reserve_region(std::size_t bytes, std::uint32_t flags,
                                                 std::uint32_t protection,
                                                 std::optional<XmemRegionInfo> xmem) {
-    const bool window = xmem && xmem->backing == XmemBacking::physical_window;
-    const auto used = window ? window_reserved_ : reserved_ - window_reserved_;
-    const auto limit = window ? limits_.window_bytes : limits_.private_bytes;
+    const bool sparse = xmem && xmem->backing != XmemBacking::private_pages;
+    const auto used = sparse ? sparse_reserved_ : reserved_ - sparse_reserved_;
+    const auto limit = sparse ? limits_.window_bytes : limits_.private_bytes;
     if (bytes > limit - used || bytes > limits_.total_bytes - reserved_ || regions_.size() >= 1024) {
         return {nullptr, error_not_enough_memory};
     }
@@ -180,8 +249,8 @@ AllocationResult MemoryServices::reserve_region(std::size_t bytes, std::uint32_t
     }
     regions_.emplace(reinterpret_cast<std::uintptr_t>(base), std::move(region));
     reserved_ += bytes;
-    if (window) {
-        window_reserved_ += bytes;
+    if (sparse) {
+        sparse_reserved_ += bytes;
     }
     return {base, 0};
 }
@@ -200,6 +269,7 @@ AllocationResult MemoryServices::allocate_xmem(std::size_t bytes, std::uint64_t 
         return {nullptr, error_invalid_parameter};
     }
     try {
+        const std::lock_guard lock(mutex_);
         XmemRegionInfo info{nullptr,    rounded,          attributes,
                             protection, guest_page_bytes, XmemBacking::private_pages};
         return reserve_region(rounded, reserve | commit, 4, info);
@@ -209,6 +279,7 @@ AllocationResult MemoryServices::allocate_xmem(std::size_t bytes, std::uint64_t 
 }
 
 std::optional<XmemRegionInfo> MemoryServices::xmem_region(const void *address) const {
+    const std::lock_guard lock(mutex_);
     const auto pointer = reinterpret_cast<std::uintptr_t>(address);
     auto found = regions_.upper_bound(pointer);
     if (found == regions_.begin()) {
@@ -218,6 +289,13 @@ std::optional<XmemRegionInfo> MemoryServices::xmem_region(const void *address) c
     const auto &region = *found->second;
     if (pointer - found->first >= region.memory.size()) {
         return std::nullopt;
+    }
+    auto child = region.placeholder_windows.upper_bound(pointer);
+    if (child != region.placeholder_windows.begin()) {
+        --child;
+        if (pointer - child->first < child->second.bytes) {
+            return child->second;
+        }
     }
     return region.xmem;
 }

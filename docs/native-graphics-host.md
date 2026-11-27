@@ -6,8 +6,9 @@ stay in their reviewed sandbox under the default outer tool sandbox.
 
 Current boot frontier: both GCC and Clang create and close 581 CPU command lists,
 record 10 cache barriers, configure the frame timer and schedule two events, then
-pass the first descriptor-increment query, then stall after an unsupported XMem
-request. The bounded probe stops after 10 seconds. The menu and GPU submission
+pass the first descriptor-increment query and reserve the next placeholder,
+then stall on an unsupported VirtualFree placeholder split. The bounded probe
+stops after 10 seconds. The menu and GPU submission
 remain unverified. The sections below retain the staged investigation; later
 sections describe the current implementations.
 
@@ -450,3 +451,26 @@ Observed RSS stays near 487 MB; no RSS/monitor failure or fault trace is observe
 Other descriptor kinds have synthetic ABI coverage, not actual-game coverage yet.
 Investigate that memory profile next; extending the timeout alone does not resolve
 the measured error. No GPU work, frame or interactive menu is verified.
+
+## Owned XMem placeholders
+
+The measured MEM_RESERVE | MEM_RESERVE_PLACEHOLDER request now owns one aligned,
+rounded, no-access Mapping. Checked reserve-only replacements can attach bounded,
+nonoverlapping child-window metadata without owning or charging the same span
+twice. Children retain opaque attributes/protection and have no physical backing.
+Ordinary commit/decommit and populated-parent/partial release remain explicitly
+unsupported. A single owner mutex serializes reservations, metadata and accounting.
+Small synthetic checks also cover two workers racing to replace the same range.
+
+The internal sparse reservation allowance is 49 GiB: the existing two 24 GiB
+windows otherwise leave no room for the additional 185 MiB placeholder. The
+reviewed sandbox still enforces 64 GiB virtual space and 8 GiB data with its
+sampled RSS watchdog. No hard RAM cap or new sandbox capability is claimed.
+
+Both compilers pass 1,563 strict checks and the two-check replacement race. The
+actual placeholder reservation succeeds, then VirtualFree rejects a 10 MiB
+MEM_RELEASE | MEM_PRESERVE_PLACEHOLDER split with error 50. Each 10-second startup
+probe is killed at its deadline. A bounded private failure trace identifies the
+flags without exposing pointers; static read-only inspection agrees with the
+published split contract. Splitting is the next implementation step. Actual child
+replacement, physical-page mapping, GPU work and the interactive menu are unverified.

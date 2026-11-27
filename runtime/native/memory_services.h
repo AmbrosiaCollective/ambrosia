@@ -2,6 +2,7 @@
 #include "host.h"
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <vector>
 
@@ -22,7 +23,7 @@ struct FreeResult {
     std::uint32_t error = 0;
 };
 
-enum class XmemBacking { private_pages, physical_window };
+enum class XmemBacking { private_pages, physical_window, placeholder };
 
 struct XmemRegionInfo {
     void *base = nullptr;
@@ -55,12 +56,16 @@ class MemoryServices {
     FreeResult free(void *address, std::size_t bytes, std::uint32_t flags) noexcept;
     AllocationResult reserve_window(std::size_t bytes, std::uint64_t attributes,
                                     std::uint32_t protection) noexcept;
+    AllocationResult reserve_placeholder(std::size_t bytes, std::uint64_t attributes) noexcept;
+    AllocationResult replace_placeholder_window(void *address, std::size_t bytes, std::uint64_t attributes,
+                                                std::uint32_t protection) noexcept;
     AllocationResult allocate_xmem(std::size_t bytes, std::uint64_t attributes, std::uint32_t protection,
                                    std::size_t guest_page_bytes) noexcept;
     std::optional<XmemRegionInfo> xmem_region(const void *address) const;
     std::optional<XmemRegionInfo> window(const void *address) const;
 
     std::size_t reserved_bytes() const {
+        const std::lock_guard lock(mutex_);
         return reserved_;
     }
 
@@ -72,18 +77,21 @@ class MemoryServices {
         host::Mapping memory;
         std::vector<std::uint32_t> protection;
         std::optional<XmemRegionInfo> xmem;
+        // Child metadata never owns the underlying mapping or adds to its budget.
+        std::map<std::uintptr_t, XmemRegionInfo> placeholder_windows;
 
         explicit Region(std::size_t size, std::size_t alignment)
             : memory(size, host::Access::none, alignment), protection(size / host::Mapping::page_size(), 0) {}
 
-        bool is_window() const {
-            return xmem && xmem->backing == XmemBacking::physical_window;
+        bool is_sparse_reservation() const {
+            return xmem && xmem->backing != XmemBacking::private_pages;
         }
     };
 
     std::map<std::uintptr_t, std::unique_ptr<Region>> regions_;
+    mutable std::mutex mutex_;
     MemoryLimits limits_;
     std::size_t reserved_ = 0;
-    std::size_t window_reserved_ = 0;
+    std::size_t sparse_reserved_ = 0;
 };
 } // namespace ambrosia::services

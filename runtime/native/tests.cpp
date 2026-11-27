@@ -25,6 +25,7 @@
 #include "unwind_table.h"
 #include <algorithm>
 #include <array>
+#include <barrier>
 #include <bit>
 #include <cerrno>
 #include <cfenv>
@@ -239,6 +240,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "graphics_list_tests.h"
 #include "frame_timing_tests.h"
 #include "descriptor_increment_tests.h"
+#include "placeholder_tests.h"
 #include "xmem_tests.h"
 #include "memory_budget_tests.h"
 #include "xmem_committed_tests.h"
@@ -743,6 +745,7 @@ extern "C" int ambrosia_native_tests() {
         frame_timing_checks();
         graphics_transport_rejection_checks();
         xmem_checks();
+        placeholder_checks();
         memory_budget_checks();
         xmem_committed_checks();
         semaphore_checks();
@@ -1081,6 +1084,18 @@ extern "C" int ambrosia_native_presentation_tests() {
         ++failures;
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_placeholder_thread_tests() {
+    checks = failures = 0;
+    try {
+        placeholder_thread_checks();
+    } catch (const std::exception &error) {
+        std::cerr << "native placeholder threads: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "placeholder threads: " << checks << " checks, " << failures << " failures\n";
     return failures ? 1 : 0;
 }
 
