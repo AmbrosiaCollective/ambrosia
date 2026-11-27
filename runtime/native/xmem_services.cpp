@@ -115,6 +115,20 @@ void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std:
     } else {
         result.error = error_not_supported;
     }
+    if (result.error == error_not_supported) {
+        const auto region = runtime->memory().xmem_region(address);
+        char target[192];
+        const auto length = std::snprintf(
+            target, sizeof(target),
+            "TRACE XMem target address_present=%u tracked=%u backing=%u guest_page=%llu region_bytes=%llu\n",
+            address ? 1u : 0u, region ? 1u : 0u,
+            region ? (region->backing == XmemBacking::physical_window ? 2u : 1u) : 0u,
+            static_cast<unsigned long long>(region ? region->guest_page_bytes : 0),
+            static_cast<unsigned long long>(region ? region->bytes : 0));
+        if (length > 0 && static_cast<std::size_t>(length) < sizeof(target)) {
+            diagnostics::write_service_trace(std::string_view(target, static_cast<std::size_t>(length)));
+        }
+    }
     // Bounded numeric request evidence stays in explicit private trace runs.
     // No guest pointer, input bytes, host address or file path is disclosed.
     char message[192];
@@ -128,6 +142,10 @@ void *AMBROSIA_GUEST_ABI virtual_allocate(void *address, std::size_t bytes, std:
     }
     if (result.error) {
         set_last_error(result.error);
+        if (result.error == error_not_supported && allocation_type == 0x20401000u && attributes == 0x283 &&
+            protection == 0x42404) {
+            diagnostics::stop_trace("unsupported XMem virtual allocation profile", 78);
+        }
     }
     return result.address;
 }
