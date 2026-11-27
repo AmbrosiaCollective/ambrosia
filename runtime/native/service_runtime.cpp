@@ -166,6 +166,7 @@ Runtime::Runtime(MemoryLimits memory_limits, std::size_t heap_budget)
     register_sort_services(registry_);
     register_random_services(registry_);
     register_window_class_services(registry_);
+    register_window_services(registry_);
     register_string_services(registry_);
     register_nls_services(registry_);
     register_file_services(registry_);

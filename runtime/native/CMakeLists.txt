@@ -26,6 +26,7 @@ add_library(ambrosia_service_runtime STATIC import_registry.cpp service_module_i
 target_link_libraries(ambrosia_service_runtime PUBLIC ambrosia_pe_core fmt::fmt-header-only Threads::Threads ICU::uc EXPAT::EXPAT)
 target_sources(ambrosia_service_runtime PRIVATE physical_pages.cpp)
 target_sources(ambrosia_service_runtime PRIVATE window_classes.cpp window_class_services.cpp)
+target_sources(ambrosia_service_runtime PRIVATE native_windows.cpp window_services.cpp)
 add_library(ambrosia_native_command STATIC native_command.cpp)
 target_link_libraries(ambrosia_native_command PUBLIC ambrosia_service_runtime ambrosia_package_provider)
 add_executable(ambrosia-host main.cpp)

@@ -25,6 +25,7 @@ struct Options {
     std::filesystem::path work;
     std::filesystem::path inventory;
     std::filesystem::path storage;
+    std::filesystem::path presentation;
     std::optional<std::string> locale_name;
     std::optional<int> physical_backing_descriptor;
     bool run = false;
@@ -42,6 +43,7 @@ constexpr const char *usage =
     "              Run modes also accept --package-inventory FILE (trusted expected file metadata).\n"
     "              --storage-root DIR selects an existing separate writable state directory.\n"
     "              --locale-name TAG selects the guest formatting locale (default en-US).\n"
+    "              --presentation-root DIR selects explicit trusted host-presentation endpoints.\n"
     "              --physical-backing-fd N transfers a reviewed sealed backing descriptor in run modes.\n"
     "Inspect maps supported PE dependencies without running callbacks.\n"
     "Run-bootstrap supports synthetic PE startup only.\n"
@@ -106,7 +108,7 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
         }
         if (flag != "--inspect" && flag != "--run-bootstrap" && flag != "--trace-startup" &&
             flag != "--package" && flag != "--work" && flag != "--package-inventory" &&
-            flag != "--storage-root" && flag != "--locale-name") {
+            flag != "--storage-root" && flag != "--locale-name" && flag != "--presentation-root") {
             throw std::invalid_argument("unknown bootstrap option");
         }
         if (++index == arguments.size() || arguments[index].empty() ||
@@ -132,6 +134,11 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
             }
             const auto utf8 = value.u8string();
             options.locale_name = std::string(utf8.begin(), utf8.end());
+        } else if (flag == "--presentation-root") {
+            if (!options.presentation.empty()) {
+                throw std::invalid_argument("duplicate presentation-root option");
+            }
+            options.presentation = value;
         } else if (flag == "--storage-root") {
             if (!options.storage.empty()) {
                 throw std::invalid_argument("duplicate storage root option");
@@ -154,6 +161,9 @@ Options parse_options(std::span<const std::filesystem::path> arguments) {
     }
     if (options.locale_name && !options.run) {
         throw std::invalid_argument("locale-name requires a run mode");
+    }
+    if (!options.presentation.empty() && !options.run) {
+        throw std::invalid_argument("presentation-root requires a run mode");
     }
     if (options.physical_backing_descriptor && !options.run) {
         throw std::invalid_argument("physical-backing-fd requires a run mode");
@@ -214,6 +224,9 @@ int run_native_command(std::span<const std::filesystem::path> arguments, std::os
             memory_limits.total_bytes = memory_limits.window_bytes + memory_limits.private_bytes;
         }
         services::Runtime service_runtime(memory_limits);
+        if (!options.presentation.empty()) {
+            service_runtime.windows().bind(options.presentation);
+        }
         if (options.physical_backing_descriptor) {
             service_runtime.physical_pages().bind(host::SharedBacking::adopt_descriptor(
                 *options.physical_backing_descriptor, services::PhysicalPages::maximum_backing_bytes));

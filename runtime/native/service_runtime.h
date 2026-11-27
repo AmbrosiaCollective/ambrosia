@@ -25,6 +25,7 @@
 #include "memory_services.h"
 #include "native_modules.h"
 #include "native_threads.h"
+#include "native_windows.h"
 #include "new_allocations.h"
 #include "persistent_storage.h"
 #include "physical_pages.h"
@@ -158,6 +159,10 @@ class Runtime {
         return window_classes_;
     }
 
+    NativeWindows &windows() {
+        return windows_;
+    }
+
     CriticalSections &critical_sections() {
         return critical_sections_;
     }
@@ -242,6 +247,7 @@ class Runtime {
     KernelObjects objects_;
     LibraryReferences library_references_;
     RegistryKeys registry_keys_;
+    NativeWindows windows_{handle_ids_};
     ReadonlyFiles files_;
     PersistentStorage persistent_storage_;
     GraphicsMemoryPolicy graphics_memory_;

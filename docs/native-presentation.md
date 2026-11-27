@@ -25,5 +25,16 @@ the transport while preserving guest window/message ownership.
 The host adapter and live broker are tested separately from game startup. Their
 original fixtures exercise software windows, copied synthetic pixels, visibility,
 events, 4K geometry and stale IDs. They do not establish actual game pixels or
-menu interaction. `CreateWindowExA` integration and its creation-message lifecycle
-are the next step.
+menu interaction.
+
+`CreateWindowExA` now uses an explicitly bound presentation root. It owns a guest
+handle and real hidden host window before delivering `WM_NCCREATE`,
+`WM_NCCALCSIZE` and `WM_CREATE` on the caller's existing guest thread/context.
+The class retains its mapped callback catalog. Rejected creation rolls back
+ownership; visibility follows successful creation. Parent/menu/extended styles
+and unmeasured creation styles remain unsupported. Callback-computed client
+rectangles are retained without inventing native border metrics.
+
+Both tested game builds create the hidden host object and enter `WM_NCCREATE`,
+then stop at the still-unsupported `DefWindowProcA` call inside that callback.
+No visible game window, game frame or interactive menu has been verified.

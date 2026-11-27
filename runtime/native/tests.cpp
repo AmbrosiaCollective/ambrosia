@@ -255,6 +255,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "physical_api_tests.h"
 #include "window_class_tests.h"
 #include "presentation_tests.h"
+#include "window_creation_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -776,7 +777,7 @@ extern "C" int ambrosia_native_inspect(const char *image, const char *package) {
 
 int trace_native_image(const char *image, const char *package, unsigned memory_profile,
                        const char *inventory = nullptr, const char *storage = nullptr,
-                       int physical_descriptor = -1) {
+                       int physical_descriptor = -1, const char *presentation = nullptr) {
     if (!image || !package) {
         return 2;
     }
@@ -795,6 +796,10 @@ int trace_native_image(const char *image, const char *package, unsigned memory_p
         if (physical_descriptor >= 3) {
             arguments.emplace_back("--physical-backing-fd");
             arguments.emplace_back(std::to_string(physical_descriptor));
+        }
+        if (presentation) {
+            arguments.emplace_back("--presentation-root");
+            arguments.emplace_back(std::u8string(reinterpret_cast<const char8_t *>(presentation)));
         }
         if (memory_profile == 1) {
             arguments.emplace_back("--sparse-windows");
@@ -1051,6 +1056,27 @@ extern "C" int ambrosia_native_presentation_tests() {
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
     return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_window_creation_tests() {
+    checks = failures = 0;
+    try {
+        window_creation_checks();
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL native window creation exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_trace_window_8g(const char *image, const char *package, const char *inventory,
+                                               const char *storage, int descriptor,
+                                               const char *presentation) {
+    if (descriptor < 3 || !presentation) {
+        return 2;
+    }
+    return trace_native_image(image, package, 3, inventory, storage, descriptor, presentation);
 }
 
 extern "C" int ambrosia_native_locale_rejection(unsigned mode) {
