@@ -249,8 +249,8 @@ void graphics_queue_live_checks(const std::filesystem::path &root, unsigned prob
           "CreateCommandQueueX clears output before rejecting a missing descriptor");
     check(create_queue_x(device, description.data(), &unsupported, &output) == no_interface && !output,
           "CreateCommandQueueX rejects unknown interfaces through the same queue ownership path");
-    std::array<void *, 4> queues{};
-    const std::array<std::uint32_t, 4> types{0, 2, 3, 2};
+    std::array<void *, 8> queues{};
+    const std::array<std::uint32_t, 8> types{0, 2, 3, 2, 2, 2, 2, 2};
     errno = E2BIG;
     set_last_error(79);
     crt_error() = 21;
@@ -258,14 +258,29 @@ void graphics_queue_live_checks(const std::filesystem::path &root, unsigned prob
         std::uint32_t flags = 0;
         if (probe == 4) {
             flags = 2;
-        } else if (index == queues.size() - 1) {
+        } else if (index == 2) {
             flags = 1;
         }
         std::array<std::uint32_t, 4> selected{types[index], probe == 2 ? 100u : 0u, flags, 1};
-        const auto create_selected = index == queues.size() - 1 ? create_queue_x : create_queue;
+        auto create_selected = create_queue;
+        if (index >= 3) {
+            create_selected = create_queue_x;
+            const auto engine = static_cast<std::uint32_t>(index - 3);
+            selected = {2, 0, engine, 0};
+            if (index == queues.size() - 1) {
+                selected = {2, 0, 0, 1};
+            }
+            if (probe == 5) {
+                selected[1] = 1;
+            } else if (probe == 6) {
+                selected[2] = 4;
+            } else if (probe == 7) {
+                selected[3] = 2;
+            }
+        }
         check(create_selected(device, selected.data(), &command_queue_interface, &queues[index]) == 0 &&
                   queues[index],
-              "supported queue kinds acquire a frontend retaining the real backend queue owner");
+              "PC queue kinds and bounded Xbox engine selectors acquire independent parent leases");
     }
     struct QueueFields {
         std::array<std::uint32_t, 4> fields;
@@ -273,21 +288,25 @@ void graphics_queue_live_checks(const std::filesystem::path &root, unsigned prob
     static_assert(sizeof(QueueFields) == 16);
     using GetDescription = void *(AMBROSIA_GUEST_ABI *)(void *, void *);
     using AggregateDescription = QueueFields(AMBROSIA_GUEST_ABI *)(void *);
-    auto *console_table = *static_cast<const std::uintptr_t **>(queues.back());
-    const auto get_description = reinterpret_cast<GetDescription>(console_table[18]);
+    auto *policy_table = *static_cast<const std::uintptr_t **>(queues[2]);
+    const auto get_description = reinterpret_cast<GetDescription>(policy_table[18]);
     struct GuardedDescription {
         std::uint64_t before = 0x1234567812345678ull;
         QueueFields value{};
         std::uint64_t after = 0x8765432187654321ull;
     } description_output;
-    check(get_description(queues.back(), &description_output.value) == &description_output.value &&
-              description_output.value.fields == std::array<std::uint32_t, 4>{2, 0, 1, 1} &&
+    check(get_description(queues[2], &description_output.value) == &description_output.value &&
+              description_output.value.fields == std::array<std::uint32_t, 4>{3, 0, 1, 1} &&
               description_output.before == 0x1234567812345678ull &&
               description_output.after == 0x8765432187654321ull,
-          "GetDesc returns the exact retained Xbox queue flags through the SDK C-style ABI");
-    const auto aggregate_description = reinterpret_cast<AggregateDescription>(console_table[18]);
-    check(aggregate_description(queues.back()).fields == std::array<std::uint32_t, 4>{2, 0, 1, 1},
+          "GetDesc returns the exact retained PC queue flags through the SDK C-style ABI");
+    const auto aggregate_description = reinterpret_cast<AggregateDescription>(policy_table[18]);
+    check(aggregate_description(queues[2]).fields == std::array<std::uint32_t, 4>{3, 0, 1, 1},
           "compiled Microsoft aggregate-return ABI receives all four queue fields");
+    auto *console_table = *static_cast<const std::uintptr_t **>(queues.back());
+    const auto console_description = reinterpret_cast<AggregateDescription>(console_table[18]);
+    check(console_description(queues.back()).fields == std::array<std::uint32_t, 4>{2, 0, 0, 1},
+          "Xbox engine selection normalizes to standard PC policy instead of becoming PC flags");
     auto *table = *static_cast<const std::uintptr_t **>(queues[0]);
     const auto query = reinterpret_cast<Query>(table[0]);
     const auto add = reinterpret_cast<Reference>(table[1]);
@@ -306,9 +325,10 @@ void graphics_queue_live_checks(const std::filesystem::path &root, unsigned prob
     check(query(queues[0], &command_queue_interface, &output) == 0 && output == queues[0] &&
               release(output) == 1 && add(queues[0]) == 2 && release(queues[0]) == 1,
           "queue identity and reference counts share one actual owned frontend");
-    check(release_device(device) == 4, "PC and Xbox queue children retain their device independently");
+    check(release_device(device) == queues.size(),
+          "PC and Xbox queue children retain their device independently");
     check(get_device(queues[0], &device11_interface, &output) == 0 && output == device &&
-              release_device(output) == 4,
+              release_device(output) == queues.size(),
           "queue GetDevice returns the retained backend parent with an added reference");
     check(errno == E2BIG && get_last_error() == 79 && crt_error() == 21,
           "queue facade preserves native and guest error state");

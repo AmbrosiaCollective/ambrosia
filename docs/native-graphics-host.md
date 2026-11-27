@@ -273,3 +273,22 @@ shared fence, then reach another Xbox descriptor with third word 2. Its meaning
 is not established by the public PC enum. A dedicated console descriptor mapping
 needs investigation; do not silently mask those words or claim GPU scheduling.
 No game frame or interactive menu is verified.
+
+## Console queue descriptor translation
+
+Xbox slot48 uses its own adapter. The [official FramePacing sample](https://github.com/microsoft/Xbox-GDK-Samples/blob/b1e77b6ac10f95b07296025fda171ca2ddc42dbe/Samples/Graphics/FramePacing/FramePacing.cpp#L1740)
+names Type,Flags,EngineOrPipeIndex and QueueIndex. The four-word binary layout is
+an HLE inference from the sample and actual calls, not a published SDK offset
+contract. This corrects the earlier shared-PC-prefix assumption.
+
+The adapter retains every field. Its bounded scope accepts types0/2/3,Flags0,
+engines0..3 and queue indices0..1. Each selection owns a logical queue with normal
+priority,flags0 and one-node PC properties over the existing real backend. PC
+slot8 keeps its own known-bit validation. At most8 frontends are live. Independent
+hardware engines,parallel scheduling and GPU execution are not claimed; future
+submission must preserve logical ordering on the leased queue.
+
+Both builds pass31 real queue and1516 strict checks. Four negative controls reject
+unknown console flags,engine4,queue2 and unknown PC flags. Both actual games now
+create five queues and five shared fences,then stop at device9CreateCommandAllocator.
+No game-rendered frame or interactive menu is verified. Profiles remain unchanged.

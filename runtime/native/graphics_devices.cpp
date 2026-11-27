@@ -104,11 +104,24 @@ struct GraphicsDevices::State {
     static_assert(offsetof(QueueDescription, flags) == 8);
     static_assert(offsetof(QueueDescription, node_mask) == 12);
 
+    // The public FramePacing sample names these console fields. Their
+    // four-word layout is the bounded HLE interpretation of the measured call,
+    // not the PC descriptor's Priority/Flags/NodeMask layout.
+    struct XboxQueueDescription {
+        std::uint32_t type = 0;
+        std::uint32_t flags = 0;
+        std::uint32_t engine_or_pipe_index = 0;
+        std::uint32_t queue_index = 0;
+    };
+
+    static_assert(sizeof(XboxQueueDescription) == 16);
+
     struct Queue {
         const std::uintptr_t *table;
         std::uint32_t references = 1;
         Device *parent = nullptr;
         QueueDescription description;
+        std::optional<XboxQueueDescription> xbox_selection;
     };
 
     static_assert(offsetof(Queue, table) == 0);
@@ -310,6 +323,35 @@ struct GraphicsDevices::State {
         return entries;
     }
 
+    // Both entrypoints hold State::mutex and validate caller pointers before
+    // transferring an immutable description and a parent lease to this owner.
+    static std::int32_t create_owned_queue(State &state, Device *pointer, const QueueDescription &copy,
+                                           std::optional<XboxQueueDescription> xbox_selection,
+                                           void **output) {
+        if ((copy.type != 0 && copy.type != 2 && copy.type != 3) || copy.priority || (copy.flags & ~1u) ||
+            copy.node_mask > 1 || state.queues.size() >= 8 || pointer->references == UINT32_MAX) {
+            diagnostics::stop_trace("unsupported native command queue descriptor or ownership capacity", 78);
+        }
+        // Logical queues lease the real graphics/compute queue. Independent
+        // hardware-engine scheduling and GPU submission are not implemented.
+        (void)state.backend->query_device(pointer->real.id);
+        auto queue = std::make_unique<Queue>();
+        queue->table = queue_table().data();
+        queue->parent = pointer;
+        queue->description = copy;
+        queue->xbox_selection = xbox_selection;
+        auto *result = queue.get();
+        auto [position, inserted] = state.queues.emplace(result, std::move(queue));
+        (void)position;
+        if (!inserted) {
+            throw std::runtime_error("native queue ownership collision");
+        }
+        ++pointer->references;
+        *output = result;
+        diagnostics::write_service_trace("TRACE native real command queue frontend created\n");
+        return 0;
+    }
+
     static std::int32_t AMBROSIA_GUEST_ABI create_queue(Device *pointer, const QueueDescription *description,
                                                         const void *interface_id, void **output) noexcept {
         const PreserveErrno preserve;
@@ -334,29 +376,45 @@ struct GraphicsDevices::State {
             if (count > 0 && static_cast<std::size_t>(count) < sizeof(message)) {
                 diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
             }
-            if ((copy.type != 0 && copy.type != 2 && copy.type != 3) || copy.priority || (copy.flags & ~1u) ||
-                copy.node_mask > 1 || access.state.queues.size() >= 8 || pointer->references == UINT32_MAX) {
-                diagnostics::stop_trace("unsupported native command queue descriptor or ownership capacity",
-                                        78);
+            return create_owned_queue(access.state, pointer, copy, std::nullopt, output);
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI create_queue_x(Device *pointer,
+                                                          const XboxQueueDescription *description,
+                                                          const void *interface_id, void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id || !description) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned(pointer);
+            if (!supports_queue(interface_id)) {
+                return no_interface;
             }
-            // Creation obtained a real graphics/compute queue. Its device owner
-            // must remain alive. No submission or independent queue ordering is
-            // claimed until those operations have their own real backend path.
-            (void)access.state.backend->query_device(pointer->real.id);
-            auto queue = std::make_unique<Queue>();
-            queue->table = queue_table().data();
-            queue->parent = pointer;
-            queue->description = copy;
-            auto *result = queue.get();
-            auto [position, inserted] = access.state.queues.emplace(result, std::move(queue));
-            (void)position;
-            if (!inserted) {
-                throw std::runtime_error("native queue ownership collision");
+            XboxQueueDescription selection;
+            std::memcpy(&selection, description, sizeof(selection));
+            char message[160];
+            const auto count = std::snprintf(
+                message, sizeof(message),
+                "TRACE native Xbox queue request type=%u flags=%x engine=%u queue=%u\n", selection.type,
+                selection.flags, selection.engine_or_pipe_index, selection.queue_index);
+            if (count > 0 && static_cast<std::size_t>(count) < sizeof(message)) {
+                diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
             }
-            ++pointer->references;
-            *output = result;
-            diagnostics::write_service_trace("TRACE native real command queue frontend created\n");
-            return 0;
+            if (selection.flags || selection.engine_or_pipe_index > 3 || selection.queue_index > 1) {
+                diagnostics::stop_trace("unsupported native Xbox command queue selection", 78);
+            }
+            QueueDescription normalized;
+            normalized.type = selection.type;
+            normalized.node_mask = 1;
+            return create_owned_queue(access.state, pointer, normalized, selection, output);
         } catch (const std::exception &error) {
             diagnostics::stop_trace(error.what(), 78);
         }
@@ -695,7 +753,7 @@ struct GraphicsDevices::State {
             result[36] = reinterpret_cast<std::uintptr_t>(&create_fence);
             // The Xbox ABI shadows PC OpenExistingHeapFromAddress here.
             // See d3d12_xs_device.h and docs/retail_boot_chain.md section 3.2.
-            result[48] = reinterpret_cast<std::uintptr_t>(&create_queue);
+            result[48] = reinterpret_cast<std::uintptr_t>(&create_queue_x);
             return result;
         }();
         return entries;
