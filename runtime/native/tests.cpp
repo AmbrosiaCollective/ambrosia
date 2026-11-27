@@ -1082,7 +1082,7 @@ extern "C" int ambrosia_native_presentation_tests() {
 extern "C" int ambrosia_native_graphics_list_tests(const char *root, unsigned probe) {
     checks = failures = 0;
     try {
-        if (!root || probe > 5) {
+        if (!root || probe > 6) {
             return 2;
         }
         graphics_list_live_checks(root, probe);

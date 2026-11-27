@@ -349,3 +349,24 @@ Both actual read-only game launches create their first direct CPU command list
 and stop at console list slot 132, without fault, timeout or watchdog failure.
 No GPU command, game-rendered frame or interactive menu is verified. Existing
 guest/host profiles are unchanged; compiler source access adds only the new unit.
+
+## Console slot 132 contract investigation
+
+A bounded nonreturning diagnostic now captures slot 132's four scalar arguments
+after checking list ownership, open recording, allocator lease and buffer bounds.
+Both compiler fixtures verify the register and stack argument positions with
+synthetic values. Actual GCC and Clang launches produce identical observations
+and stop without acknowledging the operation. Raw arguments remain private.
+
+The older FiveStar notes call slots 131/132 register writes. Archived TuxBox
+revision 8661492d74886bc99ab7816745999bc02e2f393d instead treats its extended-list
+slots as cache barriers: two 32-bit masks, then a 64-bit address and byte count,
+lowered to a full global barrier. Static read-only decoding of the actual caller
+confirms the argument widths and following slot 131/Close calls. These references
+disagree on semantics; a plausible name alone does not establish an SDK contract.
+The diagnostic's offset/value/control/mask labels follow the older notes and are
+provisional. No register or cache operation is implemented by this diagnostic.
+
+Next, review conservative whole-memory barrier recording through the canonical
+IR, retain original masks/range metadata, and reject overflow or closed recordings.
+GPU execution must remain explicit until a real submission backend exists.

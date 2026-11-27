@@ -116,6 +116,15 @@ void graphics_list_live_checks(const std::filesystem::path &root, unsigned probe
     const auto get_type = reinterpret_cast<Reference>(table[8]);
     const auto close = reinterpret_cast<Close>(table[9]);
     const auto reset = reinterpret_cast<Reset>(table[10]);
+    if (probe == 6) {
+        diagnostics::ImportStops stops;
+        stops.seal();
+        diagnostics::ImportStopScope trace(stops);
+        using Capture =
+            void(AMBROSIA_GUEST_ABI *)(void *, std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t);
+        reinterpret_cast<Capture>(table[132])(list, 0x12345678u, 0xabcdef01u, 0, 0xffffffffff00ull);
+        throw std::runtime_error("register diagnostic unexpectedly returned");
+    }
     if (probe == 1 || probe == 5) {
         const auto unsupported = probe == 1 ? 12u : 599u;
         reinterpret_cast<Close>(table[unsupported])(list);

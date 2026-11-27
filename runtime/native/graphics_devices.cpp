@@ -1020,6 +1020,35 @@ struct GraphicsDevices::State {
         return {reinterpret_cast<std::uintptr_t>(&unsupported_list<Slots>)...};
     }
 
+    static void AMBROSIA_GUEST_ABI capture_register_request(void *pointer, std::uint64_t offset,
+                                                            std::uint64_t value, std::uint64_t control,
+                                                            std::uint64_t mask) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_list(pointer);
+            if (access.list.recording.closed() || !access.list.recording.bounds_intact() ||
+                !access.list.active_allocator) {
+                diagnostics::stop_trace("native register capture requires an intact open recording", 78);
+            }
+            // Public console notes describe four scalar arguments. Keep their
+            // exact observations private; do not dereference or interpret them.
+            char message[256];
+            const auto count = std::snprintf(
+                message, sizeof(message),
+                "TRACE native console register request slot=132 offset=%016llx value=%016llx "
+                "control=%016llx mask=%016llx\n",
+                static_cast<unsigned long long>(offset), static_cast<unsigned long long>(value),
+                static_cast<unsigned long long>(control), static_cast<unsigned long long>(mask));
+            if (count <= 0 || static_cast<std::size_t>(count) >= sizeof(message)) {
+                diagnostics::stop_trace("native register capture exceeded its text bound", 78);
+            }
+            diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
+            diagnostics::stop_trace("native console register request requires state translation", 78);
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
     static const auto &list_table() {
         static const auto entries = [] {
             // Published console numbering extends well beyond the PC interface.
@@ -1032,6 +1061,7 @@ struct GraphicsDevices::State {
             result[8] = reinterpret_cast<std::uintptr_t>(&list_type);
             result[9] = reinterpret_cast<std::uintptr_t>(&list_close);
             result[10] = reinterpret_cast<std::uintptr_t>(&list_reset);
+            result[132] = reinterpret_cast<std::uintptr_t>(&capture_register_request);
             return result;
         }();
         return entries;
