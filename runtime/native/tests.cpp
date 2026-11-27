@@ -12,6 +12,7 @@
 #include "package_modules.h"
 #include "pe_bytes.h"
 #include "pe_image.h"
+#include "physical_pages.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
 #include "unwind_epilogue.h"
@@ -249,6 +250,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "random_tests.h"
 #include "prng_tests.h"
 #include "shared_backing_tests.h"
+#include "physical_page_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -962,6 +964,22 @@ extern "C" int ambrosia_native_shared_backing_tests(int descriptor) {
         shared_backing_checks(descriptor);
     } catch (const std::exception &error) {
         std::cerr << "FAIL shared backing exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_physical_page_tests(int descriptor, bool workers) {
+    checks = failures = 0;
+    try {
+        if (workers) {
+            physical_page_worker_check(descriptor);
+        } else {
+            physical_page_checks(descriptor);
+        }
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL physical page exception: " << error.what() << '\n';
         ++failures;
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
