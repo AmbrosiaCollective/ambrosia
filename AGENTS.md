@@ -228,3 +228,18 @@ Keep artifact source/hash checks and isolated runtime tests after full builds.
 Gate test/game execution on successful build/source/artifact verification. Use
 separate calls or explicit exit-status branching; an ungated multiline shell
 continues after a failed check. Preserve failed attempts as evidence.
+
+Task127's separate physical-backing profile is validated: outer-workspace
+scripts/run_physical_isolated.py and isolation_physical_bootstrap.py retain the
+thread profile's controls and limits, adding one private sealed 1 GiB backing
+file on inherited FD 3. Initial shared nonexecuting mappings are admitted only
+for that descriptor with SHARED and optional FIXED/NOREPLACE flags. Other shared
+maps and guest memfd creation remain denied. All 46 checks precede entry; an
+omission control rejects lost descriptor restriction. The 8 MiB guest file cap,
+64 GiB AS, 8 GiB data and sampled RSS watchdog, 32 tasks and other resource limits
+stay unchanged. Shared pages bypass data accounting; the watchdog is not a hard
+RSS cap. This does not track subsequent mprotect aliases. No GPU/display/network/
+unrestricted execution is added. Preserve original profiles and use the strict
+helper for ordinary tiny checks. The native backing adapter must explicitly
+adopt and validate the prepared descriptor before using it. This necessary
+profile falls under standing goal authorization; no further permission prompt.
