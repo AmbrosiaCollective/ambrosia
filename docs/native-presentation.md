@@ -53,4 +53,13 @@ Default `WM_CREATE` accepts the owned active creation structure after host/class
 storage, title and client initialization. This specific message returns zero to
 continue creation; other unimplemented messages still stop explicitly.
 
+`ShowWindow` uses actual host visibility readback and returns the previous state.
+Explicit show/hide notifications run on the existing guest thread before the host
+change. The default handler accepts only the owned pending notification. Normal
+show suppresses that notification; default and first-show settings use the CRT's
+explicit startup policy. Native focus is requested for the owned shown window,
+without claiming compositor focus or synthesizing activation messages. Minimize,
+maximize, restoring a non-normal window and wider window-position/event semantics
+remain unsupported. These window operations do not establish game rendering.
+
 No visible game window, game frame or interactive menu has been verified.

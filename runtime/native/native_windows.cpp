@@ -4,6 +4,22 @@
 #include <stdexcept>
 
 namespace ambrosia::services {
+std::int32_t resolve_show_command(std::int32_t command, std::optional<std::uint16_t> startup, bool first) {
+    if (startup && (first || command == 10) && (command == 1 || command == 5 || command == 10)) {
+        command = *startup;
+    }
+    return command == 10 ? 1 : command;
+}
+
+bool NativeWindows::consume_startup_show() {
+    const std::lock_guard lock(mutex_);
+    if (startup_show_consumed_) {
+        return false;
+    }
+    startup_show_consumed_ = true;
+    return true;
+}
+
 std::array<std::int32_t, 4> calculate_client_rectangle(const std::array<std::int32_t, 4> &outer,
                                                        const host::WindowBorders &borders) {
     for (const auto value : {borders.left, borders.top, borders.right, borders.bottom}) {

@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import resource
+import signal
 import stat
 import struct
 import time
@@ -21,6 +22,12 @@ HEADER = struct.Struct('<8sIIIIiiiiIIII8x')
 EVENT = struct.Struct('<IIIIii')
 MAX_PIXELS = 3840 * 2160
 MAX_PAYLOAD = 4096
+
+
+def limit_lifetime(seconds):
+    # Default signal termination still works if a native display call blocks.
+    signal.signal(signal.SIGALRM, signal.SIG_DFL)
+    signal.alarm(seconds + 5)
 
 
 def restrict_after_display_start():
@@ -89,6 +96,8 @@ class Video:
             'SDL_SetWindowTitle': ([ctypes.c_void_p, ctypes.c_char_p], None),
             'SDL_GetWindowTitle': ([ctypes.c_void_p], ctypes.c_char_p),
             'SDL_GetWindowID': ([ctypes.c_void_p], ctypes.c_uint),
+            'SDL_GetWindowFlags': ([ctypes.c_void_p], ctypes.c_uint),
+            'SDL_RaiseWindow': ([ctypes.c_void_p], None),
             'SDL_GetWindowSize': ([ctypes.c_void_p, ctypes.POINTER(ctypes.c_int),
                                     ctypes.POINTER(ctypes.c_int)], None),
             'SDL_GetWindowPosition': ([ctypes.c_void_p, ctypes.POINTER(ctypes.c_int),
@@ -222,6 +231,23 @@ class Video:
             if result or any(value < 0 or value > 4096 for value in borders):
                 return 3, identifier, (0, 0, 0, 0), b'', 0
             return 0, identifier, borders, b'', 0
+        if operation == 8:
+            if payload or flags not in (0, 1, 2, 3) or argument or any((x, y, width, height)):
+                return 1, identifier, (0, 0, 0, 0), b'', 0
+            # Normal-mode creation is supported. Restoring an existing native
+            # minimized/maximized window needs its resize/message integration.
+            if flags == 3 and self.library.SDL_GetWindowFlags(pointer) & (64 | 128):
+                return 3, identifier, (0, 0, 0, 0), b'', 0
+            previous = bool(self.library.SDL_GetWindowFlags(pointer) & 4)
+            if flags != 2:
+                (self.library.SDL_ShowWindow if flags else self.library.SDL_HideWindow)(pointer)
+                if flags:
+                    self.library.SDL_RaiseWindow(pointer)
+            visible = bool(self.library.SDL_GetWindowFlags(pointer) & 4)
+            if flags != 2 and visible != bool(flags):
+                return 3, identifier, (0, 0, 0, 0), b'', 0
+            state = int(previous) | (int(visible) << 1)
+            return 0, identifier, self.geometry(pointer), b'', state
         if operation == 5:
             if width <= 0 or height <= 0 or width * height > MAX_PIXELS or width > 4096 or height > 2160:
                 return 1, identifier, (0, 0, 0, 0), b'', 0
@@ -278,7 +304,7 @@ def serve(root, seconds):
                 time.sleep(0.002)
                 continue
             requests += 1
-            if magic != MAGIC or size > MAX_PAYLOAD or reserved1 or reserved2 or operation not in range(1, 8):
+            if magic != MAGIC or size > MAX_PAYLOAD or reserved1 or reserved2 or operation not in range(1, 9):
                 status, identifier, geometry, output, argument = 1, 0, (0, 0, 0, 0), b'', 0
             else:
                 payload = os.pread(request_fd, size, HEADER.size)
@@ -309,6 +335,7 @@ def main():
     arguments = parser.parse_args()
     if not 1 <= arguments.seconds <= 120:
         parser.error('seconds must be from1 to120')
+    limit_lifetime(arguments.seconds)
     environment = {key: os.environ[key] for key in ('DISPLAY', 'XAUTHORITY') if key in os.environ}
     environment.update(PATH='/usr/bin', SDL_VIDEODRIVER='x11', SDL_RENDER_DRIVER='software')
     os.environ.clear()

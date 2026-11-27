@@ -49,6 +49,9 @@ branch settings; these repository files alone do not enforce permissions.
   instructs publication for the concrete change. Do not ask to publish at task
   boundaries. Keep commits small, reviewed and accompanied by local evidence.
 - Continuing, finishing or committing work does not authorize publication.
+- Presentation endpoints have one client owner. Wait for each client/test process
+  to finish, including any yielded tool session, before starting the next one.
+  After broker expiry, preserve evidence and use fresh private endpoints.
   Historical task-boundary publication prompts remain superseded by the
   standing local-only instruction.
 - Reviewed local integration is authorized. Keep remote-tracking/publication

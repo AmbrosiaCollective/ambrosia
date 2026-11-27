@@ -42,6 +42,14 @@ std::size_t frame_bytes(std::int32_t width, std::int32_t height) {
     return static_cast<std::size_t>(width) * height * 4;
 }
 
+WindowVisibility visibility_reply(const Packet &reply, std::uint32_t window) {
+    if (reply.window != window || reply.argument > 3) {
+        throw std::runtime_error("invalid native owned window visibility reply");
+    }
+    (void)frame_bytes(reply.geometry.width, reply.geometry.height);
+    return {reply.geometry, bool(reply.argument & 1), bool(reply.argument & 2)};
+}
+
 #ifdef __linux__
 void transfer_exact(int descriptor, void *data, std::size_t bytes, std::size_t offset, bool write) {
     auto *cursor = static_cast<std::byte *>(data);
@@ -125,7 +133,8 @@ struct Presentation::Transport {
                 })) {
                 throw std::runtime_error("invalid native presentation event metadata");
             }
-        } else if (reply.argument || reply.payload_bytes) {
+        } else if (reply.payload_bytes ||
+                   (packet.operation == 8 ? reply.argument > 3 : reply.argument != 0)) {
             throw std::runtime_error("unexpected native presentation payload");
         }
         return reply;
@@ -266,6 +275,35 @@ WindowBorders Presentation::borders(std::uint32_t window) {
         throw std::runtime_error("native presentation returned invalid owned window borders");
     }
     return {values.x, values.y, values.width, values.height};
+}
+
+WindowVisibility Presentation::visibility(std::uint32_t window) {
+    const std::lock_guard lock(transport_->mutex);
+    Packet packet;
+    packet.operation = 8;
+    packet.window = window;
+    packet.flags = 2; // Query without changing the host window.
+    const auto result = visibility_reply(transport_->exchange(packet), window);
+    if (result.previous != result.visible) {
+        throw std::runtime_error("native visibility query unexpectedly changed state");
+    }
+    return result;
+}
+
+WindowVisibility Presentation::set_visibility(std::uint32_t window, bool visible, bool normal) {
+    if (normal && !visible) {
+        throw std::invalid_argument("native normal visibility requires showing the window");
+    }
+    const std::lock_guard lock(transport_->mutex);
+    Packet packet;
+    packet.operation = 8;
+    packet.window = window;
+    packet.flags = normal ? 3 : (visible ? 1 : 0);
+    const auto result = visibility_reply(transport_->exchange(packet), window);
+    if (result.visible != visible) {
+        throw std::runtime_error("native visibility acknowledgment disagrees with requested state");
+    }
+    return result;
 }
 
 void Presentation::present(std::uint32_t window, std::int32_t width, std::int32_t height,

@@ -17,6 +17,11 @@ struct WindowBorders {
     std::int32_t left = 0, top = 0, right = 0, bottom = 0;
 };
 
+struct WindowVisibility {
+    WindowGeometry geometry;
+    bool previous = false, visible = false;
+};
+
 struct PresentationWindow {
     std::uint32_t id = 0;
     WindowGeometry geometry;
@@ -48,6 +53,8 @@ class Presentation {
     WindowGeometry show(std::uint32_t window, bool visible);
     void set_title(std::uint32_t window, std::string_view title);
     WindowBorders borders(std::uint32_t window);
+    WindowVisibility visibility(std::uint32_t window);
+    WindowVisibility set_visibility(std::uint32_t window, bool visible, bool normal = false);
     std::vector<PresentationEvent> poll();
     void present(std::uint32_t window, std::int32_t width, std::int32_t height,
                  std::span<const std::byte> rgba);

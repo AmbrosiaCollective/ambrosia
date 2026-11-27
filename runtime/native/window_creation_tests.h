@@ -22,7 +22,8 @@ std::intptr_t AMBROSIA_GUEST_ABI creation_procedure(std::uintptr_t handle, std::
     observation.valid =
         observation.valid && window && current_runtime() == observation.runtime &&
         guest::ThreadContext::current() == observation.context &&
-        std::this_thread::get_id() == observation.thread && !first && current_modules() &&
+        std::this_thread::get_id() == observation.thread && (message == 0x18 || !first) &&
+        current_modules() &&
         current_modules()->module_base_for_address(observation.procedure) == observation.instance;
     if (message == 0x81 || message == 1) {
         const auto *bytes = reinterpret_cast<const std::byte *>(second);
@@ -55,6 +56,11 @@ std::intptr_t AMBROSIA_GUEST_ABI creation_procedure(std::uintptr_t handle, std::
         rectangle[1] += 4;
         rectangle[2] -= 3;
         rectangle[3] -= 4;
+    } else if (message == 0x18) {
+        const auto host = window->presentation->visibility(window->host_window.id);
+        observation.valid = observation.valid && window->pending_visibility &&
+                            *window->pending_visibility == bool(first) && !second &&
+                            host.visible == window->visible && host.visible != bool(first);
     }
     errno = ERANGE;
     crt_error() = 31;
@@ -78,6 +84,13 @@ std::intptr_t AMBROSIA_GUEST_ABI creation_procedure(std::uintptr_t handle, std::
         }
         return observation.reject == 1 ? 0 : 1;
     }
+    if (message == 0x18) {
+        using Default =
+            std::intptr_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::uint32_t, std::uintptr_t, std::intptr_t);
+        const auto procedure = reinterpret_cast<Default>(
+            observation.runtime->resolve(service_symbol("DefWindowProcA", "user32.dll")));
+        return procedure(handle, message, first, second);
+    }
     if (message == 1 && observation.default_mode >= 7) {
         using Default =
             std::intptr_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::uint32_t, std::uintptr_t, std::intptr_t);
@@ -92,6 +105,12 @@ std::intptr_t AMBROSIA_GUEST_ABI creation_procedure(std::uintptr_t handle, std::
 void window_creation_checks(unsigned default_probe = 0) {
     using namespace ambrosia;
     using namespace services;
+    check(resolve_show_command(10, std::nullopt, true) == 1 &&
+              resolve_show_command(5, std::nullopt, false) == 5,
+          "the native launcher resolves an unconfigured default show mode to normal display");
+    check(resolve_show_command(5, 0, true) == 0 && resolve_show_command(5, 0, false) == 5 &&
+              resolve_show_command(10, 0, false) == 0,
+          "explicit startup visibility overrides the first show and later default requests only");
     const auto invalid_rectangle = [](const auto &calculation) {
         try {
             calculation();
@@ -133,6 +152,10 @@ void window_creation_checks(unsigned default_probe = 0) {
               default_address == runtime.resolve(service_symbol(
                                      "DefWindowProcA", "ext-ms-win-rtcore-ntuser-window-ansi-l1-1-0.dll")),
           "default processing aliases expose the same typed Windows ABI service");
+    const auto show_address = runtime.resolve(service_symbol("ShowWindow", "user32.dll"));
+    check(show_address && show_address == runtime.resolve(service_symbol(
+                                              "ShowWindow", "ext-ms-win-rtcore-ntuser-window-l1-1-0.dll")),
+          "ShowWindow aliases expose the same native visibility service");
     runtime.windows().bind("/presentation");
     auto bytes = fixture();
     put<std::uint32_t>(bytes, 0x98 + 120, 0);
@@ -172,6 +195,17 @@ void window_creation_checks(unsigned default_probe = 0) {
     crt_error() = 19;
     set_last_error(83);
     const auto handle = call(reinterpret_cast<std::uintptr_t>("originalwindow"));
+    if (default_probe == 10) {
+        using Show = std::int32_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::int32_t);
+        (void)reinterpret_cast<Show>(show_address)(handle, 2);
+        throw std::runtime_error("unsupported ShowWindow command unexpectedly returned");
+    }
+    if (default_probe == 11) {
+        using Default =
+            std::intptr_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::uint32_t, std::uintptr_t, std::intptr_t);
+        (void)reinterpret_cast<Default>(default_address)(handle, 0x18, 1, 0);
+        throw std::runtime_error("unowned show notification unexpectedly returned");
+    }
     auto window = runtime.windows().find(handle);
     check(handle && window && observation.valid && observation.handle == handle &&
               observation.messages == std::vector<std::uint32_t>{0x81, 0x83, 1},
@@ -285,6 +319,39 @@ void window_creation_checks(unsigned default_probe = 0) {
                   observation.messages == std::vector<std::uint32_t>{0x81, 0x83, 1},
               "all default creation messages complete on the owned host window and clear both structure "
               "leases");
+        if (show_address && calculated_window) {
+            using Show = std::int32_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::int32_t);
+            const auto show = reinterpret_cast<Show>(show_address);
+            observation.messages.clear();
+            errno = E2BIG;
+            crt_error() = 19;
+            set_last_error(83);
+            const auto previously_visible = show(calculated_handle, 5);
+            check(!previously_visible && calculated_window->visible &&
+                      (calculated_window->style & 0x10000000u) && !calculated_window->pending_visibility &&
+                      observation.valid && observation.messages == std::vector<std::uint32_t>{0x18} &&
+                      errno == E2BIG && crt_error() == 31 && get_last_error() == 211,
+                  "first successful show returns previous hidden state after a correctly ordered guest "
+                  "notification");
+            observation.messages.clear();
+            check(
+                show(calculated_handle, 5) == 1 && calculated_window->visible && observation.messages.empty(),
+                "showing a visible owned window returns true without repeating its transition notification");
+            check(show(calculated_handle, 0) == 1 && !calculated_window->visible &&
+                      !(calculated_window->style & 0x10000000u) && !calculated_window->pending_visibility &&
+                      observation.valid && observation.messages == std::vector<std::uint32_t>{0x18},
+                  "hide returns the previous visible state and notifies the guest before changing the real "
+                  "host");
+            check(!show(0, 5) && get_last_error() == 1400,
+                  "an invalid handle fails before issuing a host visibility request");
+            observation.messages.clear();
+            check(!show(calculated_handle, 10) && calculated_window->visible && observation.messages.empty(),
+                  "an unconfigured default show displays the real normal window without WM_SHOWWINDOW");
+            (void)show(calculated_handle, 0);
+            observation.messages.clear();
+            check(!show(calculated_handle, 1) && calculated_window->visible && observation.messages.empty(),
+                  "normal display follows the documented WM_SHOWWINDOW suppression rule");
+        }
         runtime.windows().retire(calculated_handle);
     }
     active_creation = nullptr;

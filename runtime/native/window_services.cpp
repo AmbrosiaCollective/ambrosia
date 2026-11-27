@@ -59,17 +59,87 @@ std::optional<std::string> copy_string(const char *source, std::size_t limit) {
     return std::nullopt;
 }
 
-std::intptr_t send_creation(Runtime &runtime, const NativeWindow &window, std::uint32_t message,
-                            void *parameter) {
+std::intptr_t send_window_message(Runtime &runtime, const NativeWindow &window, std::uint32_t message,
+                                  void *parameter, std::uintptr_t first = 0) {
     if (window.owner != std::this_thread::get_id() || !guest::ThreadContext::current()) {
-        throw std::runtime_error("native creation message requires its owning active guest thread");
+        throw std::runtime_error("native window message requires its owning active guest thread");
     }
     auto catalog = *window.window_class->description.modules;
     Scope callback_scope(runtime, &catalog);
     using Procedure =
         std::intptr_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::uint32_t, std::uintptr_t, std::intptr_t);
     const auto procedure = reinterpret_cast<Procedure>(window.window_class->description.procedure);
-    return procedure(window.handle, message, 0, reinterpret_cast<std::intptr_t>(parameter));
+    return procedure(window.handle, message, first, reinterpret_cast<std::intptr_t>(parameter));
+}
+
+struct VisibilityNotification {
+    NativeWindow &window;
+    std::optional<bool> saved;
+
+    VisibilityNotification(NativeWindow &owned, bool visible)
+        : window(owned), saved(owned.pending_visibility) {
+        window.pending_visibility = visible;
+    }
+
+    ~VisibilityNotification() {
+        window.pending_visibility = saved;
+    }
+};
+
+std::int32_t AMBROSIA_GUEST_ABI show_window(std::uintptr_t handle, std::int32_t command) noexcept {
+    RestoreNativeError restore;
+    try {
+        auto *runtime = current_runtime();
+        if (!runtime || !guest::ThreadContext::current()) {
+            throw std::runtime_error("native ShowWindow requires an active guest context");
+        }
+        auto window = runtime->windows().find(handle);
+        if (!window) {
+            set_last_error(1400);
+            return 0;
+        }
+        if (window->owner != std::this_thread::get_id()) {
+            throw std::runtime_error("native ShowWindow requires its owning thread");
+        }
+        const auto &startup = runtime->startup().launch_info();
+        const auto configured = startup.flags & 1 ? std::optional(startup.show_window) : std::nullopt;
+        command = resolve_show_command(command, configured, runtime->windows().consume_startup_show());
+        if (command != 0 && command != 1 && command != 5) {
+            throw std::runtime_error("unsupported native ShowWindow command=" + std::to_string(command));
+        }
+        const bool wanted = command != 0;
+        const auto observed = window->presentation->visibility(window->host_window.id);
+        if (observed.visible != window->visible) {
+            throw std::runtime_error("native window visibility changed outside its owned lifecycle");
+        }
+        if (observed.visible != wanted && command != 1) {
+            VisibilityNotification notification(*window, wanted);
+            // WM_SHOWWINDOW precedes display. Its zero lParam identifies this
+            // explicit ShowWindow request, not an owner-window state transition.
+            (void)send_window_message(*runtime, *window, 0x18, nullptr, wanted ? 1 : 0);
+        }
+        if (runtime->windows().find(handle) != window) {
+            throw std::runtime_error("native window retired during its visibility notification");
+        }
+        const auto applied =
+            window->presentation->set_visibility(window->host_window.id, wanted, command == 1);
+        if (applied.previous != window->visible) {
+            throw std::runtime_error("native host visibility acknowledgment has stale ownership state");
+        }
+        window->visible = applied.visible;
+        window->host_window.geometry = applied.geometry;
+        if (applied.visible) {
+            window->style |= 0x10000000u;
+        } else {
+            window->style &= ~0x10000000u;
+        }
+        diagnostics::write_service_trace(applied.visible ? "TRACE native owned host window shown\n"
+                                                         : "TRACE native owned host window hidden\n");
+        // Win32 returns previous visibility, not operation success.
+        return observed.visible ? 1 : 0;
+    } catch (const std::exception &error) {
+        diagnostics::stop_trace(error.what(), 78);
+    }
 }
 
 std::uintptr_t AMBROSIA_GUEST_ABI create_window(std::uint32_t extended_style, std::uintptr_t class_id,
@@ -131,7 +201,7 @@ std::uintptr_t AMBROSIA_GUEST_ABI create_window(std::uint32_t extended_style, st
                                  0};
         window->creation_structure = reinterpret_cast<std::uintptr_t>(&creation);
         diagnostics::write_service_trace("TRACE native host window created; dispatching WM_NCCREATE\n");
-        if (!send_creation(*runtime, *window, 0x81, &creation)) {
+        if (!send_window_message(*runtime, *window, 0x81, &creation)) {
             return 0;
         }
         // SDL sizes describe the content area. The proposed outer rectangle
@@ -147,16 +217,16 @@ std::uintptr_t AMBROSIA_GUEST_ABI create_window(std::uint32_t extended_style, st
         std::array<std::int32_t, 4> rectangle{geometry.x, geometry.y, static_cast<std::int32_t>(right),
                                               static_cast<std::int32_t>(bottom)};
         window->calculation_structure = reinterpret_cast<std::uintptr_t>(rectangle.data());
-        (void)send_creation(*runtime, *window, 0x83, rectangle.data());
+        (void)send_window_message(*runtime, *window, 0x83, rectangle.data());
         window->calculation_structure = 0;
         window->client_rectangle = rectangle;
-        if (send_creation(*runtime, *window, 1, &creation) == -1) {
-            (void)send_creation(*runtime, *window, 2, nullptr);
-            (void)send_creation(*runtime, *window, 0x82, nullptr);
+        if (send_window_message(*runtime, *window, 1, &creation) == -1) {
+            (void)send_window_message(*runtime, *window, 2, nullptr);
+            (void)send_window_message(*runtime, *window, 0x82, nullptr);
             return 0;
         }
         if (style & 0x10000000u) {
-            (void)window->presentation->show(window->host_window.id, true);
+            (void)show_window(window->handle, 5);
         }
         diagnostics::write_service_trace("TRACE native guest creation messages completed\n");
         rollback.accepted = true;
@@ -230,6 +300,16 @@ std::intptr_t AMBROSIA_GUEST_ABI default_window(std::uintptr_t handle, std::uint
                 "TRACE native default WM_CREATE accepted owned initialization\n");
             return 0;
         }
+        if (message == 0x18) {
+            if (first > 1 || second || !window->pending_visibility ||
+                *window->pending_visibility != bool(first)) {
+                throw std::runtime_error(
+                    "default WM_SHOWWINDOW requires its owned pending visibility change");
+            }
+            // The explicit top-level notification needs no owner-popup action.
+            // The caller applies and checks host visibility after this callback.
+            return 0;
+        }
         // Numeric shape only: no game string, pointer or message payload bytes.
         throw std::runtime_error("unsupported native default window message=" + std::to_string(message) +
                                  " wparam_present=" + std::to_string(first != 0) +
@@ -244,6 +324,9 @@ void register_window_services(ImportRegistry &registry) {
     for (const auto *module : {"user32.dll", "ext-ms-win-rtcore-ntuser-window-ansi-l1-1-0.dll"}) {
         registry.add(module, "CreateWindowExA", reinterpret_cast<std::uintptr_t>(&create_window));
         registry.add(module, "DefWindowProcA", reinterpret_cast<std::uintptr_t>(&default_window));
+    }
+    for (const auto *module : {"user32.dll", "ext-ms-win-rtcore-ntuser-window-l1-1-0.dll"}) {
+        registry.add(module, "ShowWindow", reinterpret_cast<std::uintptr_t>(&show_window));
     }
 }
 } // namespace ambrosia::services
