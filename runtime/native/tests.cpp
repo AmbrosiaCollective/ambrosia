@@ -240,6 +240,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "graphics_list_tests.h"
 #include "frame_timing_tests.h"
 #include "descriptor_increment_tests.h"
+#include "placed_resource_tests.h"
 #include "placeholder_tests.h"
 #include "xmem_tests.h"
 #include "memory_budget_tests.h"
@@ -1111,6 +1112,18 @@ extern "C" int ambrosia_native_presentation_tests() {
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
     return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_placed_resource_capture(const char *root) {
+    if (!root) {
+        return 2;
+    }
+    try {
+        placed_resource_capture_check(root);
+    } catch (const std::exception &error) {
+        std::cerr << "native placed-resource capture: " << error.what() << '\n';
+    }
+    return 1;
 }
 
 extern "C" int ambrosia_native_placeholder_thread_tests() {

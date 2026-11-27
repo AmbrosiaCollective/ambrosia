@@ -521,3 +521,24 @@ Both actual games complete five physical-window mapping calls, then stop at devi
 slot 133 without fault, timeout or watchdog failure. Actual unmaps are not reached;
 their evidence is synthetic. No GPU submission, game frame or interactive menu is
 verified. Scatter mapping and further device extensions remain separate work.
+
+## Actual placed-resource contract
+
+Console device slot 133 is now a typed, nonreturning diagnostic with the published
+seven-argument placed-resource ABI. It reads the fixed public 56-byte resource
+description, compares the public ID3D12Resource identity, and classifies the start
+address against owned window metadata. It does not create or return a resource.
+Raw numeric fields remain in private diagnostic evidence.
+
+Both compiler fixtures verify all scalar/descriptor fields and stack argument
+positions with synthetic values. Both actual requests match: a row-major buffer,
+unit height/depth/mips, unknown format, one sample, no clear value, resource IID
+and initial layout 0xffffffff. The address starts in an owned window, but the
+requested width exceeds that child window. Whole-range mapped coverage is not yet
+proved. The next resource implementation must resolve all constituent ranges and
+their physical leases, and make those bytes visible to a real GPU buffer. A
+disconnected committed buffer would not satisfy this contract.
+
+Both builds pass 1,573 strict regressions; actual diagnostics stop at the intended
+integration boundary without fault, timeout or watchdog failure. No GPU resource,
+game frame or interactive menu is verified by this diagnostic.

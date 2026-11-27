@@ -1261,6 +1261,59 @@ struct GraphicsDevices::State {
         }
     }
 
+    static std::int32_t AMBROSIA_GUEST_ABI capture_placed_resource(
+        Device *pointer, std::uint64_t address, const void *description, std::uint32_t initial_layout,
+        const void *clear, const void *interface_id, void **output) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned(pointer);
+            if (!description || !interface_id || !output) {
+                diagnostics::stop_trace("native placed-resource capture requires complete inputs", 78);
+            }
+            // D3D12_RESOURCE_DESC layout from the pinned public SDK. Read only
+            // its fixed 56-byte shape; exact request details remain private.
+            std::array<std::byte, 56> bytes;
+            std::memcpy(bytes.data(), description, bytes.size());
+            const auto u32 = [&](std::size_t offset) {
+                std::uint32_t value;
+                std::memcpy(&value, bytes.data() + offset, sizeof(value));
+                return value;
+            };
+            const auto u64 = [&](std::size_t offset) {
+                std::uint64_t value;
+                std::memcpy(&value, bytes.data() + offset, sizeof(value));
+                return value;
+            };
+            std::array<std::uint16_t, 2> depth_mips;
+            std::memcpy(depth_mips.data(), bytes.data() + 28, sizeof(depth_mips));
+            Guid identity;
+            std::memcpy(&identity, interface_id, sizeof(identity));
+            auto *runtime = current_runtime();
+            const auto window = runtime->memory().window(reinterpret_cast<const void *>(address));
+            const auto offset = window ? address - reinterpret_cast<std::uintptr_t>(window->base) : 0;
+            const auto width = u64(16);
+            const bool in_window = window && offset < window->bytes && width <= window->bytes - offset;
+            char message[512];
+            const auto count = std::snprintf(
+                message, sizeof(message),
+                "TRACE native placed-resource request address_present=%u owned_window=%u width_fits=%u "
+                "dimension=%u alignment=%llu width=%llu height=%u depth=%u mips=%u format=%u "
+                "samples=%u quality=%u layout=%u flags=%x initial=%x clear=%u resource_iid=%u output=1\n",
+                address ? 1u : 0u, window ? 1u : 0u, in_window ? 1u : 0u, u32(0),
+                static_cast<unsigned long long>(u64(8)), static_cast<unsigned long long>(width), u32(24),
+                static_cast<unsigned>(depth_mips[0]), static_cast<unsigned>(depth_mips[1]), u32(32), u32(36),
+                u32(40), u32(44), u32(48), initial_layout, clear ? 1u : 0u,
+                identity == resource_interface ? 1u : 0u);
+            if (count <= 0 || static_cast<std::size_t>(count) >= sizeof(message)) {
+                diagnostics::stop_trace("native placed-resource capture exceeded its text bound", 78);
+            }
+            diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(count)));
+            diagnostics::stop_trace("native placed resource requires GPU-backed memory integration", 78);
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
     static std::uint64_t frame_now_us() {
         const auto counter = host::performance_counter();
         if (counter < 0) {
@@ -1371,6 +1424,7 @@ struct GraphicsDevices::State {
             result[78] = reinterpret_cast<std::uintptr_t>(&set_frame_interval);
             result[79] = reinterpret_cast<std::uintptr_t>(&schedule_frame_event);
             result[80] = reinterpret_cast<std::uintptr_t>(&wait_frame_event);
+            result[133] = reinterpret_cast<std::uintptr_t>(&capture_placed_resource);
             return result;
         }();
         return entries;

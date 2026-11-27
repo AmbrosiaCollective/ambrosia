@@ -429,3 +429,10 @@ xmem_exe_calls.md under the project's existing terms. No Windows MapViewOfFile3
 implementation is ported. Native ownership adds retained page leases, prevalidated
 requests, bounded metadata, rollback and teardown ordering. CPU aliases do not
 prove host GPU coherence, and unsupported scatter mapping remains separate.
+
+The placed-resource diagnostic uses the public 56-byte D3D12_RESOURCE_DESC layout
+and ID3D12Resource identity from the pinned DirectX-Headers SDK. Console slot133's
+seven-argument shape follows inherited retail_boot_chain.md and FiveStar's pinned
+XboxDeviceMethods.CreatePlacedResource declaration. The diagnostic copies only
+that bounded shape and stops without creating or returning a stand-in resource;
+actual observations remain private. No external resource implementation is ported.

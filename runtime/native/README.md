@@ -1584,5 +1584,9 @@ Preserve-placeholder prefix/suffix splitting now records explicit aligned segmen
 under the same Mapping. Window replacements require an exact segment. Split
 metadata is bounded and transactional; no additional address reservation or budget
 charge is created. Coalescing, middle three-way splits, populated-window conversion
-and partial release remain unsupported. Actual startup completes five replacements
-and reaches XMemMapPhysicalPages; that import is still unimplemented.
+and partial release remain unsupported. Task162 startup completed five replacements
+and reached XMemMapPhysicalPages. Task163 added leased physical-window aliases,
+partial unmap/remap and checked rollback through the existing sealed backing.
+Both compiler builds complete five actual mapping calls, then reach Xbox device
+slot133 resource creation. CPU alias coherence does not prove GPU visibility or
+a rendered frame; native GPU resource integration remains the next boundary.

@@ -11,6 +11,8 @@
 namespace ambrosia::services {
 // Guest record strides. Host Vulkan descriptors have their own representation.
 inline constexpr std::array<std::uint32_t, 5> guest_descriptor_increments{32, 16, 32, 32, 32};
+inline constexpr Guid resource_interface{
+    0x696442be, 0xa72e, 0x4059, {0xbc, 0x79, 0x5b, 0x5c, 0x98, 0x04, 0x0f, 0xad}};
 // Public ID3D12Device11 identity from pinned DirectX-Headers61c7718.
 inline constexpr Guid device11_interface{
     0x5405c344, 0xd457, 0x444e, {0xb4, 0xdd, 0x23, 0x66, 0xe4, 0x5a, 0xee, 0x39}};
