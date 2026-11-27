@@ -229,6 +229,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "event_tests.h"
 #include "registry_tests.h"
 #include "graphics_memory_tests.h"
+#include "graphics_creation_tests.h"
 #include "xmem_tests.h"
 #include "memory_budget_tests.h"
 #include "xmem_committed_tests.h"
@@ -725,6 +726,7 @@ extern "C" int ambrosia_native_tests() {
         event_checks();
         registry_checks();
         graphics_memory_checks();
+        graphics_creation_checks();
         xmem_checks();
         memory_budget_checks();
         xmem_committed_checks();
@@ -1044,6 +1046,10 @@ extern "C" int ambrosia_native_physical_api_rejection(unsigned mode) {
 
 extern "C" int ambrosia_native_window_class_rejection(unsigned mode) {
     return window_class_rejection_probe(mode);
+}
+
+extern "C" int ambrosia_native_graphics_creation_probe() {
+    return graphics_creation_probe();
 }
 
 extern "C" int ambrosia_native_presentation_tests() {
