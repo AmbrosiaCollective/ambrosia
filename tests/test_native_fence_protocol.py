@@ -18,7 +18,10 @@ valid = bytes(broker.response(1, 5, 1, value=2**40))
 check(broker.decode(valid) == (1, 5, 1, 2**40))
 check(broker.decode(bytes(broker.response(2, 6, 1))) == (2, 6, 1, 0))
 check(broker.decode(bytes(broker.response(3, 7, 1, value=2**64 - 2))) == (3, 7, 1, 2**64 - 2))
-invalid = [b'', bytes(63), bytes(65), bytes(64), bytes(broker.response(0, 5, 1)),
+shared = bytes(broker.response(4, 5, 1, status=1, value=7))
+check(broker.decode(shared) == (4, 5, 1, 7))
+invalid = [bytes(broker.response(1, 5, 1, status=2)),
+           bytes(broker.response(1, 6, 1, status=1)), b'', bytes(63), bytes(65), bytes(64), bytes(broker.response(0, 5, 1)),
            bytes(broker.response(1, 5, 0)), bytes(broker.response(1, 10, 1)),
            bytes(broker.response(1, 6, 1, value=1)), bytes(broker.response(1, 8, 1, value=1)),
            bytes(broker.response(1, 7, 1, value=2**64 - 1))]

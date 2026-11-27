@@ -23,6 +23,20 @@ class SemaphoreSignalInfo(ctypes.Structure):
                 ('semaphore', ctypes.c_uint64), ('value', ctypes.c_uint64)]
 
 
+class ExternalSemaphoreInfo(ctypes.Structure):
+    _fields_ = [('sType', ctypes.c_int), ('pNext', ctypes.c_void_p), ('handleType', ctypes.c_uint32)]
+
+
+class ExternalSemaphoreProperties(ctypes.Structure):
+    _fields_ = [('sType', ctypes.c_int), ('pNext', ctypes.c_void_p),
+                ('exportFromImportedHandleTypes', ctypes.c_uint32),
+                ('compatibleHandleTypes', ctypes.c_uint32), ('externalSemaphoreFeatures', ctypes.c_uint32)]
+
+
+class ExportSemaphoreInfo(ctypes.Structure):
+    _fields_ = [('sType', ctypes.c_int), ('pNext', ctypes.c_void_p), ('handleTypes', ctypes.c_uint32)]
+
+
 def checked_value(value):
     if not isinstance(value, int) or not 0 <= value < 2**64 - 1:
         raise ValueError('native fence value is outside its bounded uint64 contract')
@@ -50,7 +64,17 @@ class TimelineDevice(base.NativeDevice):
             raise
 
     def create_device(self, physical, family, required12, required13):
-        super().create_device(physical, family, required12, required13)
+        timeline = SemaphoreTypeCreateInfo(1000207002, None, 1, 0)
+        request = ExternalSemaphoreInfo(1000076000, ctypes.addressof(timeline), 1)
+        supported = ExternalSemaphoreProperties(sType=1000076001)
+        query = self.function('vkGetPhysicalDeviceExternalSemaphoreProperties', None,
+            [ctypes.c_void_p, ctypes.POINTER(ExternalSemaphoreInfo),
+             ctypes.POINTER(ExternalSemaphoreProperties)])
+        query(physical, ctypes.byref(request), ctypes.byref(supported))
+        self.shared_supported = bool(supported.compatibleHandleTypes & 1 and
+                                     supported.externalSemaphoreFeatures & 3 == 3)
+        extensions = ('VK_KHR_external_semaphore_fd',) if self.shared_supported else ()
+        super().create_device(physical, family, required12, required13, extensions)
         properties = self.function('vkGetPhysicalDeviceProperties', None,
                                    [ctypes.c_void_p, ctypes.c_void_p])
         storage = (ctypes.c_uint64 * 512)()
@@ -62,11 +86,15 @@ class TimelineDevice(base.NativeDevice):
         # classes need a reviewed policy rather than an invented heap mapping.
         self.heap_model = {1: 1, 2: 2}.get(device_class, 0)
 
-    def create_fence(self, initial):
+    def create_fence(self, initial, shared=False):
         initial = checked_value(initial)
         if len(self.fences) >= 32 or self.next_fence > 128:
             raise ValueError('native fence ownership budget exhausted')
-        type_info = SemaphoreTypeCreateInfo(1000207002, None, 1, initial)
+        if shared and not self.shared_supported:
+            raise ValueError('native timeline sharing is not supported by this device')
+        export = ExportSemaphoreInfo(1000077000, None, 1)
+        type_info = SemaphoreTypeCreateInfo(1000207002,
+            ctypes.addressof(export) if shared else None, 1, initial)
         description = SemaphoreCreateInfo(9, ctypes.addressof(type_info), 0)
         semaphore = ctypes.c_uint64()
         result = self.create_semaphore(self.device, ctypes.byref(description), None, ctypes.byref(semaphore))

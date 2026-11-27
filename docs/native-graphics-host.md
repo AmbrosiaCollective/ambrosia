@@ -221,3 +221,20 @@ checks, including three kinds,parent retention and backend recreation. Thirteen
 independent SDK/fixture index checks pass. Actual game direct-queue creation now
 succeeds; the next stop is CreateFence's unsupported flags/initial-value contract.
 No queue work or game frame/menu is verified by ownership checks.
+
+## Shareable timeline creation
+
+The fixed host service queries external timeline-semaphore properties for only
+OPAQUE_FD. Export/import support and compatible handle type are required before
+shared creation. It enables only `VK_KHR_external_semaphore_fd` when supported and
+chains an actual `VkExportSemaphoreCreateInfo` into shared semaphore creation.
+Earlier device services select no extensions by default. Their existing CPU
+regression coverage passes. No descriptor is exported or transferred by creation.
+
+Request flag1 on fence-create operation5 selects shared creation; other request
+flags remain invalid. Existing host/guest controls and resource bounds remain.
+The isolated client has exercised real exportable counters/signals/lifetime with
+21 operations;23 CPU external-chain/capability checks and pinned C layouts pass.
+Native shared-fence frontend validation follows separately. This establishes
+exportable object creation, not Windows shared handles, cross-process imports,
+GPU queue work or a game frame/menu.

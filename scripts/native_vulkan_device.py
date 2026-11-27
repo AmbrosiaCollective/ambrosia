@@ -120,15 +120,21 @@ class NativeDevice:
                     return
         raise RuntimeError('no native device meets the renderer bootstrap requirements')
 
-    def create_device(self, physical, family, required12, required13):
+    def create_device(self, physical, family, required12, required13, extensions=()):
         api = self.bindings
         enabled13 = api.Features13(sType=53, **dict.fromkeys(required13, 1))
         enabled12 = api.Features12(sType=51, pNext=ctypes.addressof(enabled13),
                                    **dict.fromkeys(required12, 1))
         priority = ctypes.c_float(1.0)
         queue_info = DeviceQueueCreateInfo(2, None, 0, family, 1, ctypes.pointer(priority))
+        if extensions not in ((), ('VK_KHR_external_semaphore_fd',)):
+            raise ValueError('unsupported fixed native device extension selection')
+        extension_names = (ctypes.c_char_p * len(extensions))(
+            *(name.encode('ascii') for name in extensions))
+        extension_pointer = ctypes.cast(extension_names, ctypes.c_void_p) if extensions else None
         description = DeviceCreateInfo(3, ctypes.addressof(enabled12), 0, 1,
-                                      ctypes.pointer(queue_info), 0, None, 0, None, None)
+                                      ctypes.pointer(queue_info), 0, None,
+                                      len(extensions), extension_pointer, None)
         create = self.function('vkCreateDevice', ctypes.c_int,
             [ctypes.c_void_p, ctypes.POINTER(DeviceCreateInfo), ctypes.c_void_p,
              ctypes.POINTER(ctypes.c_void_p)])

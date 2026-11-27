@@ -26,8 +26,10 @@ def decode(data):
         return sequence, operation, owner, 0
     if fields[0] != base.MAGIC or not fields[1] or fields[2] not in (5, 6, 7, 8, 9) or not fields[3]:
         raise ValueError('invalid native fence command')
-    if any(fields[index] for index in (4, 7, 8, 9, 10, 11, 12)) or any(data[-8:]):
+    if any(fields[index] for index in (4, 7, 8, 10, 11, 12)) or any(data[-8:]):
         raise ValueError('unsupported native fence command fields')
+    if fields[9] and (fields[2] != 5 or fields[9] != 1):
+        raise ValueError('unsupported native fence sharing flags')
     value = struct.unpack_from('<Q', data, 24)[0]
     if value == 2**64 - 1 or fields[2] in (6, 8, 9) and value:
         raise ValueError('invalid native fence command value')
@@ -101,7 +103,7 @@ def serve(request, reply, device_factory):
                     if operation == 5:
                         if requested_owner != owner:
                             raise ValueError('foreign device fence creation')
-                        result_owner = device.create_fence(value)
+                        result_owner = device.create_fence(value, shared=bool(base.PACKET.unpack(data)[9]))
                         next_fence_id = device.next_fence
                     elif operation == 6:
                         result_value = device.completed(requested_owner)

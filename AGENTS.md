@@ -312,3 +312,10 @@ against pinned public declarations before use. Validate fixture call indices
 independently too: implementation and fixture can share the same wrong numeric
 slot and falsely pass. Preserve incorrect diagnostic evidence, correct the mapping,
 repeat affected builds/checks and actual startup before claiming progress.
+
+Task149's fixed timeline service may query core external timeline properties and
+enable only the optional VK_KHR_external_semaphore_fd extension for OPAQUE_FD
+exportable creation after compatible export/import support is confirmed.51host/
+65guest controls and all resource bounds remain. No descriptor export/transfer,
+new guest GPU access, CPU payload or queue submission is added by this creation
+step. Earlier device services retain empty extension selection by default.

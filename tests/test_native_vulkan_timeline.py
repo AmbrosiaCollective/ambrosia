@@ -104,7 +104,10 @@ try:
         def physical_properties(physical, output):
             prefix = ctypes.cast(output, ctypes.POINTER(ctypes.c_uint32))
             prefix[4] = device_class
-        selected.function = lambda name, result, arguments: physical_properties
+        def unsupported_external(physical, request, output):
+            return None
+        selected.function = lambda name, result, arguments: (
+            physical_properties if name == 'vkGetPhysicalDeviceProperties' else unsupported_external)
         selected.create_device(1, 0, (), ())
         check(selected.heap_model == expected)
 finally:
