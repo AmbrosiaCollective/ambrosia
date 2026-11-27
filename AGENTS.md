@@ -282,3 +282,11 @@ all 43 controls and resource bounds precede one real Vulkan device/queue bootstr
 Only creation, queue lookup and reverse-order destruction are added; no GPU work,
 shader, guest/test payload or host handle transfer. The metadata-only service and
 all guest/compiler profiles remain unchanged. See docs/native-graphics-host.md.
+
+Task138's fixed scripts/run_native_graphics_host.py owns real Vulkan devices over
+bounded regular-file RPC.51 host checks add pinned request-RO/response-RW endpoint
+controls to Task137; no GPU work or guest CPU entrypoint. Initial isolated clients
+reuse the original57-check presentation profile with an unused empty frame.
+No guest profile changes or host handle transfers. See native-graphics-host.md
+for protocol/ownership/resource bounds; game integration still needs a reviewed
+combined endpoint profile and typed native frontend.

@@ -61,3 +61,28 @@ queue are prerequisites; they do not establish D3D12 coverage or menu rendering.
 The guest-facing device still needs a typed transport and COM interface backed
 by this real ownership. Preserve the metadata-only service and original guest
 profiles. Device names and identifying hardware fields remain omitted.
+
+## Owned device file service
+
+`scripts/run_native_graphics_host.py` keeps the real device in its namespace.
+Supply a fresh private `--root` under `reports`, plus `--evidence` and a fresh
+`--label`. It creates fixed request/response files and an unused empty frame file
+for the initial client profile. The host mounts request read-only and response
+writable in an immutable directory. Eight additional checks pin file identity,
+type, size and access directions; all 51 checks precede driver loading.
+
+The 64-byte little-endian `AMBGFX01` protocol has only four operations: create,
+destroy, query owned device and close service. It reuses the presentation packet
+layout with all payload/geometry/reserved fields zero. Responses carry a numeric
+ownership ID, status and public Vulkan API version. IDs are never reused during
+the service lifetime. Unknown/released IDs and duplicate live creation are rejected.
+At most one device is live, with 64 lifetime IDs, 1024 requests and a 20-second
+service lifetime under the original 30-second parent watchdog. Driver failures
+are not acknowledged as successful creation. Remaining devices close on exit.
+
+The first isolated client reuses the unchanged 57-check presentation file profile;
+its frame is unused. It verifies 11 real protocol operations, including stale and
+foreign ownership rejection and recreation, without direct GPU access. This is
+transport/device ownership coverage, not game COM coverage, GPU work or a menu.
+Using graphics and presentation together still requires a reviewed combined
+endpoint profile. Never send host pointers, CPU payloads or arbitrary commands.
