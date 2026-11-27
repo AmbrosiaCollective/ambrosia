@@ -243,6 +243,17 @@ std::string render(const std::string &format, Arguments &arguments, std::uint64_
             width = 0;
             precision = -1;
             conversion = 's';
+        } else if (conversion == 'p' && length.empty()) {
+            // Windows x64 uses sixteen uppercase hex digits, including for
+            // null. Its forced precision ignores caller precision and zero
+            // padding; only space padding and left alignment affect the field.
+            auto pointer_text = fmt::sprintf("%016llX", arguments.next());
+            values.push_back(pad_string(std::move(pointer_text), flags, width));
+            flags.clear();
+            width = 0;
+            precision = -1;
+            conversion = 's';
+            diagnostics::write_service_trace("TRACE native CRT pointer formatted\n");
         } else {
             // Includes positional parameters and disabled %n. Do not silently
             // reinterpret unsupported Windows-specific conversions as host ones.

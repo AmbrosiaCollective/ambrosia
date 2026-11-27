@@ -81,15 +81,42 @@ void format_checks() {
     check(call(1, output.data(), output.size(), "%cZ", {0}) == 2 && output[0] == 0 && output[1] == 'Z' &&
               output[2] == 0,
           "formatted output retains embedded NUL characters and counts them before its terminating NUL");
+    check(call(38, output.data(), output.size(), "%p/%p/%p", {0, 0xabcdef, UINT64_MAX}) == 50 &&
+              std::string(output.data()) == "0000000000000000/0000000000ABCDEF/FFFFFFFFFFFFFFFF",
+          "Windows x64 pointer text uses sixteen uppercase hex digits without reading the pointed-to memory");
+    check(call(2, output.data(), output.size(), "[%20p][%-20p]", {0xab, 0xcd}) == 44 &&
+              std::string(output.data()) == "[    00000000000000AB][00000000000000CD    ]",
+          "pointer field width pads with spaces and supports left alignment");
+    check(call(2, output.data(), output.size(), "[%020p][%#+ p]", {0xab, 0xcd}) == 40 &&
+              std::string(output.data()) == "[    00000000000000AB][00000000000000CD]",
+          "forced pointer precision disables zero field padding and adds no sign or alternate prefix");
+    check(call(2, output.data(), output.size(), "%.0p/%.25p/%.*p/%*p", {0, 1, 3, 2, 0xffffffec, 3}) == 71 &&
+              std::string(output.data()) ==
+                  "0000000000000000/0000000000000001/0000000000000002/0000000000000003    ",
+          "pointer precision remains fixed while star arguments are consumed in Windows slot order");
+    std::array<std::byte, 17> packed_slots{};
+    const std::uint64_t pointer_value = 0xfedcba9876543210ull;
+    const std::uint64_t following_integer = 23;
+    std::memcpy(packed_slots.data() + 1, &pointer_value, sizeof(pointer_value));
+    std::memcpy(packed_slots.data() + 9, &following_integer, sizeof(following_integer));
+    check(format(2, output.data(), output.size(), "%p/%u", nullptr, packed_slots.data() + 1) == 19 &&
+              std::string(output.data()) == "FEDCBA9876543210/23",
+          "packed pointer slots retain all 64 bits and consume exactly one argument");
+    guarded.fill('z');
+    check(call(2, guarded.data() + 1, 4, "%p", {0xabcdef}) == 16 &&
+              guarded == std::array<char, 6>{'z', '0', '0', '0', '\0', 'z'} &&
+              call(2, nullptr, 0, "%p", {0}) == 16,
+          "pointer truncation and sizing preserve existing snprintf counts, terminators and guards");
     check(errno == E2BIG && crt_error() == 19 && get_last_error() == 87,
           "successful formatted output preserves host errno, guest errno and LastError");
 
     auto caller = fixture();
     text(caller, 0x440, "ucrtbase.dll");
     text(caller, 0x4a2, "__stdio_common_vsprintf");
-    text(caller, 0x540, "%d/%.1f");
-    put<std::uint64_t>(caller, 0x570, 42);
-    put<std::uint64_t>(caller, 0x578, std::bit_cast<std::uint64_t>(2.5));
+    text(caller, 0x540, "%p/%d/%.1f");
+    put<std::uint64_t>(caller, 0x570, 0xabcdef0123456789ull);
+    put<std::uint64_t>(caller, 0x578, 42);
+    put<std::uint64_t>(caller, 0x580, std::bit_cast<std::uint64_t>(2.5));
     // Six Windows register/stack arguments, with the va_list pointing to guest
     // argument slots. Return the formatter count and inspect its guest buffer.
     constexpr unsigned char code[] = {
@@ -103,8 +130,9 @@ void format_checks() {
     put<std::uint32_t>(caller, 0x229, 0x2170 - (0x1000 + 45));
     put<std::uint32_t>(caller, 0x234, 0x2080 - (0x1000 + 56));
     auto image = pe::Image::load(caller, [&](const auto &symbol) { return runtime.resolve(symbol); });
-    check(image.run_bootstrap() == 6 &&
-              std::strcmp(reinterpret_cast<const char *>(image.base() + 0x2110), "42/2.5") == 0,
-          "an original PE passes locale and Windows argument-slot pointers on the stack to formatted output");
+    check(
+        image.run_bootstrap() == 23 && std::strcmp(reinterpret_cast<const char *>(image.base() + 0x2110),
+                                                   "ABCDEF0123456789/42/2.5") == 0,
+        "an original PE passes locale and mixed pointer, integer and floating slots through the Windows ABI");
     errno = saved_error;
 }
