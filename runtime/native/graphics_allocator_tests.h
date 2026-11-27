@@ -42,6 +42,18 @@ void graphics_allocator_live_checks(const std::filesystem::path &root, unsigned 
                   allocators[type],
               "each supported CPU allocator kind retains its real parent device");
     }
+    if (probe == 4) {
+        using CreateListX = std::int32_t(AMBROSIA_GUEST_ABI *)(void *, const void *, void *, const void *,
+                                                               const void *, void **);
+        const auto create_list_x = reinterpret_cast<CreateListX>(device_table[73]);
+        const std::array<std::uint32_t, 4> description{};
+        diagnostics::ImportStops synthetic_stops;
+        synthetic_stops.seal();
+        diagnostics::ImportStopScope trace_scope(synthetic_stops);
+        (void)create_list_x(device, description.data(), allocators[0], nullptr, &unknown_interface_id,
+                            &output);
+        throw std::runtime_error("diagnostic command-list creation unexpectedly returned");
+    }
     auto *table = *static_cast<const std::uintptr_t **>(allocators[0]);
     const auto query = reinterpret_cast<Query>(table[0]);
     const auto add = reinterpret_cast<Reference>(table[1]);

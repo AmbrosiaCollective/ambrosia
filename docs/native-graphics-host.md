@@ -308,3 +308,18 @@ stop unknown methods,foreign runtime access and released objects before access.
 Both actual games create the first allocator and reach Xbox73CreateCommandListX,
 with no fault/timeout/watchdog failure. No game frame or menu is verified. Profiles
 remain unchanged; no game bytes or raw diagnostics belong in publication artifacts.
+
+## Xbox command-list contract
+
+Xbox73CreateCommandListX shadows PC73CreateShaderCacheSession. A typed diagnostic
+verifies the owned device/allocator and captures only a bounded prefix and identity
+in private trace mode,then stops without returning a list. Both compilers verify
+the six-argument ABI with synthetic inputs and capture the actual call: direct
+list,idle matching allocator,null initial pipeline state,present output.
+
+The requested identity matches a published console GraphicsCommandList6 alias
+outside the public PC SDK. Prior art documents inline writes into the console
+object,so a console-shaped wrapper must precede the existing portable command IR.
+The next implementation must validate its buffer bounds and recording lifetime.
+This is contract evidence,not a command list,GPU work or an interactive menu.
+Raw descriptor/identity data remains private. Existing profiles are unchanged.

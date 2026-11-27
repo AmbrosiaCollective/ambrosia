@@ -810,6 +810,51 @@ struct GraphicsDevices::State {
         }
     }
 
+    static std::int32_t AMBROSIA_GUEST_ABI capture_command_list_x(Device *pointer, const void *description,
+                                                                  Allocator *allocator,
+                                                                  const void *initial_state,
+                                                                  const void *interface_id,
+                                                                  void **output) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned(pointer);
+            const auto found = access.state.allocators.find(allocator);
+            if (!description || !interface_id || !output || found == access.state.allocators.end() ||
+                found->second->parent != pointer) {
+                diagnostics::stop_trace("native Xbox command-list capture requires owned complete inputs",
+                                        78);
+            }
+            // Only the bounded observed prefix is diagnostic evidence. Its
+            // unknown fields and requested identity stay in private trace logs.
+            std::array<std::uint32_t, 4> words{};
+            std::array<unsigned char, 16> identity{};
+            std::memcpy(words.data(), description, sizeof(words));
+            std::memcpy(identity.data(), interface_id, identity.size());
+            char message[256];
+            const auto count = std::snprintf(
+                message, sizeof(message),
+                "TRACE native Xbox command-list request allocator_type=%u busy=%u initial=%u output=1 "
+                "prefix16=%08x %08x %08x %08x interface=",
+                allocator->type, allocator->recording ? 1u : 0u, initial_state ? 1u : 0u, words[0], words[1],
+                words[2], words[3]);
+            if (count <= 0 || static_cast<std::size_t>(count) >= sizeof(message)) {
+                diagnostics::stop_trace("native Xbox command-list capture exceeded its text bound", 78);
+            }
+            std::string trace(message, static_cast<std::size_t>(count));
+            constexpr char digits[] = "0123456789abcdef";
+            for (const auto byte : identity) {
+                trace += digits[byte >> 4];
+                trace += digits[byte & 15];
+            }
+            trace += '\n';
+            diagnostics::write_service_trace(trace);
+            diagnostics::stop_trace("native Xbox command-list contract captured; recording not implemented",
+                                    78);
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
     template <std::size_t Slot> static std::uintptr_t AMBROSIA_GUEST_ABI unsupported(Device *) noexcept {
         diagnostics::stop_trace("unsupported native ID3D12Device11 slot " + std::to_string(Slot), 78);
     }
@@ -957,6 +1002,7 @@ struct GraphicsDevices::State {
             // The Xbox ABI shadows PC OpenExistingHeapFromAddress here.
             // See d3d12_xs_device.h and docs/retail_boot_chain.md section 3.2.
             result[48] = reinterpret_cast<std::uintptr_t>(&create_queue_x);
+            result[73] = reinterpret_cast<std::uintptr_t>(&capture_command_list_x);
             return result;
         }();
         return entries;
