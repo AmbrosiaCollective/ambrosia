@@ -272,6 +272,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "presentation_tests.h"
 #include "window_creation_tests.h"
 #include "graphics_transport_tests.h"
+#include "graphics_buffer_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -1263,6 +1264,18 @@ extern "C" int ambrosia_native_trace_menu_8g(const char *image, const char *pack
         return 2;
     }
     return trace_native_image(image, package, 3, inventory, storage, descriptor, presentation, graphics);
+}
+
+extern "C" int ambrosia_native_graphics_buffer_tests(const char *root) {
+    checks = failures = 0;
+    try {
+        graphics_buffer_checks(root);
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL native buffer bridge exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "native buffer bridge: " << checks << " checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
 }
 
 extern "C" int ambrosia_native_graphics_transport_tests(const char *root) {

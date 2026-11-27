@@ -1597,3 +1597,9 @@ the same backing and outlives original-window unmap/remap or token retirement.
 Spans are bounded to 16,384 pages including an unaligned first-page prefix. Gaps,
 private pages, missing mappings and wrapping extents are rejected. These snapshots
 provide stable input to GPU resource integration; they do not create a GPU resource.
+
+The host graphics seam now supports bounded owned-buffer creation, destruction,
+byte uploads/downloads and synchronous copies through optional directional
+payload files. Old device/fence-only sessions remain usable. Buffer ranges and
+IDs are checked on both sides; CPU pointers and driver handles stay host-owned.
+The game resource facade and physical-page synchronization remain separate work.

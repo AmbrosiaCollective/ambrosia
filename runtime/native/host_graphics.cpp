@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <chrono>
 #include <cstddef>
+#include <map>
 #include <mutex>
 #include <set>
 #include <stdexcept>
@@ -20,6 +21,8 @@ namespace ambrosia::host {
 namespace {
 constexpr std::array<char, 8> magic{'A', 'M', 'B', 'G', 'F', 'X', '0', '1'};
 constexpr std::uint32_t minimum_api = (1u << 22) | (3u << 12);
+constexpr std::uint64_t maximum_buffer_bytes = 256ull * 1024 * 1024;
+constexpr std::size_t chunk_bytes = 1024 * 1024;
 
 struct Packet {
     std::array<char, 8> signature = magic;
@@ -51,6 +54,28 @@ void transfer(int descriptor, Packet &packet, bool write) {
         offset += static_cast<std::size_t>(count);
     }
 }
+
+void transfer_bytes(int descriptor, std::span<std::byte> bytes, bool write) {
+    struct stat information {};
+
+    if (fstat(descriptor, &information) || information.st_size != static_cast<off_t>(chunk_bytes)) {
+        throw std::runtime_error("native buffer payload size changed");
+    }
+    std::size_t offset = 0;
+    while (offset < bytes.size()) {
+        const auto count =
+            write
+                ? pwrite(descriptor, bytes.data() + offset, bytes.size() - offset, static_cast<off_t>(offset))
+                : pread(descriptor, bytes.data() + offset, bytes.size() - offset, static_cast<off_t>(offset));
+        if (count < 0 && errno == EINTR) {
+            continue;
+        }
+        if (count <= 0) {
+            throw std::runtime_error("native buffer payload transfer failed or was truncated");
+        }
+        offset += static_cast<std::size_t>(count);
+    }
+}
 #endif
 } // namespace
 
@@ -60,7 +85,10 @@ struct Graphics::Transport {
     GraphicsDevice owned;
     std::set<std::uint32_t> fences;
     std::uint32_t last_fence = 0;
+    std::map<std::uint32_t, GraphicsBuffer> buffers;
+    std::uint32_t last_buffer = 0;
     int request = -1, response = -1;
+    int upload = -1, download = -1;
     bool ready = false;
 
     ~Transport() {
@@ -73,7 +101,7 @@ struct Graphics::Transport {
                 // lifetime owns cleanup; destructors must not throw or retry.
             }
         }
-        for (const auto descriptor : {request, response}) {
+        for (const auto descriptor : {request, response, upload, download}) {
             if (descriptor >= 0) {
                 (void)close(descriptor);
             }
@@ -82,7 +110,8 @@ struct Graphics::Transport {
     }
 
     Packet exchange(std::uint32_t operation, std::uint32_t owner, std::uint64_t value = 0,
-                    std::uint32_t request_flags = 0) {
+                    std::uint32_t request_flags = 0, std::uint32_t bytes = 0, std::uint32_t destination = 0,
+                    std::uint64_t destination_offset = 0) {
 #ifdef __linux__
         if (sequence >= 1024) {
             throw std::runtime_error("native graphics request budget exhausted");
@@ -93,6 +122,10 @@ struct Graphics::Transport {
         command.owner = owner;
         command.value = value;
         command.status = request_flags;
+        command.payload = bytes;
+        command.unused[0] = destination;
+        command.reserved[0] = static_cast<std::uint32_t>(destination_offset);
+        command.reserved[1] = static_cast<std::uint32_t>(destination_offset >> 32);
         transfer(request, command, true);
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
         Packet reply;
@@ -112,10 +145,19 @@ struct Graphics::Transport {
             throw std::runtime_error(
                 "native graphics service rejected the request or returned invalid fields");
         }
-        if (operation != 6 && operation != 9 && reply.value) {
+        if (operation != 6 && operation != 9 && operation != 10 && reply.value) {
             throw std::runtime_error("unexpected native graphics response value");
         }
-        if (operation == 5) {
+        if (operation == 10) {
+            if (!reply.owner || reply.owner > 128 || !reply.value || reply.api_version ||
+                value > UINT64_MAX - reply.value) {
+                throw std::runtime_error("invalid native buffer creation reply");
+            }
+        } else if (operation >= 11 && operation <= 14) {
+            if (reply.owner != owner || reply.api_version) {
+                throw std::runtime_error("invalid native buffer operation reply");
+            }
+        } else if (operation == 5) {
             if (!reply.owner || reply.owner > 128 || reply.api_version) {
                 throw std::runtime_error("invalid native fence creation reply");
             }
@@ -141,8 +183,19 @@ struct Graphics::Transport {
         (void)owner;
         (void)value;
         (void)request_flags;
+        (void)bytes;
+        (void)destination;
+        (void)destination_offset;
         throw std::runtime_error("native graphics file transport is unsupported on this host");
 #endif
+    }
+
+    void buffer_range(std::uint32_t id, std::uint64_t offset, std::size_t bytes) const {
+        const auto found = buffers.find(id);
+        if (found == buffers.end() || !bytes || bytes > chunk_bytes || offset > found->second.bytes ||
+            bytes > found->second.bytes - offset) {
+            throw std::runtime_error("native transfer exceeds its owned buffer range or chunk budget");
+        }
     }
 };
 
@@ -153,14 +206,18 @@ Graphics::Graphics(const std::filesystem::path &endpoint_root) : transport_(std:
         throw std::runtime_error("cannot open explicit native graphics endpoints");
     }
     try {
-        const auto endpoint = [&](const char *name, int access) {
+        const auto endpoint = [&](const char *name, int access, std::size_t bytes = sizeof(Packet),
+                                  bool optional = false) {
             const auto descriptor = openat(directory, name, access | O_CLOEXEC | O_NOFOLLOW);
+            if (descriptor < 0 && optional && errno == ENOENT) {
+                return -1;
+            }
             if (descriptor < 0) {
                 throw std::runtime_error("cannot open native graphics endpoint");
             }
             struct stat information {};
             if (fstat(descriptor, &information) || !S_ISREG(information.st_mode) ||
-                information.st_nlink != 1 || information.st_size != static_cast<off_t>(sizeof(Packet))) {
+                information.st_nlink != 1 || information.st_size != static_cast<off_t>(bytes)) {
                 (void)close(descriptor);
                 throw std::runtime_error("invalid native graphics endpoint type or size");
             }
@@ -168,6 +225,11 @@ Graphics::Graphics(const std::filesystem::path &endpoint_root) : transport_(std:
         };
         transport_->request = endpoint("request", O_RDWR);
         transport_->response = endpoint("response", O_RDONLY);
+        transport_->upload = endpoint("upload", O_RDWR, chunk_bytes, true);
+        transport_->download = endpoint("download", O_RDONLY, chunk_bytes, true);
+        if ((transport_->upload < 0) != (transport_->download < 0)) {
+            throw std::runtime_error("native buffer payload endpoints are incomplete");
+        }
         if (flock(transport_->request, LOCK_EX | LOCK_NB)) {
             throw std::runtime_error("native graphics endpoints already have a client owner");
         }
@@ -218,8 +280,8 @@ void Graphics::destroy_device(std::uint32_t id) {
     if (!id || id != transport_->owned.id) {
         throw std::runtime_error("native graphics device is not owned by this session");
     }
-    if (!transport_->fences.empty()) {
-        throw std::runtime_error("native graphics device still owns live fences");
+    if (!transport_->fences.empty() || !transport_->buffers.empty()) {
+        throw std::runtime_error("native graphics device still owns live fences or buffers");
     }
     (void)transport_->exchange(2, id);
     transport_->owned = {};
@@ -275,6 +337,74 @@ void Graphics::destroy_fence(std::uint32_t id) {
     }
     (void)transport_->exchange(8, id);
     transport_->fences.erase(id);
+}
+
+GraphicsBuffer Graphics::create_buffer(std::uint64_t bytes) {
+    const std::lock_guard lock(transport_->mutex);
+    if (!transport_->owned.id || transport_->upload < 0 || !bytes || bytes > maximum_buffer_bytes ||
+        transport_->buffers.size() >= 32) {
+        throw std::runtime_error(
+            "native buffer creation requires owned device, payload files and bounded size");
+    }
+    const auto reply = transport_->exchange(10, transport_->owned.id, bytes);
+    if (reply.owner <= transport_->last_buffer) {
+        throw std::runtime_error("native buffer service reused an ownership ID");
+    }
+    const GraphicsBuffer result{reply.owner, bytes, reply.value};
+    try {
+        transport_->buffers.emplace(reply.owner, result);
+    } catch (...) {
+        (void)transport_->exchange(11, reply.owner);
+        throw;
+    }
+    transport_->last_buffer = reply.owner;
+    return result;
+}
+
+void Graphics::destroy_buffer(std::uint32_t id) {
+    const std::lock_guard lock(transport_->mutex);
+    if (!transport_->buffers.contains(id)) {
+        throw std::runtime_error("native buffer is not owned by this session");
+    }
+    (void)transport_->exchange(11, id);
+    transport_->buffers.erase(id);
+}
+
+void Graphics::upload_buffer(std::uint32_t id, std::uint64_t offset, std::span<const std::byte> bytes) {
+    const std::lock_guard lock(transport_->mutex);
+    transport_->buffer_range(id, offset, bytes.size());
+#ifdef __linux__
+    // pwrite does not modify the source. Keep the mutable span confined to the
+    // shared read/write transfer helper, never to the public upload interface.
+    transfer_bytes(transport_->upload, {const_cast<std::byte *>(bytes.data()), bytes.size()}, true);
+    (void)transport_->exchange(12, id, offset, 0, static_cast<std::uint32_t>(bytes.size()));
+#else
+    throw std::runtime_error("native buffer file transport is unsupported on this host");
+#endif
+}
+
+void Graphics::download_buffer(std::uint32_t id, std::uint64_t offset, std::span<std::byte> bytes) {
+    const std::lock_guard lock(transport_->mutex);
+    transport_->buffer_range(id, offset, bytes.size());
+#ifdef __linux__
+    (void)transport_->exchange(13, id, offset, 0, static_cast<std::uint32_t>(bytes.size()));
+    transfer_bytes(transport_->download, bytes, false);
+#else
+    throw std::runtime_error("native buffer file transport is unsupported on this host");
+#endif
+}
+
+void Graphics::copy_buffer(std::uint32_t source, std::uint64_t source_offset, std::uint32_t destination,
+                           std::uint64_t destination_offset, std::uint32_t bytes) {
+    const std::lock_guard lock(transport_->mutex);
+    transport_->buffer_range(source, source_offset, bytes);
+    transport_->buffer_range(destination, destination_offset, bytes);
+    if (source_offset % 4 || destination_offset % 4 || bytes % 4 ||
+        (source == destination && source_offset < destination_offset + bytes &&
+         destination_offset < source_offset + bytes)) {
+        throw std::runtime_error("native buffer copy ranges are unaligned or overlap");
+    }
+    (void)transport_->exchange(14, source, source_offset, 0, bytes, destination, destination_offset);
 }
 
 } // namespace ambrosia::host

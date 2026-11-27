@@ -637,3 +637,28 @@ physical-pool coherence, frame or interactive menu is established by this probe.
 Existing host services and guest/compiler profiles retain their capabilities
 and limits. Next connect explicit transfer endpoints and retained physical
 spans to this backend before returning a resource to the game.
+
+## Native directional buffer transport
+
+The new fixed buffer service and isolated client use separately pinned upload
+and download files. Host permissions are upload RO/download RW; client
+permissions are upload RW/download RO. The protocol is documented in
+[native-buffer-protocol.md](native-buffer-protocol.md). Original service and
+guest profiles remain unchanged. All restriction/physical/topology call paths
+remain identical apart from added endpoint controls and fixed host dispatch.
+
+The new profiles pass 56 host and 69 client guards. Deliberately writable host
+upload and client download omissions are rejected before any payload. The
+expected payload size is 1 MiB, checked before entry and every host request;
+the client's existing 32 MiB file limit bounds malicious growth before
+detection. No per-inode 1 MiB hard cap is claimed. No GPU node, socket, cookie,
+credential, unrestricted execution or new syscall permission reaches the client.
+
+GCC and Clang each pass 1,573 strict regressions and 13 actual bridge checks,
+including chained real GPU copies with exact byte readback, unaligned CPU
+transfers, invalid ownership/ranges/copies, live-device retention, retired IDs
+and monotonic buffer IDs across device recreation. The new CPU wire fixture
+passes 56 checks without a Vulkan driver. Native sources, canonical header,
+compiler guard and artifacts match exact build hashes. No CMake wiring changes.
+This proves the byte transport; connecting retained game physical spans and
+returning a correct resource object remain next. No game frame/menu is claimed.

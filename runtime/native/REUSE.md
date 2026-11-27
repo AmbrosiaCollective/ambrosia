@@ -443,3 +443,9 @@ retains each page's policy, and optionally creates a read-only CPU alias using
 the existing host SharedBacking adapter. It imports no external implementation.
 Retained physical identity survives changes to original virtual mappings; this
 does not add a GPU buffer, coherency protocol or direct guest GPU access.
+
+The owned-buffer file transport extends Ambrosia's existing numeric ownership
+protocol. It uses the previously verified coherent Vulkan backend and existing
+isolation controls with separately pinned directional payload files. No external
+implementation is copied. This transport alone does not establish game physical
+coherence or return a native game resource.
