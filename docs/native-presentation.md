@@ -49,4 +49,8 @@ monitor coordinates and collapsed content areas. Native requests retain SDL's
 content-size convention; complete Windows outer-size negotiation, arbitrary
 resize messages and `TRUE` preservation remain unsupported.
 
+Default `WM_CREATE` accepts the owned active creation structure after host/class
+storage, title and client initialization. This specific message returns zero to
+continue creation; other unimplemented messages still stop explicitly.
+
 No visible game window, game frame or interactive menu has been verified.

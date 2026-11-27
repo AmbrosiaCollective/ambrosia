@@ -219,6 +219,17 @@ std::intptr_t AMBROSIA_GUEST_ABI default_window(std::uintptr_t handle, std::uint
                 "TRACE native default NCCALCSIZE calculated owned host client area\n");
             return 0;
         }
+        if (message == 1) {
+            if (first || !second || !window->creation_structure ||
+                static_cast<std::uintptr_t>(second) != window->creation_structure) {
+                throw std::runtime_error("default WM_CREATE requires its owned active creation structure");
+            }
+            // Class storage, host ownership, title and client calculation already
+            // exist. Default WM_CREATE adds no application-specific initialization.
+            diagnostics::write_service_trace(
+                "TRACE native default WM_CREATE accepted owned initialization\n");
+            return 0;
+        }
         // Numeric shape only: no game string, pointer or message payload bytes.
         throw std::runtime_error("unsupported native default window message=" + std::to_string(message) +
                                  " wparam_present=" + std::to_string(first != 0) +

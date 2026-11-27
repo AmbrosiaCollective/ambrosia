@@ -78,6 +78,14 @@ std::intptr_t AMBROSIA_GUEST_ABI creation_procedure(std::uintptr_t handle, std::
         }
         return observation.reject == 1 ? 0 : 1;
     }
+    if (message == 1 && observation.default_mode >= 7) {
+        using Default =
+            std::intptr_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::uint32_t, std::uintptr_t, std::intptr_t);
+        const auto procedure = reinterpret_cast<Default>(
+            observation.runtime->resolve(service_symbol("DefWindowProcA", "user32.dll")));
+        return procedure(handle, message, observation.default_mode == 9 ? 1 : 0,
+                         observation.default_mode == 8 ? second + 8 : second);
+    }
     return message == 1 && observation.reject == 2 ? -1 : 0;
 }
 
@@ -266,15 +274,17 @@ void window_creation_checks(unsigned default_probe = 0) {
         default_window.reset();
         check(!procedure(default_handle, 0x81, 0, 0) && get_last_error() == 1400,
               "default processing rejects retired handles before inspecting a creation pointer");
-        observation.default_mode = 4;
+        observation.default_mode = 7;
         observation.messages.clear();
         const auto calculated_handle = call(registered.atom);
         auto calculated_window = runtime.windows().find(calculated_handle);
         check(calculated_window && observation.valid && !calculated_window->calculation_structure &&
+                  !calculated_window->creation_structure &&
                   calculated_window->client_rectangle[2] - calculated_window->client_rectangle[0] == 640 &&
                   calculated_window->client_rectangle[3] - calculated_window->client_rectangle[1] == 360 &&
                   observation.messages == std::vector<std::uint32_t>{0x81, 0x83, 1},
-              "default creation calculates the actual owned host client area and clears its RECT lease");
+              "all default creation messages complete on the owned host window and clear both structure "
+              "leases");
         runtime.windows().retire(calculated_handle);
     }
     active_creation = nullptr;
