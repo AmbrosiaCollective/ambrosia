@@ -458,3 +458,10 @@ No external resource implementation is ported. Raw console description/initial
 policy is retained; the supported row-major buffer projection uses coherent
 Vulkan storage with explicit byte synchronization. The console-only0x20000 hint
 is preserved as metadata, not interpreted as a Vulkan resource flag.
+
+The title-memory adapter is an original implementation using the native module
+graph's validated PE section extents and active context. Pinned FiveStar
+TitleMemoryHooks.cs and XboxDescriptorHeaps.cs publish the two-word exported
+allocator/free ABI and descriptor attributes0x00800004. Only those API facts are
+used; no external hook/heap implementation is ported. Validated data/code access,
+generation pairing and no-lock reentry follow Ambrosia's existing native contract.

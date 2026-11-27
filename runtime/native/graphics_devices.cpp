@@ -8,6 +8,7 @@
 #include "resource_description.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
+#include "title_memory.h"
 #include <algorithm>
 #include <cerrno>
 #include <cstdio>
@@ -1304,6 +1305,59 @@ struct GraphicsDevices::State {
         }
     }
 
+    static std::int32_t AMBROSIA_GUEST_ABI capture_descriptor_heap(Device *pointer, const void *description,
+                                                                   const void *interface_id,
+                                                                   void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!description || !interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned(pointer);
+            std::array<std::uint32_t, 4> fields{};
+            std::memcpy(fields.data(), description, sizeof(fields));
+            Guid requested;
+            std::memcpy(&requested, interface_id, sizeof(requested));
+            if (requested != descriptor_heap_interface) {
+                return no_interface;
+            }
+            const auto type = fields[0];
+            const auto count = fields[1];
+            if (type >= guest_descriptor_increments.size() || !count || (fields[2] & ~1u) || fields[3] > 1) {
+                diagnostics::stop_trace("unsupported native descriptor heap description", 78);
+            }
+            const auto bytes = std::uint64_t{count} * guest_descriptor_increments[type];
+            if (bytes > 64 * 1024 * 1024) {
+                diagnostics::stop_trace("native descriptor heap exceeds its bounded title-memory probe", 78);
+            }
+            char message[192];
+            const auto length =
+                std::snprintf(message, sizeof(message),
+                              "TRACE native descriptor heap type=%u count=%u flags=%x node=%u bytes=%llu\n",
+                              type, count, fields[2], fields[3], static_cast<unsigned long long>(bytes));
+            if (length > 0 && static_cast<std::size_t>(length) < sizeof(message)) {
+                diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(length)));
+            }
+            // The title allocator can reenter services. No graphics lock is held
+            // across that guest call. This diagnostic never returns an object.
+            access.lock.unlock();
+            auto allocation = allocate_title_descriptors(static_cast<std::size_t>(bytes));
+            if (!allocation.data() || allocation.size() != bytes) {
+                diagnostics::stop_trace("native descriptor title allocation has an invalid extent", 78);
+            }
+            diagnostics::write_service_trace(
+                "TRACE native descriptor storage returned by validated title hook\n");
+            // Process teardown owns this nonreturning diagnostic allocation.
+            diagnostics::stop_trace("native descriptor heap requires title-backed object integration", 78);
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
     template <std::size_t Slot>
     static std::uintptr_t AMBROSIA_GUEST_ABI unsupported_resource(Resource *) noexcept {
         diagnostics::stop_trace("unsupported native ID3D12Resource slot " + std::to_string(Slot), 78);
@@ -1711,6 +1765,7 @@ struct GraphicsDevices::State {
             result[7] = reinterpret_cast<std::uintptr_t>(&node_count);
             result[8] = reinterpret_cast<std::uintptr_t>(&create_queue);
             result[9] = reinterpret_cast<std::uintptr_t>(&create_allocator);
+            result[14] = reinterpret_cast<std::uintptr_t>(&capture_descriptor_heap);
             result[15] = reinterpret_cast<std::uintptr_t>(&descriptor_increment);
             result[26] = reinterpret_cast<std::uintptr_t>(&heap_properties);
             result[36] = reinterpret_cast<std::uintptr_t>(&create_fence);

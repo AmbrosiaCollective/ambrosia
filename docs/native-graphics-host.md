@@ -678,3 +678,14 @@ Resource allocation is no longer the startup boundary. Descriptor heaps, further
 command lowering and an actual frame/menu still require implementation and
 verification. General submission must retain the same physical upload/writeback
 ordering; the new resource is not a claim that arbitrary commands can execute.
+
+## Descriptor allocator prerequisite
+
+The descriptor-heap boundary now calls the title's validated exported allocator
+before stopping at heap-object integration. Both compiler builds receive real
+title-selected storage in actual game probes. An unrelated allocation would
+violate the console handle identity that the game expects. See
+[native-title-memory.md](native-title-memory.md) for the callback ABI, data/code
+range validation, generation pairing, explicit release and remaining storage
+validation requirement. Both builds pass 23 focused hook checks and the existing
+regressions. No descriptor heap object, encoding, binding or menu is claimed.

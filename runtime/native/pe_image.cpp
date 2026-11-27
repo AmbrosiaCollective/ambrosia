@@ -396,6 +396,9 @@ Image Image::load(std::span<const std::byte> bytes, const Resolver &resolver, st
     for (const auto &section : sections) {
         const auto access = state.inspection_only ? host::Access::read : section_access(section.flags);
         state.memory.protect(section.rva, section.pages, access);
+        // Keep validated raw section extents and intended permissions. Padding,
+        // headers and executable sections are not exported data-table storage.
+        state.section_ranges.push_back({section.rva, section.size, section_access(section.flags)});
     }
     return image;
 }

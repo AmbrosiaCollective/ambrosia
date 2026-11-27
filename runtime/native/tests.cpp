@@ -5,6 +5,7 @@
 #include "graphics_recording.h"
 #include "physical_buffer.h"
 #include "resource_description.h"
+#include "title_memory.h"
 #include "event_signal.h"
 #include "file_services.h"
 #include "guest_thread.h"
@@ -277,6 +278,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "graphics_buffer_tests.h"
 #include "physical_buffer_tests.h"
 #include "placed_buffer_tests.h"
+#include "title_memory_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -1268,6 +1270,18 @@ extern "C" int ambrosia_native_trace_menu_8g(const char *image, const char *pack
         return 2;
     }
     return trace_native_image(image, package, 3, inventory, storage, descriptor, presentation, graphics);
+}
+
+extern "C" int ambrosia_native_title_memory_tests() {
+    checks = failures = 0;
+    try {
+        title_memory_checks();
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL title memory exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "title memory hooks: " << checks << " checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
 }
 
 extern "C" int ambrosia_native_physical_buffer_tests(int descriptor, const char *root) {

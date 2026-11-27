@@ -3,6 +3,7 @@
 #include "module_graph.h"
 #include "image_state.h"
 #include <charconv>
+#include <cstring>
 #include <limits>
 #include <mutex>
 #include <optional>
@@ -367,6 +368,64 @@ std::optional<std::uintptr_t> ModuleGraph::loaded_export(std::uintptr_t module, 
         }
     }
     return std::nullopt;
+}
+
+bool ModuleGraph::copy_loaded_data(std::uintptr_t address, std::span<std::byte> output) const {
+    state_->require_access();
+    if (output.empty() || output.size() > 64 || output.size() > UINTPTR_MAX - address) {
+        return false;
+    }
+    for (const auto &[name, node] : state_->modules) {
+        (void)name;
+        if (!node.image) {
+            continue;
+        }
+        const auto base = reinterpret_cast<std::uintptr_t>(node.image->base());
+        if (address < base) {
+            continue;
+        }
+        const auto offset = address - base;
+        for (const auto &section : node.image->state_->section_ranges) {
+            if ((section.access == host::Access::read || section.access == host::Access::read_write) &&
+                offset >= section.rva && offset - section.rva < section.bytes &&
+                output.size() <= section.bytes - (offset - section.rva)) {
+                std::memcpy(output.data(), reinterpret_cast<const void *>(address), output.size());
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool ModuleGraph::active_code_address(std::uintptr_t address) const {
+    state_->require_access();
+    for (const auto &[name, node] : state_->modules) {
+        (void)name;
+        if (!node.image || node.image->state_->inspection_only || !node.image->state_->active.load()) {
+            continue;
+        }
+        const auto base = reinterpret_cast<std::uintptr_t>(node.image->base());
+        if (address < base) {
+            continue;
+        }
+        const auto offset = address - base;
+        for (const auto &section : node.image->state_->section_ranges) {
+            if (section.access == host::Access::read_execute && offset >= section.rva &&
+                offset - section.rva < section.bytes) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::uint64_t ModuleGraph::execution_generation() const {
+    state_->require_access();
+    const std::lock_guard lock(state_->thread_mutex);
+    if (!state_->active) {
+        throw std::runtime_error("title callbacks require an active module execution generation");
+    }
+    return state_->generation;
 }
 
 std::uintptr_t ModuleGraph::module_base_for_address(std::uintptr_t address) const {

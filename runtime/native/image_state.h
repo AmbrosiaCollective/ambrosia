@@ -9,6 +9,14 @@ struct Image::State {
     explicit State(std::size_t size) : memory(size) {}
 
     host::Mapping memory;
+
+    struct SectionRange {
+        std::size_t rva = 0;
+        std::size_t bytes = 0;
+        host::Access access = host::Access::none;
+    };
+
+    std::vector<SectionRange> section_ranges;
     std::uint32_t entry = 0;
     bool dll = false;
     bool has_tls = false;

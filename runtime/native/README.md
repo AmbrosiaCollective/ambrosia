@@ -1611,3 +1611,10 @@ before completion. Resource identity, references, parent, Map/Unmap, both GetDes
 return conventions and console GPU virtual address are separate from backend
 addresses. Unsupported descriptions, textures and resource slots remain explicit
 failures. General command submission and game rendering are not implied.
+
+Descriptor heaps must use the title's exported allocation hooks to preserve its
+chosen descriptor address. The new scoped adapter accepts only a bounded loaded
+data table and callbacks in active executable sections, with generation/runtime
+checks and explicit release. Device14 currently probes that real allocation and
+stops before returning an unimplemented heap. General heap objects/descriptor
+writes and GPU binding remain separate work.

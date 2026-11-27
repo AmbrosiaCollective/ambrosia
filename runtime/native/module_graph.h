@@ -50,6 +50,9 @@ class ModuleGraph {
     std::uintptr_t loaded_module(std::optional<std::string> name = std::nullopt) const;
     std::optional<std::filesystem::path> loaded_module_path(std::uintptr_t module = 0) const;
     std::optional<std::uintptr_t> loaded_export(std::uintptr_t module, const Import &symbol) const;
+    bool copy_loaded_data(std::uintptr_t address, std::span<std::byte> output) const;
+    bool active_code_address(std::uintptr_t address) const;
+    std::uint64_t execution_generation() const;
     bool disable_thread_notifications(std::uintptr_t module);
     std::optional<bool> thread_notifications_enabled(std::uintptr_t module) const;
     bool has_available_source(std::string name) const;
