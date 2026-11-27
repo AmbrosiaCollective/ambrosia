@@ -242,6 +242,19 @@ GPU queue work or a game frame/menu.
 Native SHARED flag1 now reaches actual exportable semaphore creation. Its creation
 flags are retained; other flag bits remain unsupported. Both builds pass1516 strict
 and17 native fence checks, including shared counters/signals/release. The actual
-game creates a shared fence on both compilers and now stops at device48
-OpenExistingHeapFromAddress. No shared handle export/import, GPU queue work or game
-frame/menu is claimed. Descriptor-transfer support remains separate work.
+game creates a shared fence on both compilers and reaches device slot 48. The
+initial PC method-name interpretation was incorrect: the inherited Xbox adapter
+and [retail boot chain](retail_boot_chain.md#32-device-slot-48-creates-a-command-queue)
+identify this as CreateCommandQueueX. Public PC order does not establish Xbox
+semantics. No shared handle export/import, GPU queue work or game frame/menu is
+claimed. Descriptor-transfer support remains separate work.
+
+## Xbox command-queue override
+
+The console frontend routes device slot 48 to the existing CreateCommandQueue
+owner, matching the inherited Xbox adapter and retail boot-chain notes. This is
+CreateCommandQueueX on Xbox; the public PC method at that index is unrelated.
+Both compiler builds pass 20 real queue checks, including console argument guards
+and independent parent references. Both actual games reach the compute-queue
+request with DISABLE_GPU_TIMEOUT flag 1, which remains explicitly unsupported at
+this checkpoint. No heap import, queue work or game frame/menu is established.

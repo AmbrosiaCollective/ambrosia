@@ -658,6 +658,9 @@ struct GraphicsDevices::State {
             result[8] = reinterpret_cast<std::uintptr_t>(&create_queue);
             result[26] = reinterpret_cast<std::uintptr_t>(&heap_properties);
             result[36] = reinterpret_cast<std::uintptr_t>(&create_fence);
+            // The Xbox ABI shadows PC OpenExistingHeapFromAddress here.
+            // See d3d12_xs_device.h and docs/retail_boot_chain.md section 3.2.
+            result[48] = reinterpret_cast<std::uintptr_t>(&create_queue);
             return result;
         }();
         return entries;

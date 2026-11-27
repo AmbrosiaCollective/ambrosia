@@ -319,3 +319,10 @@ exportable creation after compatible export/import support is confirmed.51host/
 65guest controls and all resource bounds remain. No descriptor export/transfer,
 new guest GPU access, CPU payload or queue submission is added by this creation
 step. Earlier device services retain empty extension selection by default.
+
+Before implementing a guest graphics slot, inspect both the pinned public SDK
+and the inherited Xbox adapter/header and measured boot-chain notes. Xbox slots
+can intentionally shadow unrelated PC methods, even when QueryInterface returns
+a public device IID. Verify the console override and fixture index independently;
+a correct PC index does not establish the console call's meaning. Preserve failed
+hypotheses as private/local evidence and remove incorrect prototypes before commit.

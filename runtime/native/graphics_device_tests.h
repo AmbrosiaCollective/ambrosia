@@ -240,14 +240,24 @@ void graphics_queue_live_checks(const std::filesystem::path &root, unsigned prob
     const std::array<std::uint32_t, 4> description{};
     check(create_queue(device, description.data(), &unsupported, &output) == no_interface && !output,
           "CreateCommandQueue rejects an unsupported identity without frontend ownership");
-    std::array<void *, 3> queues{};
-    const std::array<std::uint32_t, 3> types{0, 2, 3};
+    const auto create_queue_x = reinterpret_cast<CreateQueue>(device_table[48]);
+    check(create_queue_x(device, reinterpret_cast<const void *>(1), reinterpret_cast<const void *>(1),
+                         nullptr) == pointer_error,
+          "CreateCommandQueueX validates output before reading the console descriptor");
+    output = reinterpret_cast<void *>(1);
+    check(create_queue_x(device, nullptr, &command_queue_interface, &output) == pointer_error && !output,
+          "CreateCommandQueueX clears output before rejecting a missing descriptor");
+    check(create_queue_x(device, description.data(), &unsupported, &output) == no_interface && !output,
+          "CreateCommandQueueX rejects unknown interfaces through the same queue ownership path");
+    std::array<void *, 4> queues{};
+    const std::array<std::uint32_t, 4> types{0, 2, 3, 2};
     errno = E2BIG;
     set_last_error(79);
     crt_error() = 21;
     for (std::size_t index = 0; index < queues.size(); ++index) {
         std::array<std::uint32_t, 4> selected{types[index], probe == 2 ? 100u : 0u, 0, 1};
-        check(create_queue(device, selected.data(), &command_queue_interface, &queues[index]) == 0 &&
+        const auto create_selected = index == queues.size() - 1 ? create_queue_x : create_queue;
+        check(create_selected(device, selected.data(), &command_queue_interface, &queues[index]) == 0 &&
                   queues[index],
               "supported queue kinds acquire a frontend retaining the real backend queue owner");
     }
@@ -269,9 +279,9 @@ void graphics_queue_live_checks(const std::filesystem::path &root, unsigned prob
     check(query(queues[0], &command_queue_interface, &output) == 0 && output == queues[0] &&
               release(output) == 1 && add(queues[0]) == 2 && release(queues[0]) == 1,
           "queue identity and reference counts share one actual owned frontend");
-    check(release_device(device) == 3, "three queue children retain their device independently");
+    check(release_device(device) == 4, "PC and Xbox queue children retain their device independently");
     check(get_device(queues[0], &device11_interface, &output) == 0 && output == device &&
-              release_device(output) == 3,
+              release_device(output) == 4,
           "queue GetDevice returns the retained backend parent with an added reference");
     check(errno == E2BIG && get_last_error() == 79 && crt_error() == 21,
           "queue facade preserves native and guest error state");
