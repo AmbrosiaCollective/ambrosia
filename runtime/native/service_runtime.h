@@ -36,6 +36,7 @@
 #include "storage_factory.h"
 #include "task_queues.h"
 #include "user_locale.h"
+#include "window_classes.h"
 #include "winsock_lifecycle.h"
 #include <functional>
 #include <mutex>
@@ -153,6 +154,10 @@ class Runtime {
         return physical_pages_;
     }
 
+    WindowClasses &window_classes() {
+        return window_classes_;
+    }
+
     CriticalSections &critical_sections() {
         return critical_sections_;
     }
@@ -215,6 +220,7 @@ class Runtime {
   private:
     // Memory windows are destroyed before the allocator releases its ID leases.
     PhysicalPages physical_pages_;
+    WindowClasses window_classes_;
     MemoryServices memory_;
     CriticalSections critical_sections_;
     SlimLocks slim_locks_;

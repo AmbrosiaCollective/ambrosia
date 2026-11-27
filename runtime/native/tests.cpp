@@ -252,6 +252,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "shared_backing_tests.h"
 #include "physical_page_tests.h"
 #include "physical_api_tests.h"
+#include "window_class_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -744,6 +745,7 @@ extern "C" int ambrosia_native_tests() {
         invalid_parameter_checks();
         secure_random_checks();
         prng_checks();
+        window_class_checks();
         private_memory_option_checks();
     } catch (const std::exception &error) {
         ++failures;
@@ -1031,6 +1033,10 @@ extern "C" int ambrosia_native_physical_api_rejection(unsigned mode) {
     std::uint64_t token = 0;
     (void)allocate(mode == 1 ? 0x281 : 0x280, &count, &token);
     return 1;
+}
+
+extern "C" int ambrosia_native_window_class_rejection(unsigned mode) {
+    return window_class_rejection_probe(mode);
 }
 
 extern "C" int ambrosia_native_locale_rejection(unsigned mode) {
