@@ -40,7 +40,17 @@ std::intptr_t AMBROSIA_GUEST_ABI creation_procedure(std::uintptr_t handle, std::
     } else if (message == 0x83) {
         auto *rectangle = reinterpret_cast<std::int32_t *>(second);
         observation.valid =
-            observation.valid && rectangle[2] - rectangle[0] == 640 && rectangle[3] - rectangle[1] == 360;
+            observation.valid &&
+            rectangle[2] - rectangle[0] == 640 + window->borders.left + window->borders.right &&
+            rectangle[3] - rectangle[1] == 360 + window->borders.top + window->borders.bottom;
+        if (observation.default_mode >= 4) {
+            using Default = std::intptr_t(AMBROSIA_GUEST_ABI *)(std::uintptr_t, std::uint32_t, std::uintptr_t,
+                                                                std::intptr_t);
+            const auto procedure = reinterpret_cast<Default>(
+                observation.runtime->resolve(service_symbol("DefWindowProcA", "user32.dll")));
+            return procedure(handle, message, observation.default_mode == 6 ? 1 : 0,
+                             observation.default_mode == 5 ? second + 4 : second);
+        }
         rectangle[0] += 3;
         rectangle[1] += 4;
         rectangle[2] -= 3;
@@ -74,6 +84,31 @@ std::intptr_t AMBROSIA_GUEST_ABI creation_procedure(std::uintptr_t handle, std::
 void window_creation_checks(unsigned default_probe = 0) {
     using namespace ambrosia;
     using namespace services;
+    const auto invalid_rectangle = [](const auto &calculation) {
+        try {
+            calculation();
+        } catch (const std::invalid_argument &) {
+            return true;
+        }
+        return false;
+    };
+    check(calculate_client_rectangle({10, 20, 650, 380}, {}) == std::array<std::int32_t, 4>{10, 20, 650, 380},
+          "measured zero frame insets preserve the actual content rectangle");
+    check(calculate_client_rectangle({10, 20, 650, 380}, {3, 24, 5, 7}) ==
+              std::array<std::int32_t, 4>{13, 44, 645, 373},
+          "asymmetric native frame insets calculate screen client coordinates");
+    check(calculate_client_rectangle({-650, -380, -10, -20}, {3, 24, 5, 7}) ==
+              std::array<std::int32_t, 4>{-647, -356, -15, -27},
+          "client geometry preserves negative monitor coordinates");
+    check(calculate_client_rectangle({0, 0, 4, 3}, {3, 4, 5, 6}) == std::array<std::int32_t, 4>{3, 4, 3, 4},
+          "frame insets larger than the proposal collapse the client area without inversion");
+    check(invalid_rectangle([&] { (void)calculate_client_rectangle({0, 0, 4, 3}, {-1, 0, 0, 0}); }),
+          "invalid host frame metrics cannot enlarge the proposed client rectangle");
+    check(runtime_rejected(
+              [&] { (void)calculate_client_rectangle({INT32_MAX, 0, INT32_MAX, 3}, {1, 0, 0, 0}); }),
+          "client rectangle arithmetic rejects overflow before narrowing to guest coordinates");
+    check(invalid_rectangle([&] { (void)calculate_client_rectangle({5, 0, 4, 3}, {}); }),
+          "an inverted proposed rectangle is rejected explicitly");
     Runtime runtime;
     using Create = std::uintptr_t(AMBROSIA_GUEST_ABI *)(
         std::uint32_t, std::uintptr_t, const char *, std::uint32_t, std::int32_t, std::int32_t, std::int32_t,
@@ -142,8 +177,10 @@ void window_creation_checks(unsigned default_probe = 0) {
     check(window->host_window.id && window->owner == observation.thread && window->extra.size() == 16 &&
               std::all_of(window->extra.begin(), window->extra.end(),
                           [](auto value) { return value == std::byte{0}; }) &&
-              window->client_rectangle[2] - window->client_rectangle[0] == 634 &&
-              window->client_rectangle[3] - window->client_rectangle[1] == 352,
+              window->client_rectangle[2] - window->client_rectangle[0] ==
+                  634 + window->borders.left + window->borders.right &&
+              window->client_rectangle[3] - window->client_rectangle[1] ==
+                  352 + window->borders.top + window->borders.bottom,
           "the guest handle retains owned host/class/extra metadata and the callback's client rectangle");
     check(errno == E2BIG && crt_error() == 31 && get_last_error() == 211,
           "window creation preserves host errno while retaining guest error changes made by its procedure");
@@ -229,6 +266,16 @@ void window_creation_checks(unsigned default_probe = 0) {
         default_window.reset();
         check(!procedure(default_handle, 0x81, 0, 0) && get_last_error() == 1400,
               "default processing rejects retired handles before inspecting a creation pointer");
+        observation.default_mode = 4;
+        observation.messages.clear();
+        const auto calculated_handle = call(registered.atom);
+        auto calculated_window = runtime.windows().find(calculated_handle);
+        check(calculated_window && observation.valid && !calculated_window->calculation_structure &&
+                  calculated_window->client_rectangle[2] - calculated_window->client_rectangle[0] == 640 &&
+                  calculated_window->client_rectangle[3] - calculated_window->client_rectangle[1] == 360 &&
+                  observation.messages == std::vector<std::uint32_t>{0x81, 0x83, 1},
+              "default creation calculates the actual owned host client area and clears its RECT lease");
+        runtime.windows().retire(calculated_handle);
     }
     active_creation = nullptr;
     errno = saved_error;

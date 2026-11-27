@@ -254,6 +254,20 @@ void Presentation::set_title(std::uint32_t window, std::string_view title) {
     }
 }
 
+WindowBorders Presentation::borders(std::uint32_t window) {
+    const std::lock_guard lock(transport_->mutex);
+    Packet packet;
+    packet.operation = 7;
+    packet.window = window;
+    const auto reply = transport_->exchange(packet);
+    const auto &values = reply.geometry;
+    if (reply.window != window || values.x < 0 || values.y < 0 || values.width < 0 || values.height < 0 ||
+        values.x > 4096 || values.y > 4096 || values.width > 4096 || values.height > 4096) {
+        throw std::runtime_error("native presentation returned invalid owned window borders");
+    }
+    return {values.x, values.y, values.width, values.height};
+}
+
 void Presentation::present(std::uint32_t window, std::int32_t width, std::int32_t height,
                            std::span<const std::byte> rgba) {
     const auto expected_bytes = frame_bytes(width, height);

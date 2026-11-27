@@ -19,10 +19,15 @@ struct NativeWindow {
     std::uint32_t style = 0, extended_style = 0;
     // Nonzero only while the owning thread is dispatching creation messages.
     std::uintptr_t creation_structure = 0;
+    std::uintptr_t calculation_structure = 0;
+    host::WindowBorders borders;
     std::string title;
     std::array<std::int32_t, 4> client_rectangle{};
     std::vector<std::byte> extra;
 };
+
+std::array<std::int32_t, 4> calculate_client_rectangle(const std::array<std::int32_t, 4> &outer,
+                                                       const host::WindowBorders &borders);
 
 class NativeWindows {
   public:

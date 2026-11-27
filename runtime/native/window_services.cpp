@@ -38,6 +38,7 @@ struct CreationRollback {
 
     ~CreationRollback() {
         window.creation_structure = 0;
+        window.calculation_structure = 0;
         if (!accepted) {
             windows.retire(window.handle);
         }
@@ -133,16 +134,21 @@ std::uintptr_t AMBROSIA_GUEST_ABI create_window(std::uint32_t extended_style, st
         if (!send_creation(*runtime, *window, 0x81, &creation)) {
             return 0;
         }
-        // FALSE wParam supplies one RECT in screen coordinates. The callback
-        // owns its non-client calculation; do not invent native border metrics.
-        const auto right = static_cast<std::int64_t>(geometry.x) + geometry.width;
-        const auto bottom = static_cast<std::int64_t>(geometry.y) + geometry.height;
+        // SDL sizes describe the content area. The proposed outer rectangle
+        // includes only frame insets successfully measured from this host window.
+        window->borders = window->presentation->borders(window->host_window.id);
+        const auto right = static_cast<std::int64_t>(geometry.x) + geometry.width + window->borders.left +
+                           window->borders.right;
+        const auto bottom = static_cast<std::int64_t>(geometry.y) + geometry.height + window->borders.top +
+                            window->borders.bottom;
         if (right > INT32_MAX || bottom > INT32_MAX) {
             throw std::runtime_error("native creation rectangle exceeds the guest coordinate range");
         }
         std::array<std::int32_t, 4> rectangle{geometry.x, geometry.y, static_cast<std::int32_t>(right),
                                               static_cast<std::int32_t>(bottom)};
+        window->calculation_structure = reinterpret_cast<std::uintptr_t>(rectangle.data());
         (void)send_creation(*runtime, *window, 0x83, rectangle.data());
+        window->calculation_structure = 0;
         window->client_rectangle = rectangle;
         if (send_creation(*runtime, *window, 1, &creation) == -1) {
             (void)send_creation(*runtime, *window, 2, nullptr);
@@ -199,6 +205,19 @@ std::intptr_t AMBROSIA_GUEST_ABI default_window(std::uintptr_t handle, std::uint
             diagnostics::write_service_trace(
                 "TRACE native default NCCREATE initialized owned window title\n");
             return 1;
+        }
+        if (message == 0x83) {
+            if (first || !second || !window->calculation_structure ||
+                static_cast<std::uintptr_t>(second) != window->calculation_structure) {
+                throw std::runtime_error("default NCCALCSIZE requires its owned active FALSE rectangle");
+            }
+            std::array<std::int32_t, 4> outer;
+            std::memcpy(outer.data(), reinterpret_cast<const void *>(second), sizeof(outer));
+            const auto client = calculate_client_rectangle(outer, window->borders);
+            std::memcpy(reinterpret_cast<void *>(second), client.data(), sizeof(client));
+            diagnostics::write_service_trace(
+                "TRACE native default NCCALCSIZE calculated owned host client area\n");
+            return 0;
         }
         // Numeric shape only: no game string, pointer or message payload bytes.
         throw std::runtime_error("unsupported native default window message=" + std::to_string(message) +

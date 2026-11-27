@@ -1,8 +1,34 @@
 #include "native_windows.h"
 #include "startup_trace.h"
+#include <algorithm>
 #include <stdexcept>
 
 namespace ambrosia::services {
+std::array<std::int32_t, 4> calculate_client_rectangle(const std::array<std::int32_t, 4> &outer,
+                                                       const host::WindowBorders &borders) {
+    for (const auto value : {borders.left, borders.top, borders.right, borders.bottom}) {
+        if (value < 0 || value > 4096) {
+            throw std::invalid_argument("native client calculation received invalid frame metrics");
+        }
+    }
+    if (outer[0] > outer[2] || outer[1] > outer[3]) {
+        throw std::invalid_argument("native client calculation received an inverted outer rectangle");
+    }
+    const std::int64_t left = static_cast<std::int64_t>(outer[0]) + borders.left;
+    const std::int64_t top = static_cast<std::int64_t>(outer[1]) + borders.top;
+    const auto right = std::max(left, static_cast<std::int64_t>(outer[2]) - borders.right);
+    const auto bottom = std::max(top, static_cast<std::int64_t>(outer[3]) - borders.bottom);
+    std::array<std::int32_t, 4> result;
+    const std::array<std::int64_t, 4> coordinates{left, top, right, bottom};
+    for (std::size_t index = 0; index < coordinates.size(); ++index) {
+        if (coordinates[index] < INT32_MIN || coordinates[index] > INT32_MAX) {
+            throw std::overflow_error("native client rectangle exceeds the guest coordinate range");
+        }
+        result[index] = static_cast<std::int32_t>(coordinates[index]);
+    }
+    return result;
+}
+
 NativeWindow::~NativeWindow() {
     if (presentation && host_window.id) {
         try {

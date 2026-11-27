@@ -93,6 +93,9 @@ class Video:
                                     ctypes.POINTER(ctypes.c_int)], None),
             'SDL_GetWindowPosition': ([ctypes.c_void_p, ctypes.POINTER(ctypes.c_int),
                                         ctypes.POINTER(ctypes.c_int)], None),
+            'SDL_GetWindowBordersSize': ([ctypes.c_void_p, ctypes.POINTER(ctypes.c_int),
+                ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
+                ctypes.POINTER(ctypes.c_int)], ctypes.c_int),
             'SDL_PollEvent': ([ctypes.c_void_p], ctypes.c_int),
             'SDL_GetWindowSurface': ([ctypes.c_void_p], ctypes.c_void_p),
             'SDL_CreateRGBSurfaceFrom': ([ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
@@ -208,6 +211,17 @@ class Video:
             if self.library.SDL_GetWindowTitle(pointer) != payload:
                 return 3, identifier, (0, 0, 0, 0), b'', 0
             return 0, identifier, self.geometry(pointer), b'', 0
+        if operation == 7:
+            if payload or flags or argument or any((x, y, width, height)):
+                return 1, identifier, (0, 0, 0, 0), b'', 0
+            top, left, bottom, right = (ctypes.c_int() for _ in range(4))
+            result = self.library.SDL_GetWindowBordersSize(
+                pointer, ctypes.byref(top), ctypes.byref(left),
+                ctypes.byref(bottom), ctypes.byref(right))
+            borders = left.value, top.value, right.value, bottom.value
+            if result or any(value < 0 or value > 4096 for value in borders):
+                return 3, identifier, (0, 0, 0, 0), b'', 0
+            return 0, identifier, borders, b'', 0
         if operation == 5:
             if width <= 0 or height <= 0 or width * height > MAX_PIXELS or width > 4096 or height > 2160:
                 return 1, identifier, (0, 0, 0, 0), b'', 0
@@ -264,7 +278,7 @@ def serve(root, seconds):
                 time.sleep(0.002)
                 continue
             requests += 1
-            if magic != MAGIC or size > MAX_PAYLOAD or reserved1 or reserved2 or operation not in range(1, 7):
+            if magic != MAGIC or size > MAX_PAYLOAD or reserved1 or reserved2 or operation not in range(1, 8):
                 status, identifier, geometry, output, argument = 1, 0, (0, 0, 0, 0), b'', 0
             else:
                 payload = os.pread(request_fd, size, HEADER.size)

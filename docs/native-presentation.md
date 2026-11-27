@@ -40,4 +40,13 @@ on the owner thread. It initializes the actual host title, requires host title
 readback, and then accepts creation. Unsupported default messages stop explicitly.
 The temporary structure lease is cleared when creation returns or rolls back.
 
+Creation also queries the actual host frame insets. The proposed outer rectangle
+includes those measured insets around the host content size. Default
+`WM_NCCALCSIZE(FALSE)` computes screen client coordinates only for the exact
+active creation rectangle, then clears that lease. A failed border query is an
+error, not an assumed borderless window. Checked arithmetic handles negative
+monitor coordinates and collapsed content areas. Native requests retain SDL's
+content-size convention; complete Windows outer-size negotiation, arbitrary
+resize messages and `TRUE` preservation remain unsupported.
+
 No visible game window, game frame or interactive menu has been verified.
