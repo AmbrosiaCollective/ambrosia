@@ -386,3 +386,12 @@ Windows COM submission with canonical CPU IR recording, retains original request
 metadata and adds bounded ownership, transition and atomic failure handling.
 No TuxBox runtime, compiler or shader code is built or executed. Shader compiler
 notices are unrelated to this command-recording policy and no shader source is used.
+
+`frame_timing.cpp` adapts the timer-grid, current-origin polling, token-in event
+and finite-timeout policy from [FiveStar FramePacer.cs](https://github.com/ThatRecompDev/five-star-recomp/blob/323ea3000b9e6a49dbfda5c36ed0c1022fde90ae/src/FiveStar.Loader/Shims/D3D12X/Present/FramePacer.cs).
+Its copyright notice and GPL-3.0-or-later terms are retained; the project's GPL
+license applies. The C++ component adds checked integer arithmetic, explicit time
+inputs, bounded configuration and immutable wait plans. Existing host adapters
+supply the monotonic clock and sleep. No Windows timer, C# runtime or upstream
+executable is imported or run. Timer tokens do not certify GPU completion, and
+presented-token/GPU throttling remains separate from this timer implementation.

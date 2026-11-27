@@ -1,6 +1,8 @@
 #include "graphics_devices.h"
+#include "frame_timing.h"
 #include "graphics_recording.h"
 #include "guest_thread.h"
+#include "host.h"
 #include "host_graphics.h"
 #include "service_runtime.h"
 #include "startup_trace.h"
@@ -98,6 +100,7 @@ struct GraphicsDevices::State {
         // Coverage is a future resource-mapping constraint, not a claim that
         // logical-device creation reserves a contiguous host GPU address range.
         std::optional<GraphicsMemoryPlan> memory_plan;
+        FrameTiming frame_timing;
     };
 
     struct Fence {
@@ -1243,6 +1246,92 @@ struct GraphicsDevices::State {
         }
     }
 
+    static std::uint64_t frame_now_us() {
+        const auto counter = host::performance_counter();
+        if (counter < 0) {
+            throw std::runtime_error("native monotonic frame clock is unavailable");
+        }
+        return static_cast<std::uint64_t>(counter) / 1000;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI set_frame_interval(Device *pointer, const void *output,
+                                                              std::uint32_t period_us, std::uint32_t latency,
+                                                              std::uint32_t flags) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned(pointer);
+            if (output || flags) {
+                return static_cast<std::int32_t>(0x80004001u);
+            }
+            if (!pointer->frame_timing.set_interval(period_us, latency, frame_now_us())) {
+                return static_cast<std::int32_t>(0x80070057u);
+            }
+            diagnostics::write_service_trace("TRACE native frame interval configured\n");
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI schedule_frame_event(Device *pointer, std::uint32_t event,
+                                                                std::uint32_t offset_us, const void *reserved,
+                                                                std::uint32_t flags) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned(pointer);
+            if (reserved || flags) {
+                return static_cast<std::int32_t>(0x80004001u);
+            }
+            if (!pointer->frame_timing.schedule(event, offset_us)) {
+                return static_cast<std::int32_t>(0x80070057u);
+            }
+            diagnostics::write_service_trace("TRACE native frame timer event scheduled\n");
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI wait_frame_event(Device *pointer, std::uint32_t event,
+                                                            std::uint32_t timeout_ms, const void *reserved,
+                                                            std::uint32_t flags, void *output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned(pointer);
+            if (reserved) {
+                return static_cast<std::int32_t>(0x80004001u);
+            }
+            std::uint64_t token;
+            std::memcpy(&token, output, sizeof(token));
+            const auto plan =
+                pointer->frame_timing.prepare_wait(event, timeout_ms, flags, token, frame_now_us());
+            if (plan.result < 0) {
+                return plan.result;
+            }
+            // The immutable grid snapshot needs no device/backend reference
+            // during its host timer wait. Other graphics callers keep running.
+            access.lock.unlock();
+            for (;;) {
+                const auto now = frame_now_us();
+                if (now >= plan.wake_us) {
+                    break;
+                }
+                const auto milliseconds = std::clamp<std::uint64_t>((plan.wake_us - now) / 1000, 1, 100);
+                host::sleep_milliseconds(static_cast<std::uint32_t>(milliseconds));
+            }
+            if (plan.result == 0) {
+                std::memcpy(output, &plan.token, sizeof(plan.token));
+            }
+            diagnostics::write_service_trace("TRACE native frame timer event waited\n");
+            return plan.result;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
     template <std::size_t... Slots>
     static std::array<std::uintptr_t, sizeof...(Slots)> make_table(std::index_sequence<Slots...>) {
         return {reinterpret_cast<std::uintptr_t>(&unsupported<Slots>)...};
@@ -1263,6 +1352,9 @@ struct GraphicsDevices::State {
             // See d3d12_xs_device.h and docs/retail_boot_chain.md section 3.2.
             result[48] = reinterpret_cast<std::uintptr_t>(&create_queue_x);
             result[73] = reinterpret_cast<std::uintptr_t>(&create_command_list_x);
+            result[78] = reinterpret_cast<std::uintptr_t>(&set_frame_interval);
+            result[79] = reinterpret_cast<std::uintptr_t>(&schedule_frame_event);
+            result[80] = reinterpret_cast<std::uintptr_t>(&wait_frame_event);
             return result;
         }();
         return entries;

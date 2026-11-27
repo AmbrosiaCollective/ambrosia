@@ -1,6 +1,7 @@
 // Original tiny PE byte fixtures only. No SDK, game, driver or network needed.
 #include "clock_services.h"
 #include "command_list.h"
+#include "frame_timing.h"
 #include "graphics_recording.h"
 #include "event_signal.h"
 #include "file_services.h"
@@ -236,6 +237,7 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "graphics_device_tests.h"
 #include "graphics_allocator_tests.h"
 #include "graphics_list_tests.h"
+#include "frame_timing_tests.h"
 #include "xmem_tests.h"
 #include "memory_budget_tests.h"
 #include "xmem_committed_tests.h"
@@ -737,6 +739,7 @@ extern "C" int ambrosia_native_tests() {
         graphics_option_checks();
         graphics_recording_checks();
         graphics_cache_recording_checks();
+        frame_timing_checks();
         graphics_transport_rejection_checks();
         xmem_checks();
         memory_budget_checks();
@@ -1077,6 +1080,21 @@ extern "C" int ambrosia_native_presentation_tests() {
         ++failures;
     }
     std::cout << "{\"checks\":" << checks << ",\"failures\":" << failures << "}\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_frame_timing_tests(const char *root, unsigned probe) {
+    checks = failures = 0;
+    try {
+        if (!root || probe > 2) {
+            return 2;
+        }
+        frame_timing_live_checks(root, probe);
+    } catch (const std::exception &error) {
+        std::cerr << "native frame timing: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "frame timing: " << checks << " checks, " << failures << " failures\n";
     return failures ? 1 : 0;
 }
 

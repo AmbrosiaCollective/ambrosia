@@ -4,10 +4,11 @@ The Linux guest runtime does not inherit host GPU nodes or display credentials.
 A separate trusted service owns host integration. Game code and ordinary tests
 stay in their reviewed sandbox under the default outer tool sandbox.
 
-Current boot frontier: both GCC and Clang create and close 581 CPU command lists
-and record 10 cache barriers, then stop at Xbox device slot 78 (frame interval).
-The menu and GPU submission remain unverified. The sections below retain the
-staged investigation; the latest implemented cache policy is described last.
+Current boot frontier: both GCC and Clang create and close 581 CPU command lists,
+record 10 cache barriers, configure the frame timer and schedule two events, then
+stop at descriptor-increment query slot 15. The menu and GPU submission remain
+unverified. The sections below retain the staged investigation; later sections
+describe the current implementations.
 
 The first service, `scripts/query_native_graphics_host.py`, reports Vulkan API
 version, device class, queue availability and selected Vulkan 1.2/1.3 features.
@@ -398,3 +399,31 @@ game launches create and close 581 lists, record 10 barriers and reach device sl
 78 without fault, timeout or watchdog failure. Xbox slot 78 is the inherited HLE's
 SetFrameIntervalX override, distinct from its public PC SDK slot. Raw game evidence
 remains private. No guest/host/compiler capability or dependency changed.
+
+## Native frame timer
+
+Xbox device slots 78/79/80 implement interval setup, event scheduling and timer
+waits. These shadow unrelated PC methods; slot 80 exceeds the public Device11
+table. The published console signatures include reserved arguments, retained in
+their correct positions. Nonnull display/reserved integration remains unsupported.
+
+The portable FrameTiming component adapts FiveStar's timer-grid policy. It plans
+origin polling, the next origin, token-in event offsets and finite timeouts using
+explicit monotonic microsecond inputs. Checked arithmetic rejects wrapping
+deadlines. Configuration supports periods 1..1,000,000 us, latency 1..16, four
+event types and offsets up to 1,000,000 us. Repeating the same configuration
+preserves its epoch. Unsupported flags fail explicitly; current-origin polling
+uses flag 2. Timeout returns S_FALSE and preserves the input token.
+
+Each wait captures a value snapshot and releases the graphics ownership mutex
+before using existing host clock/sleep adapters. Sleep granularity can add about
+a millisecond; precision, cancellation and a display-vblank source are not claimed.
+These are host timer tokens. GPU completion, frames in flight, presented-token
+consumption and render throttling still need actual submission/presentation work.
+
+Both compilers pass 1,545 strict checks and 14 real-device timer ABI checks,
+including host deadline arrival. Foreign/released-device controls stop before
+access. Offline CMake and all source/header/guard/ELF gates pass. Both actual games
+configure one interval and two events, then reach device slot 15 without fault,
+timeout or watchdog failure. Actual game wait calls are not reached yet. No frame
+or interactive menu is verified. Profiles and dependencies are unchanged.
