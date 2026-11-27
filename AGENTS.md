@@ -299,3 +299,10 @@ RO game, credential, network/process/WX and direct GPU/display restrictions rema
 A response-RW omission fails before entry. Both native compiler builds pass31
 window and7 real graphics checks with both service mounts. Never escalate this
 launcher, tests or game. Host-only services keep their separate reviewed scope.
+
+Task144 validates the separate fixed scripts/run_native_fence_host.py service.
+All51 host controls/resource bounds remain. Only owned timeline semaphore create,
+counter query, host signal and destruction are added; no shaders/queue submission,
+CPU guest payloads or direct guest GPU access.32 live/128 lifetime nonreused fence
+IDs; explicit rewind/reserved-value rejection. Original services/profiles stay
+unchanged. See docs/native-graphics-host.md; game/test execution never escalates.

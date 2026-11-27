@@ -142,3 +142,24 @@ support or complete D3D12 conformance is claimed by this initial frontend.
 Both native game builds now pass device creation with a real host owner. Their
 next observed blocker is an unsupported 64 KiB XMem commit request, after which
 the bounded diagnostic run times out. No game-rendered frame or menu is verified.
+
+## Timeline fence service
+
+The separate `scripts/run_native_fence_host.py` retains all 51 host controls and
+resource bounds. It adds only real Vulkan timeline semaphore create/counter/host
+signal/destroy calls. No queue command or shader is submitted. The earlier
+metadata, device bootstrap and ownership services remain unchanged.
+
+Packet operations 5..8 create, query, host-signal and destroy a fence. The value
+occupies bytes24..31 as little-endian uint64; all other unused fields remain zero.
+Creation names the owned device; subsequent calls name the owned fence. Fence IDs
+are never reused across device recreation. Limits are 32 live and 128 lifetime
+fences under the existing service/request lifetime. Fences die before their device.
+Foreign/released IDs fail. Vulkan timelines cannot rewind, so decreasing signals
+are rejected; equal signals are already satisfied. UINT64_MAX is reserved and
+rejected. These explicit limits do not imply full D3D12 fence conformance.
+
+The isolated client verifies real counters, high values, host signals, ownership,
+recreation and cleanup with no direct GPU access. CPU ABI/protocol and public C
+layout checks precede hardware use. Native guest CreateFence wiring is separate;
+this service alone does not render or verify a game frame/menu.
