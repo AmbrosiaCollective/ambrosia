@@ -111,6 +111,111 @@ class QueueFamilyProperties(ctypes.Structure):
                 ('minimumTransferGranularity', ctypes.c_uint32 * 3)]
 
 
+class ExtensionProperties(ctypes.Structure):
+    _fields_ = [('extensionName', ctypes.c_char * 256), ('specVersion', ctypes.c_uint32)]
+
+
+class MemoryType(ctypes.Structure):
+    _fields_ = [('propertyFlags', ctypes.c_uint32), ('heapIndex', ctypes.c_uint32)]
+
+
+class MemoryHeap(ctypes.Structure):
+    _fields_ = [('size', ctypes.c_uint64), ('flags', ctypes.c_uint32)]
+
+
+class MemoryProperties(ctypes.Structure):
+    _fields_ = [('memoryTypeCount', ctypes.c_uint32), ('memoryTypes', MemoryType * 32),
+                ('memoryHeapCount', ctypes.c_uint32), ('memoryHeaps', MemoryHeap * 16)]
+
+
+class Properties2Storage(ctypes.Structure):
+    # Core VkPhysicalDeviceProperties is written at offset 16. Overallocate its
+    # aligned storage, as in the existing core query; never expose its identifiers.
+    _fields_ = [('sType', ctypes.c_int), ('pNext', ctypes.c_void_p),
+                ('properties', ctypes.c_uint64 * 512)]
+
+
+class ExternalHostProperties(ctypes.Structure):
+    _fields_ = [('sType', ctypes.c_int), ('pNext', ctypes.c_void_p),
+                ('minImportedHostPointerAlignment', ctypes.c_uint64)]
+
+
+class ExternalBufferInfo(ctypes.Structure):
+    _fields_ = [('sType', ctypes.c_int), ('pNext', ctypes.c_void_p),
+                ('flags', ctypes.c_uint32), ('usage', ctypes.c_uint32),
+                ('handleType', ctypes.c_uint32)]
+
+
+class ExternalMemoryProperties(ctypes.Structure):
+    _fields_ = [('externalMemoryFeatures', ctypes.c_uint32),
+                ('exportFromImportedHandleTypes', ctypes.c_uint32),
+                ('compatibleHandleTypes', ctypes.c_uint32)]
+
+
+class ExternalBufferProperties(ctypes.Structure):
+    _fields_ = [('sType', ctypes.c_int), ('pNext', ctypes.c_void_p),
+                ('externalMemoryProperties', ExternalMemoryProperties)]
+
+
+def query_host_memory(function, instance, physical):
+    """Report import candidates only; no logical device or host allocation exists."""
+    enumerate_extensions = function(instance, 'vkEnumerateDeviceExtensionProperties', ctypes.c_int,
+        [ctypes.c_void_p, ctypes.c_char_p, ctypes.POINTER(ctypes.c_uint32),
+         ctypes.POINTER(ExtensionProperties)])
+    count = ctypes.c_uint32()
+    if enumerate_extensions(physical, None, ctypes.byref(count), None) or count.value > 1024:
+        raise RuntimeError('native device extension count failed or exceeds bounds')
+    extensions = (ExtensionProperties * count.value)()
+    if count.value:
+        if enumerate_extensions(physical, None, ctypes.byref(count), extensions):
+            raise RuntimeError('native device extension enumeration changed or failed')
+        if count.value > len(extensions):
+            raise RuntimeError('native device extension count exceeds its storage')
+    host_extension = any(entry.extensionName == b'VK_EXT_external_memory_host'
+                         for entry in extensions[:count.value])
+    get_memory = function(instance, 'vkGetPhysicalDeviceMemoryProperties', None,
+                          [ctypes.c_void_p, ctypes.POINTER(MemoryProperties)])
+    memory = MemoryProperties()
+    get_memory(physical, ctypes.byref(memory))
+    if not 1 <= memory.memoryTypeCount <= 32 or not 1 <= memory.memoryHeapCount <= 16:
+        raise RuntimeError('native memory counts outside fixed Vulkan bounds')
+    types = memory.memoryTypes[:memory.memoryTypeCount]
+    if any(entry.heapIndex >= memory.memoryHeapCount for entry in types):
+        raise RuntimeError('native memory type refers to an invalid heap')
+    result = {'extension_present': host_extension,
+              'memory_type_flags': [int(entry.propertyFlags) for entry in types],
+              'host_visible_coherent_available': any(entry.propertyFlags & 6 == 6 for entry in types),
+              'minimum_import_alignment': None, 'buffer_candidates': []}
+    if not host_extension:
+        return result
+    get_properties = function(instance, 'vkGetPhysicalDeviceProperties2', None,
+                              [ctypes.c_void_p, ctypes.POINTER(Properties2Storage)])
+    host = ExternalHostProperties(sType=1000178002)
+    properties = Properties2Storage(sType=1000059001, pNext=ctypes.addressof(host))
+    get_properties(physical, ctypes.byref(properties))
+    ctypes.memset(ctypes.addressof(properties), 0, ctypes.sizeof(properties))
+    alignment = host.minImportedHostPointerAlignment
+    if not alignment or alignment & (alignment - 1):
+        raise RuntimeError('native host import alignment is not a nonzero power of two')
+    result['minimum_import_alignment'] = int(alignment)
+    get_external = function(instance, 'vkGetPhysicalDeviceExternalBufferProperties', None,
+        [ctypes.c_void_p, ctypes.POINTER(ExternalBufferInfo), ctypes.POINTER(ExternalBufferProperties)])
+    # HOST_ALLOCATION and HOST_MAPPED_FOREIGN_MEMORY are distinct import classes.
+    # Test ordinary renderer usage, then the same mask plus buffer device address.
+    for handle in (0x80, 0x100):
+        for usage in (0x1ff, 0x201ff):
+            info = ExternalBufferInfo(1000071002, None, 0, usage, handle)
+            output = ExternalBufferProperties(sType=1000071003)
+            get_external(physical, ctypes.byref(info), ctypes.byref(output))
+            flags = output.externalMemoryProperties
+            result['buffer_candidates'].append({
+                'handle_type': handle, 'usage': usage,
+                'importable': bool(flags.externalMemoryFeatures & 4),
+                'dedicated_only': bool(flags.externalMemoryFeatures & 1),
+                'compatible_handle': bool(flags.compatibleHandleTypes & handle)})
+    return result
+
+
 def version_parts(version):
     return [(version >> 22) & 0x7f, (version >> 12) & 0x3ff, version & 0xfff]
 
@@ -195,6 +300,7 @@ def query_vulkan():
                 'compute_queue': any(family.queueCount and family.queueFlags & 2 for family in available_families),
                 'features12': {name: bool(getattr(feature12, name)) for name in selected12},
                 'features13': {name: bool(getattr(feature13, name)) for name in selected13},
+                'host_memory_import': query_host_memory(function, instance, device),
             })
         return {'native_vulkan_host_query': True, 'public_capabilities': summaries,
                 'logical_device_created': False, 'gpu_work_submitted': False,

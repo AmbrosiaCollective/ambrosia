@@ -563,3 +563,21 @@ pages, despite exceeding the first child window. Both still stop explicitly at
 the GPU-backed resource boundary. No menu, GPU resource or frame is verified.
 The compiler unit allowlist adds physical_span.cpp; sandbox capabilities and
 resource limits are unchanged.
+
+## Host-memory import candidates
+
+The fixed metadata query also enumerates at most 1,024 device extensions and the
+core memory types/heaps. It reports only raw memory-property flags, whether a
+host-visible coherent type exists, and supported host-import buffer usages.
+If VK_EXT_external_memory_host is absent, it skips its property chain entirely.
+Counts, heap references and import alignment fail closed on invalid values.
+No host pointer, GPU identifier, device name or UUID is returned.
+
+The current hardware advertises 4 KiB import alignment. HOST_ALLOCATION is
+importable for ordinary renderer usage and buffer-device-address usage without
+a dedicated-only restriction. HOST_MAPPED_FOREIGN_MEMORY is unsupported for both
+masks. This establishes a candidate, not a successful import: an actual pointer
+must still pass vkGetMemoryHostPointerPropertiesEXT, compatible memory-type and
+buffer-binding checks before use. No logical device, allocation, import, buffer,
+queue work or menu is verified by the metadata query. All 43 existing host
+controls and resource bounds remain unchanged.
