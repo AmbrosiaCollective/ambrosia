@@ -1,4 +1,5 @@
 #include "graphics_devices.h"
+#include "descriptor_heap_description.h"
 #include "frame_timing.h"
 #include "graphics_recording.h"
 #include "guest_thread.h"
@@ -92,6 +93,14 @@ bool supports_resource(const void *interface_id) {
     return requested == unknown_interface_id || requested == supported_interfaces.front() ||
            requested == device_child_interface || requested == pageable_interface ||
            requested == resource_interface;
+}
+
+bool supports_heap(const void *interface_id) {
+    Guid requested;
+    std::memcpy(&requested, interface_id, sizeof(requested));
+    return requested == unknown_interface_id || requested == supported_interfaces.front() ||
+           requested == device_child_interface || requested == pageable_interface ||
+           requested == descriptor_heap_interface;
 }
 
 bool supports(const void *interface_id) {
@@ -201,6 +210,22 @@ struct GraphicsDevices::State {
         std::unique_ptr<PhysicalBuffer> physical;
     };
 
+    struct Heap {
+        const std::uintptr_t *table = nullptr;
+        std::uint32_t references = 1;
+        Device *parent = nullptr;
+        DescriptorHeapDescription description;
+        std::uintptr_t start = 0;
+        std::size_t bytes = 0;
+    };
+
+    static_assert(offsetof(Heap, table) == 0);
+
+    struct OwnedHeap {
+        Heap object;
+        std::optional<TitleMemoryAllocation> allocation;
+    };
+
     std::mutex mutex;
     std::unique_ptr<host::Graphics> backend;
     std::unique_ptr<Device> device;
@@ -210,6 +235,9 @@ struct GraphicsDevices::State {
     std::map<void *, std::unique_ptr<List>> lists;
     // Resources retire their GPU buffers and aliases before the backend closes.
     std::map<Resource *, std::unique_ptr<OwnedResource>> resources;
+    std::map<Heap *, std::unique_ptr<OwnedHeap>> heaps;
+    std::size_t heap_bytes = 0;
+    std::size_t pending_heaps = 0;
 
     struct Access {
         State &state;
@@ -299,6 +327,20 @@ struct GraphicsDevices::State {
         if (!pointer || !state.resources.contains(pointer) || !state.backend || !state.device ||
             pointer->parent != state.device.get()) {
             diagnostics::stop_trace("native resource is not owned by this runtime", 78);
+        }
+        return {state, std::move(lock)};
+    }
+
+    static Access owned_heap(Heap *pointer) {
+        auto *runtime = current_runtime();
+        if (!runtime || !guest::ThreadContext::current()) {
+            diagnostics::stop_trace("native descriptor heap requires an active guest runtime", 78);
+        }
+        auto &state = *runtime->graphics_devices().state_;
+        std::unique_lock lock(state.mutex);
+        if (!pointer || !state.heaps.contains(pointer) || !state.device || !state.backend ||
+            pointer->parent != state.device.get()) {
+            diagnostics::stop_trace("native descriptor heap is not owned by this runtime", 78);
         }
         return {state, std::move(lock)};
     }
@@ -1305,54 +1347,254 @@ struct GraphicsDevices::State {
         }
     }
 
-    static std::int32_t AMBROSIA_GUEST_ABI capture_descriptor_heap(Device *pointer, const void *description,
-                                                                   const void *interface_id,
-                                                                   void **output) noexcept {
+    template <std::size_t Slot> static std::uintptr_t AMBROSIA_GUEST_ABI unsupported_heap(Heap *) noexcept {
+        diagnostics::stop_trace("unsupported native ID3D12DescriptorHeap slot " + std::to_string(Slot), 78);
+    }
+
+    static void increment_heap(Heap &heap) {
+        if (heap.references == UINT32_MAX) {
+            diagnostics::stop_trace("native descriptor heap reference count exhausted", 78);
+        }
+        ++heap.references;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI heap_query(Heap *pointer, const void *interface_id,
+                                                      void **output) noexcept {
         const PreserveErrno preserve;
         if (!output) {
             return pointer_error;
         }
         *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_heap(pointer);
+            if (!supports_heap(interface_id)) {
+                return no_interface;
+            }
+            increment_heap(*pointer);
+            *output = pointer;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI heap_add(Heap *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_heap(pointer);
+            increment_heap(*pointer);
+            return pointer->references;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint32_t AMBROSIA_GUEST_ABI heap_release(Heap *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_heap(pointer);
+            const auto remaining = pointer->references - 1;
+            if (remaining) {
+                pointer->references = remaining;
+                return remaining;
+            }
+            auto *parent = pointer->parent;
+            auto owner = std::move(access.state.heaps.at(pointer));
+            access.state.heaps.erase(pointer);
+            ++access.state.pending_heaps;
+            // Keep the parent's heap reference while free reenters services.
+            // The removed heap can no longer be retained through a stale pointer.
+            access.lock.unlock();
+            owner->allocation->close();
+            access.lock.lock();
+            --access.state.pending_heaps;
+            access.state.heap_bytes -= pointer->bytes;
+            release_device(access.state, *parent);
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI heap_device(Heap *pointer, const void *interface_id,
+                                                       void **output) noexcept {
+        const PreserveErrno preserve;
+        if (!output) {
+            return pointer_error;
+        }
+        *output = nullptr;
+        if (!interface_id) {
+            return pointer_error;
+        }
+        try {
+            auto access = owned_heap(pointer);
+            if (!supports(interface_id)) {
+                return no_interface;
+            }
+            increment(*pointer->parent);
+            *output = pointer->parent;
+            return 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static DescriptorHeapDescription *AMBROSIA_GUEST_ABI heap_description(void *first,
+                                                                          void *second) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto *runtime = current_runtime();
+            if (!runtime || !guest::ThreadContext::current()) {
+                diagnostics::stop_trace("native heap description requires active guest context", 78);
+            }
+            auto &state = *runtime->graphics_devices().state_;
+            const std::lock_guard lock(state.mutex);
+            auto *first_heap = static_cast<Heap *>(first);
+            auto *second_heap = static_cast<Heap *>(second);
+            const bool first_receiver = state.heaps.contains(first_heap);
+            const bool second_receiver = state.heaps.contains(second_heap);
+            if (first_receiver == second_receiver || !state.backend || !state.device) {
+                diagnostics::stop_trace("native heap description receiver is not uniquely owned", 78);
+            }
+            auto *heap = first_receiver ? first_heap : second_heap;
+            auto *output = static_cast<DescriptorHeapDescription *>(first_receiver ? second : first);
+            if (!output) {
+                diagnostics::stop_trace("native heap description requires result storage", 78);
+            }
+            std::memcpy(output, &heap->description, sizeof(*output));
+            return output;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint64_t AMBROSIA_GUEST_ABI heap_cpu_start(Heap *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_heap(pointer);
+            diagnostics::write_service_trace("TRACE native title-backed CPU descriptor handle queried\n");
+            return pointer->start;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    static std::uint64_t AMBROSIA_GUEST_ABI heap_gpu_start(Heap *pointer) noexcept {
+        const PreserveErrno preserve;
+        try {
+            auto access = owned_heap(pointer);
+            diagnostics::write_service_trace("TRACE native title-backed GPU descriptor handle queried\n");
+            return (pointer->description.flags & 1) ? pointer->start : 0;
+        } catch (const std::exception &error) {
+            diagnostics::stop_trace(error.what(), 78);
+        }
+    }
+
+    template <std::size_t... Slots> static auto make_heap_table(std::index_sequence<Slots...>) {
+        return std::array<std::uintptr_t, sizeof...(Slots)>{
+            reinterpret_cast<std::uintptr_t>(&unsupported_heap<Slots>)...};
+    }
+
+    static const auto &heap_table() {
+        static const auto entries = [] {
+            auto result = make_heap_table(std::make_index_sequence<64>{});
+            result[0] = reinterpret_cast<std::uintptr_t>(&heap_query);
+            result[1] = reinterpret_cast<std::uintptr_t>(&heap_add);
+            result[2] = reinterpret_cast<std::uintptr_t>(&heap_release);
+            result[7] = reinterpret_cast<std::uintptr_t>(&heap_device);
+            result[8] = reinterpret_cast<std::uintptr_t>(&heap_description);
+            // The Xbox ABI returns these handles in RAX, without desktop's
+            // explicit result-storage argument. They name guest records only.
+            result[9] = reinterpret_cast<std::uintptr_t>(&heap_cpu_start);
+            result[10] = reinterpret_cast<std::uintptr_t>(&heap_gpu_start);
+            return result;
+        }();
+        return entries;
+    }
+
+    static std::int32_t AMBROSIA_GUEST_ABI create_descriptor_heap(Device *pointer, const void *description,
+                                                                  const void *interface_id,
+                                                                  void **output) noexcept {
+        const PreserveErrno preserve;
+        if (output) {
+            *output = nullptr;
+        }
         if (!description || !interface_id) {
             return pointer_error;
         }
         try {
             auto access = owned(pointer);
-            std::array<std::uint32_t, 4> fields{};
-            std::memcpy(fields.data(), description, sizeof(fields));
-            Guid requested;
-            std::memcpy(&requested, interface_id, sizeof(requested));
-            if (requested != descriptor_heap_interface) {
+            if (!supports_heap(interface_id)) {
                 return no_interface;
             }
-            const auto type = fields[0];
-            const auto count = fields[1];
-            if (type >= guest_descriptor_increments.size() || !count || (fields[2] & ~1u) || fields[3] > 1) {
-                diagnostics::stop_trace("unsupported native descriptor heap description", 78);
+            DescriptorHeapDescription requested;
+            std::memcpy(&requested, description, sizeof(requested));
+            if (requested.type >= guest_descriptor_increments.size() || !requested.count ||
+                (requested.flags & ~1u) || requested.node_mask > 1 ||
+                ((requested.flags & 1) && (requested.type == 2 || requested.type == 3))) {
+                return static_cast<std::int32_t>(0x80070057u);
             }
-            const auto bytes = std::uint64_t{count} * guest_descriptor_increments[type];
+            const auto bytes = std::uint64_t{requested.count} * guest_descriptor_increments[requested.type];
             if (bytes > 64 * 1024 * 1024) {
-                diagnostics::stop_trace("native descriptor heap exceeds its bounded title-memory probe", 78);
+                return static_cast<std::int32_t>(0x80070057u);
             }
-            char message[192];
-            const auto length =
-                std::snprintf(message, sizeof(message),
-                              "TRACE native descriptor heap type=%u count=%u flags=%x node=%u bytes=%llu\n",
-                              type, count, fields[2], fields[3], static_cast<unsigned long long>(bytes));
-            if (length > 0 && static_cast<std::size_t>(length) < sizeof(message)) {
-                diagnostics::write_service_trace(std::string_view(message, static_cast<std::size_t>(length)));
+            if (!output) {
+                return 1; // S_FALSE: capability validation without allocation.
             }
-            // The title allocator can reenter services. No graphics lock is held
-            // across that guest call. This diagnostic never returns an object.
+            if (access.state.heaps.size() + access.state.pending_heaps >= 32 ||
+                bytes > 128 * 1024 * 1024 - access.state.heap_bytes || pointer->references == UINT32_MAX) {
+                return static_cast<std::int32_t>(0x8007000eu);
+            }
+            auto owner = std::make_unique<OwnedHeap>();
+            owner->object.table = heap_table().data();
+            owner->object.parent = pointer;
+            owner->object.description = requested;
+            owner->object.bytes = static_cast<std::size_t>(bytes);
+            increment(*pointer);
+            ++access.state.pending_heaps;
+            access.state.heap_bytes += bytes;
             access.lock.unlock();
-            auto allocation = allocate_title_descriptors(static_cast<std::size_t>(bytes));
-            if (!allocation.data() || allocation.size() != bytes) {
-                diagnostics::stop_trace("native descriptor title allocation has an invalid extent", 78);
+            try {
+                owner->allocation.emplace(allocate_title_descriptors(static_cast<std::size_t>(bytes)));
+                auto *address = owner->allocation->data();
+                if (!current_runtime()->memory().writable_range(address, static_cast<std::size_t>(bytes)) ||
+                    reinterpret_cast<std::uintptr_t>(address) % guest_descriptor_increments[requested.type]) {
+                    throw std::runtime_error(
+                        "title descriptor storage is not a complete aligned writable range");
+                }
+                owner->object.start = reinterpret_cast<std::uintptr_t>(address);
+                auto *result = &owner->object;
+                access.lock.lock();
+                for (const auto &[existing, existing_owner] : access.state.heaps) {
+                    (void)existing_owner;
+                    if (existing->start < result->start + bytes &&
+                        result->start < existing->start + existing->bytes) {
+                        diagnostics::stop_trace("title descriptor allocation overlaps a live heap", 78);
+                    }
+                }
+                if (!access.state.heaps.try_emplace(result, std::move(owner)).second) {
+                    throw std::runtime_error("native heap identity unexpectedly overlaps a live owner");
+                }
+                --access.state.pending_heaps;
+                *output = result;
+                diagnostics::write_service_trace("TRACE native title-backed descriptor heap created\n");
+                return 0;
+            } catch (...) {
+                if (access.lock.owns_lock()) {
+                    access.lock.unlock();
+                }
+                if (owner && owner->allocation) {
+                    owner->allocation->close();
+                }
+                access.lock.lock();
+                --access.state.pending_heaps;
+                access.state.heap_bytes -= bytes;
+                release_device(access.state, *pointer);
+                throw;
             }
-            diagnostics::write_service_trace(
-                "TRACE native descriptor storage returned by validated title hook\n");
-            // Process teardown owns this nonreturning diagnostic allocation.
-            diagnostics::stop_trace("native descriptor heap requires title-backed object integration", 78);
         } catch (const std::exception &error) {
             diagnostics::stop_trace(error.what(), 78);
         }
@@ -1765,7 +2007,7 @@ struct GraphicsDevices::State {
             result[7] = reinterpret_cast<std::uintptr_t>(&node_count);
             result[8] = reinterpret_cast<std::uintptr_t>(&create_queue);
             result[9] = reinterpret_cast<std::uintptr_t>(&create_allocator);
-            result[14] = reinterpret_cast<std::uintptr_t>(&capture_descriptor_heap);
+            result[14] = reinterpret_cast<std::uintptr_t>(&create_descriptor_heap);
             result[15] = reinterpret_cast<std::uintptr_t>(&descriptor_increment);
             result[26] = reinterpret_cast<std::uintptr_t>(&heap_properties);
             result[36] = reinterpret_cast<std::uintptr_t>(&create_fence);

@@ -74,6 +74,7 @@ class MemoryServices {
     std::uint32_t map_physical(void *address,
                                std::span<const std::shared_ptr<const PhysicalPage>> pages) noexcept;
     PhysicalSpanResult physical_span(const void *address, std::size_t bytes) const noexcept;
+    bool writable_range(const void *address, std::size_t bytes) const noexcept;
 
     std::size_t reserved_bytes() const {
         const std::lock_guard lock(mutex_);

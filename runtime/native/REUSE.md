@@ -465,3 +465,9 @@ TitleMemoryHooks.cs and XboxDescriptorHeaps.cs publish the two-word exported
 allocator/free ABI and descriptor attributes0x00800004. Only those API facts are
 used; no external hook/heap implementation is ported. Validated data/code access,
 generation pairing and no-lock reentry follow Ambrosia's existing native contract.
+
+The title-backed descriptor heap object and writable-range validator are original
+extensions of the existing allocator adapter and memory owner. Public SDK
+interface/description facts and the pinned console scalar heap-handle ABI are
+verified independently. No external heap implementation or encoding is copied.
+Guest record addresses are frontend identities, not Vulkan descriptor handles.

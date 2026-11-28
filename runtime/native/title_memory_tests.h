@@ -3,6 +3,9 @@ std::size_t title_releases = 0;
 std::size_t title_requested_bytes = 0;
 std::uint64_t title_requested_attributes = 0;
 bool title_callback_context = false;
+std::function<void()> title_hook_observer;
+void *title_last_address = nullptr;
+unsigned title_allocation_mode = 0;
 
 void *AMBROSIA_GUEST_ABI synthetic_title_allocate(std::size_t bytes, std::uint64_t attributes) {
     using namespace ambrosia;
@@ -11,8 +14,13 @@ void *AMBROSIA_GUEST_ABI synthetic_title_allocate(std::size_t bytes, std::uint64
     ++title_allocations;
     title_requested_bytes = bytes;
     title_requested_attributes = attributes;
+    if (title_hook_observer) {
+        title_hook_observer();
+    }
     errno = ERANGE;
-    return runtime->memory().allocate(nullptr, bytes, 0x3000, 4).address;
+    title_last_address =
+        runtime->memory().allocate(nullptr, bytes, 0x3000, title_allocation_mode == 1 ? 2 : 4).address;
+    return title_last_address;
 }
 
 void AMBROSIA_GUEST_ABI synthetic_title_free(void *address, std::uint64_t attributes) {
@@ -21,6 +29,9 @@ void AMBROSIA_GUEST_ABI synthetic_title_free(void *address, std::uint64_t attrib
               guest::ThreadContext::current(),
           "title release callback retains its actual attributes and guest context");
     ++title_releases;
+    if (title_hook_observer) {
+        title_hook_observer();
+    }
     check(services::current_runtime()->memory().free(address, 0, 0x8000).success,
           "title release callback frees its own selected allocation");
     errno = EBADF;

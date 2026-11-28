@@ -458,6 +458,51 @@ MemoryServices::map_physical(void *address,
     }
 }
 
+bool MemoryServices::writable_range(const void *address, std::size_t bytes) const noexcept {
+    auto cursor = reinterpret_cast<std::uintptr_t>(address);
+    if (!address || !bytes || bytes > 64 * 1024 * 1024 || bytes > UINTPTR_MAX - cursor) {
+        return false;
+    }
+    try {
+        const std::lock_guard lock(mutex_);
+        while (bytes) {
+            auto owner = regions_.upper_bound(cursor);
+            if (owner == regions_.begin()) {
+                return false;
+            }
+            --owner;
+            const auto &region = *owner->second;
+            const auto offset = cursor - owner->first;
+            if (offset >= region.memory.size()) {
+                return false;
+            }
+            std::size_t step;
+            if (region.is_sparse_reservation()) {
+                const auto page_offset = offset - offset % physical_page_bytes;
+                const auto page = region.physical_views.find(page_offset);
+                const auto window = region.window_at(cursor);
+                if (!window || page == region.physical_views.end() || !page->second ||
+                    ((window->protection & 0xff) != 1 && (window->protection & 0xff) != 4)) {
+                    return false;
+                }
+                step = physical_page_bytes - offset % physical_page_bytes;
+            } else {
+                const auto page_bytes = host::Mapping::page_size();
+                if (region.protection[offset / page_bytes] != 4) {
+                    return false;
+                }
+                step = page_bytes - offset % page_bytes;
+            }
+            step = std::min({step, bytes, region.memory.size() - offset});
+            cursor += step;
+            bytes -= step;
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 PhysicalSpanResult MemoryServices::physical_span(const void *address, std::size_t bytes) const noexcept {
     const auto pointer = reinterpret_cast<std::uintptr_t>(address);
     const auto prefix = pointer % physical_page_bytes;

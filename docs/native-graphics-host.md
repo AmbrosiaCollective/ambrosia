@@ -689,3 +689,20 @@ violate the console handle identity that the game expects. See
 range validation, generation pairing, explicit release and remaining storage
 validation requirement. Both builds pass 23 focused hook checks and the existing
 regressions. No descriptor heap object, encoding, binding or menu is claimed.
+
+
+## Owned title-backed heaps
+
+Device slot 14 now returns an owned descriptor heap after validating the entire
+title-selected writable extent. Both current GCC and Clang builds create the
+first actual game heap, return its console CPU/GPU record handles and pass the
+previous address-check boundary. Both stop explicitly at the next missing import,
+`xmem.dll!XMemAllocDefault`, without fault, timeout or RSS-watchdog failure.
+
+Both builds pass 157 heap lifecycle/ABI checks, six complete-range checks,
+23 title-hook checks and 1,573 strict regressions. Three negative controls reject
+an unsupported slot, foreign runtime ownership and read-only title storage.
+Twenty-two independent SDK and console ABI checks verify the slots, layouts and
+scalar handle override. See [native-descriptor-heaps.md](native-descriptor-heaps.md).
+These frontend addresses do not establish GPU descriptor encoding or binding.
+No game frame or interactive menu has been verified.

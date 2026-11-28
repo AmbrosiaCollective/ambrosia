@@ -27,16 +27,17 @@ native services. Release uses the paired callback explicitly in the original
 active context. Destruction never invokes guest code implicitly after detach.
 Process teardown remains responsible for allocations whose context has closed.
 
-## Current integration boundary
+## Current integration
 
-The typed device-slot-14 probe records the public four-word descriptor request,
-uses the established console descriptor stride, and invokes the validated title
-allocator for a bounded extent. It stops before returning a heap object. The
-returned address is title-selected storage, not a host-validated writable lease;
-heap integration must validate the complete writable range before accessing or
-publishing it. The probe does not zero, write or dereference that returned range.
+Device slot 14 now returns an owned heap over the title-selected storage. The
+complete extent must be tracked writable memory with the console descriptor
+alignment before either handle is published. Reserved, read-only, unmapped,
+incomplete and wrapping ranges are rejected without changing permissions.
 
-A heap frontend must retain this address identity for console CPU/GPU handles,
-validate descriptor extents and ownership, and implement the appropriate object
-and release lifecycle. Descriptor encoding, GPU binding, game rendering and the
-interactive menu remain separate implementation and verification gates.
+The frontend preserves the original address for console CPU handles and for
+shader-visible GPU record identities. Creation and explicit release run the
+paired title hooks outside the graphics lock, while retaining the parent and
+reserving live, pending and retiring quotas. See
+[native-descriptor-heaps.md](native-descriptor-heaps.md) for interfaces, ABI and
+bounds. Descriptor encoding, GPU binding, game rendering and the interactive
+menu remain separate implementation and verification gates.

@@ -1618,3 +1618,9 @@ data table and callbacks in active executable sections, with generation/runtime
 checks and explicit release. Device14 currently probes that real allocation and
 stops before returning an unimplemented heap. General heap objects/descriptor
 writes and GPU binding remain separate work.
+
+Descriptor heap objects now retain title-selected storage after complete writable
+range validation. They preserve the original description and console CPU/GPU
+record handles; shader-invisible heaps return a zero GPU handle. Allocation and
+free callbacks run outside graphics locks while parent and pending budgets stay
+reserved. Descriptor encoding and GPU binding remain explicit unsupported work.

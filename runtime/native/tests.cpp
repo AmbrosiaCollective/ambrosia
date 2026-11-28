@@ -6,6 +6,7 @@
 #include "physical_buffer.h"
 #include "resource_description.h"
 #include "title_memory.h"
+#include "descriptor_heap_description.h"
 #include "event_signal.h"
 #include "file_services.h"
 #include "guest_thread.h"
@@ -279,6 +280,8 @@ template <class Function> bool runtime_rejected(Function operation) {
 #include "physical_buffer_tests.h"
 #include "placed_buffer_tests.h"
 #include "title_memory_tests.h"
+#include "descriptor_heap_tests.h"
+#include "writable_range_tests.h"
 // clang-format on
 
 void pe_checks() {
@@ -1270,6 +1273,30 @@ extern "C" int ambrosia_native_trace_menu_8g(const char *image, const char *pack
         return 2;
     }
     return trace_native_image(image, package, 3, inventory, storage, descriptor, presentation, graphics);
+}
+
+extern "C" int ambrosia_native_descriptor_heap_tests(const char *root, unsigned probe) {
+    checks = failures = 0;
+    try {
+        descriptor_heap_checks(root, probe);
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL native heap exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "native descriptor heaps: " << checks << " checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
+}
+
+extern "C" int ambrosia_native_writable_range_tests(int descriptor) {
+    checks = failures = 0;
+    try {
+        writable_range_checks(descriptor);
+    } catch (const std::exception &error) {
+        std::cerr << "FAIL writable range exception: " << error.what() << '\n';
+        ++failures;
+    }
+    std::cout << "writable descriptor ranges: " << checks << " checks, " << failures << " failures\n";
+    return failures ? 1 : 0;
 }
 
 extern "C" int ambrosia_native_title_memory_tests() {
