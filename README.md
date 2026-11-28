@@ -62,19 +62,20 @@ SPIR-V for Vulkan. Game files and generated outputs stay on the player's machine
 
 ## Project status
 
-**Experimental. No playable Ambrosia release or verified retail boot is claimed.**
+**Experimental. No playable release, rendered game frame or interactive menu is verified.**
 
 | Area | What we can actually say |
 |---|---|
 | Local checks | 106 synthetic test methods passed on Linux with Python 3.12.3: 78 contributor checks, 22 import-readiness checks, and six launch-policy checks. |
-| Runtime | A separate native CPU bootstrap maps and executes tiny synthetic PEs through a shared core and host-memory adapters. The inherited full loader/shims still depend on Windows; native retail services and graphics integration remain unfinished. |
+| Runtime | The native Linux runtime loads the local executable and resolves startup services through a shared compatibility core and host adapters. Current game probes pass the first placed-buffer and descriptor-heap creation, then stop at the missing `xmem.dll!XMemAllocDefault` import. The inherited Windows runtime remains separate. |
 | Shaders and formats | Translation, archive, model, texture, and audio tools are inherited from earlier work. Their recorded measurements are not new Ambrosia validation. |
-| Native builds | The CPU bootstrap builds with GCC, Clang and offline CMake on Linux; 578 native checks pass under each compiler, including package discovery, CLI modes and bounded memory services. CLI logic is tested in-process; the standalone executable was built, not launched. No verified menu result exists. |
+| Native builds | Current GCC and Clang shared builds each pass 1,573 strict regressions, 23 title-allocation checks, six writable-range checks and 157 descriptor-heap checks on Linux. Independent ABI checks and rejection controls also pass. Earlier offline CMake builds verified standalone wiring; the latest shared objects were exercised through isolated test and game entrypoints. |
 | CI and delivery | Contributor CI runs on GitHub for Windows and Linux. Extended builds are opt-in. No continuous deployment or release pipeline is configured. |
-| Game and GPU | No Ambrosia menu, in-game rendering, performance, or stability result has been verified. |
+| Game and GPU | Bounded Vulkan buffer transfers and copies are verified. Both current compiler builds advance through real game startup into title-backed descriptor heaps. Descriptor encoding, general command submission, rendering, menus and gameplay remain unfinished. No frame-rate or stability result is claimed. |
 
 The CI badge follows the published Contributor workflow. The test-count badge
-records local validation; native builds and gameplay remain unverified.
+records the earlier contributor validation. Current native results are local
+checks; GitHub CI does not verify game startup or gameplay.
 See the [roadmap](ROADMAP.md), [CI policy](docs/ci-policy.md), and
 [inherited technical notes](docs/README.md) for the detail behind it.
 
